@@ -1,0 +1,74 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Oneinfo: Start database",
+      "type": "shell",
+      "command": "docker compose up -d postgres",
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: Migrate database",
+      "type": "shell",
+      "command": "npm run db:migrate",
+      "dependsOn": "Oneinfo: Start database",
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: Start API",
+      "type": "npm",
+      "script": "dev:api",
+      "dependsOn": "Oneinfo: Migrate database",
+      "isBackground": true,
+      "presentation": { "group": "oneinfo", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: Start production console",
+      "type": "npm",
+      "script": "dev:console",
+      "isBackground": true,
+      "presentation": { "group": "oneinfo", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: Start admin control center",
+      "type": "npm",
+      "script": "dev:control",
+      "isBackground": true,
+      "presentation": { "group": "oneinfo", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: Start local system",
+      "dependsOrder": "parallel",
+      "dependsOn": [
+        "Oneinfo: Start API",
+        "Oneinfo: Start production console",
+        "Oneinfo: Start admin control center"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: USB NFC reader",
+      "type": "shell",
+      "command": "npm run nfc:desktop -- --pairing ${input:pairingCode}",
+      "presentation": { "group": "oneinfo", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Oneinfo: Connect Android NFC",
+      "type": "npm",
+      "script": "android:usb",
+      "presentation": { "group": "oneinfo", "reveal": "always" },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pairingCode",
+      "type": "promptString",
+      "description": "Six-digit pairing code from http://127.0.0.1:5173"
+    }
+  ]
+}

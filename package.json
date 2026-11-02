@@ -1,0 +1,27 @@
+{
+  "name": "oneinfo-production-system",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @oneinfo/contracts && npm run build --workspace @oneinfo/api && npm run build --workspace @oneinfo/production-console && npm run build --workspace @oneinfo/control-center",
+    "dev": "npm run dev --workspace @oneinfo/api",
+    "dev:api": "npm run dev --workspace @oneinfo/api",
+    "dev:console": "npm run dev --workspace @oneinfo/production-console",
+    "dev:control": "npm run dev --workspace @oneinfo/control-center",
+    "nfc:desktop": "npm run start --workspace @oneinfo/desktop-nfc-bridge -- --mode pcsc",
+    "android:usb": "bash scripts/connect-android-nfc.sh",
+    "db:generate": "npm run db:generate --workspace @oneinfo/api",
+    "db:migrate": "npm run db:migrate --workspace @oneinfo/api",
+    "db:push": "npm run db:push --workspace @oneinfo/api",
+    "smoke": "node scripts/smoke-test.mjs",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspace @oneinfo/contracts && npm run typecheck --workspace @oneinfo/api && npm run typecheck --workspace @oneinfo/production-console && npm run typecheck --workspace @oneinfo/control-center"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

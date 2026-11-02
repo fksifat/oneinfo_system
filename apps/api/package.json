@@ -1,0 +1,33 @@
+{
+  "name": "@oneinfo/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@oneinfo/contracts": "0.1.0",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.8",
+    "jose": "^6.2.15",
+    "pg": "^8.16.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.5",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.20.6",
+    "typescript": "^7.0.2",
+    "vitest": "^4.0.6"
+  }
+}
