@@ -11,3 +11,5 @@ apps/production-console/.vite/
 **/build/
 local.properties
 .tools/
+
+.product-media/

@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { ProductInputSchema, UpdateProductSchema, type ProductInput } from "@oneinfo/contracts";
 import { z } from "zod";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { products, auditLogs } from "../db/schema.js";
@@ -17,7 +17,7 @@ export const productRoutes: FastifyPluginAsync = async app => {
   app.get("/public", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
     const items = await db.select().from(products).where(eq(products.status, "PUBLISHED"))
-      .orderBy(desc(products.featured), asc(products.sortOrder), asc(products.name), asc(products.id));
+      .orderBy(asc(products.sortOrder), asc(products.name), asc(products.id));
     return { items };
   });
   app.get("/", async request => {

@@ -71,7 +71,8 @@ are not part of this catalogue; checkout still saves a browser-local draft.
 `packages/layout.css` owns shared layout limits: storefront/production content
 is capped at 1280px; the admin workspace at 1440px. Sections keep full-width
 backgrounds while adaptive inline padding aligns their content with the navbar
-and footer. Mobile layouts use the available width with responsive gutters.
+and footer. Product details use a more compact, centered 1120px content width.
+Mobile layouts use the available width with responsive gutters.
 
 ## Product details
 
@@ -81,6 +82,20 @@ full product information, colour selection and the only product Add to cart
 action. Direct links/refresh, browser Back and Back to cards are supported.
 Hidden/archived products show an unavailable message. Adding from details refreshes
 the catalogue and asks for review if the selected price changed.
+
+The purchase panel shows per-card pricing and savings, named colour choices,
+quantity (1–99), a live total, and Add to cart. Colour/media switches preserve
+the chosen quantity. Product details use the admin description/features in an
+accordion; ordering notes describe the existing local-draft flow. Adding refreshes
+prices/availability, prevents duplicate in-flight clicks and rejects a cart line
+above 99 instead of silently reducing the requested quantity.
+
+Warranty terms are product-level fields in Admin → Products → Warranty. A
+nonempty policy adds a Warranty accordion; empty terms hide it. Demo policies
+carry a visible Demo badge and example-only notice. Turn off the demo checkbox
+only after entering the final policy. Migration 0004 adds empty defaults without
+inventing coverage for existing products. Warranty changes use the same admin
+authorization, version checks and audit trail as other product edits.
 
 ## Media gallery
 
@@ -108,13 +123,25 @@ Admin resolves bundled image previews from `VITE_STOREFRONT_URL` (default port 5
 
 ## Gallery proportions and colours
 
-The product preview follows each image's intrinsic aspect ratio (`width:100%;
-height:auto`), without a fixed/minimum image height or crop. The gallery and
-product copy are separate columns, so long copy cannot stretch the media area.
-Collection covers use a card-shaped stage with contain sizing.
+All product media use the same 1600 × 1200 landscape frame. The detail gallery is
+capped at 640px wide and scales down on smaller screens. Images and videos use
+contain sizing, preserving their original proportions without stretching or
+cropping; switching media does not change the frame height. Thumbnails and the
+admin preview use the same ratio. Admin image inputs recommend 1600 × 1200 px,
+show loaded dimensions and warn about a different ratio or smaller raster image.
+SVG remains resolution-independent. Existing image URLs remain valid; warnings
+do not block saving. Keep artwork canvas and product scale consistent for the
+best visual match across colours and 360° frames.
+
+On desktop, the gallery stays below the sticky navbar while product details
+scroll, stopping at the end of the product section. Its width also adapts to the
+viewport height so the image and thumbnail strip stay visible together. Narrow
+or very short viewports keep the gallery in normal document flow.
 
 All colours' media appear in the detail thumbnail strip by default. Clicking a
 thumbnail selects its owning colour, updates the URL/price/cart selection and
 opens that media. Selected colour thumbnails are outlined and the active
 thumbnail is larger. Admin can select **Gallery thumbnails → every colour /
 only this colour** and **Default large preview** for each colour.
+
+Previously uploaded product media is stored in `PRODUCT_MEDIA_DIR` (default `.product-media` under the API working directory). In production, point it to a persistent volume and include it in backups. The storefront loads uploaded media from its configured API origin.

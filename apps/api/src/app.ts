@@ -11,6 +11,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { localNfcRoutes } from "./routes/local-nfc.js";
 
 import { productRoutes } from "./routes/products.js";
+import { productMediaRoutes } from "./routes/product-media.js";
 
 export function buildApp() {
   const app = Fastify({ logger: true, requestIdHeader: "x-request-id" });
@@ -28,6 +29,7 @@ export function buildApp() {
   app.register(cardRoutes, { prefix: "/api/v1/production/cards" });
   app.register(profileRoutes, { prefix: "/api/v1/profiles" });
   app.register(productRoutes, { prefix: "/api/v1/products" });
+  app.register(productMediaRoutes, { prefix: "/api/v1/product-media" });
   app.register(adminRoutes, { prefix: "/api/v1/admin" });
   app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
 

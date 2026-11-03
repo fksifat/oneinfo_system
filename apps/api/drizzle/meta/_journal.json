@@ -29,6 +29,13 @@
       "when": 1793716504259,
       "tag": "0003_sour_sebastian_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793726003286,
+      "tag": "0004_product_warranty",
+      "breakpoints": true
     }
   ]
 }

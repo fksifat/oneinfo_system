@@ -25,5 +25,8 @@
   },
   "engines": {
     "node": ">=22.12"
+  },
+  "dependencies": {
+    "@google/model-viewer": "4.1.0"
   }
 }

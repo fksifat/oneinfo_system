@@ -1,5 +1,14 @@
 import { variantPrice } from '@oneinfo/contracts';
 
+export function addCartVariant(cart, product, variant, quantity) {
+  if (!variant.available || !Number.isInteger(quantity) || quantity < 1 || quantity > 99)
+    throw new RangeError('Choose an available colour and a quantity from 1 to 99.');
+  const existing = cart.find(item => item.id === product.id && item.variantId === variant.id);
+  if ((existing?.quantity ?? 0) + quantity > 99) throw new RangeError('You can add up to 99 cards of each colour.');
+  const item = { id:product.id, variantId:variant.id, name:product.name, variantName:variant.name, colorHex:variant.colorHex, priceMinor:variantPrice(variant), quantity:(existing?.quantity ?? 0) + quantity };
+  return existing ? cart.map(previous => previous === existing ? item : previous) : [...cart, item];
+}
+
 export function reconcileCartItems(cart, products) {
   const merged = new Map();
   for (const item of cart) {

@@ -275,6 +275,8 @@ export const products = pgTable("products", {
   name: varchar("name", { length: 120 }).notNull(),
   subtitle: varchar("subtitle", { length: 100 }).notNull().default(""),
   description: text("description").notNull().default(""),
+  warranty: text("warranty").notNull().default(""),
+  warrantyIsDemo: boolean("warranty_is_demo").notNull().default(false),
   priceMinor: integer("price_minor").notNull(),
   variants: jsonb("variants").$type<ProductVariant[]>().notNull().default([]),
   features: jsonb("features").$type<string[]>().notNull().default([]),

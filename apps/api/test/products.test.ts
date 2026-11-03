@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { ProductInputSchema, UpdateProductSchema, productMedia, productGallery, discountPercent, variantPrice } from "../../../packages/contracts/src/index.js";
-import { reconcileCartItems, productRoute, spinFrame } from "../../../sites/storefront/catalog.js";
+import { addCartVariant, reconcileCartItems, productRoute, spinFrame } from "../../../sites/storefront/catalog.js";
 const variant = { id:"01800000-0000-4000-8000-000000000011", name:"White", colorHex:"#ffffff", priceMinor:129000, salePriceMinor:null, available:true, finish:"Satin", appearance:"light", imageUrl:"" };
 const product = { id:"01800000-0000-4000-8000-000000000001", name:"Example card", slug:"example-card", variants:[variant] };
 const blue = {...variant, id:"01800000-0000-4000-8000-000000000012", name:"Blue", colorHex:"#193c66", priceMinor:200000, salePriceMinor:150000};
@@ -22,6 +22,12 @@ describe("catalog input boundaries", () => {
     expect(UpdateProductSchema.safeParse(product).success).toBe(false);
     expect(ProductInputSchema.safeParse({...product,features:Array(13).fill("Feature")}).success).toBe(false);
     expect(ProductInputSchema.safeParse({...product,status:"DELETED"}).success).toBe(false);
+  });
+  it("defaults warranty to hidden and validates editable terms and demo status", () => {
+    expect(ProductInputSchema.parse(product)).toMatchObject({warranty:"",warrantyIsDemo:false});
+    expect(ProductInputSchema.parse({...product,warranty:"  Example coverage\nConditions apply.  ",warrantyIsDemo:true})).toMatchObject({warranty:"Example coverage\nConditions apply.",warrantyIsDemo:true});
+    expect(ProductInputSchema.safeParse({...product,warranty:"x".repeat(2001)}).success).toBe(false);
+    expect(ProductInputSchema.safeParse({...product,warrantyIsDemo:"false"}).success).toBe(false);
   });
   it("uses sale price and computes discounts without overstating savings", () => {
     expect(variantPrice(variant)).toBe(129000); expect(variantPrice(blue)).toBe(150000);
@@ -45,6 +51,24 @@ describe("variant cart reconciliation", () => {
   it("migrates old carts to the original colour and bounds quantities", () => {
     expect(reconcileCartItems([{name:product.name,quantity:120}],catalog)[0]).toMatchObject({variantId:variant.id,quantity:99});
     expect(reconcileCartItems([{id:product.id,quantity:-1},{id:product.id,quantity:1.5}],catalog)).toEqual([]);
+  });
+});
+
+describe("product purchase quantity", () => {
+  it("adds the selected quantity at the current sale price without mixing colours", () => {
+    const original = addCartVariant([], product, variant, 1);
+    const cart = addCartVariant(original, product, blue, 3);
+    expect(original).toHaveLength(1);
+    expect(cart).toHaveLength(2);
+    expect(cart[1]).toMatchObject({variantId:blue.id,quantity:3,priceMinor:150000});
+    expect(addCartVariant(cart, product, blue, 2)[1].quantity).toBe(5);
+    expect(cart[1].quantity).toBe(3);
+  });
+  it("rejects unavailable colours, invalid quantities and totals above 99", () => {
+    for (const quantity of [0,-1,1.5,100,NaN]) expect(()=>addCartVariant([],product,variant,quantity)).toThrow(RangeError);
+    expect(()=>addCartVariant([],product,{...variant,available:false},1)).toThrow(RangeError);
+    expect(()=>addCartVariant(addCartVariant([],product,variant,98),product,variant,2)).toThrow(/99/);
+    expect(addCartVariant(addCartVariant([],product,variant,98),product,variant,1)[0].quantity).toBe(99);
   });
 });
 

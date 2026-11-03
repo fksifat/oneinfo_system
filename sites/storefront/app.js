@@ -1,16 +1,26 @@
 import { variantPrice, discountPercent, productMedia, productGallery } from "@oneinfo/contracts";
-import { reconcileCartItems, productRoute, spinFrame } from "./catalog.js";
+import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 
 (function () {
   "use strict";
 
-  const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const storageKey = "oneinfo.storefront.cart";
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
+  function driveVideoPreview(url) {
+    const match = /^https:\/\/drive\.google\.com\/file\/d\/([\w-]+)(?:\/(?:view|preview))?\/?(?:[?#]|$)/.exec(url);
+    if (!match) return null;
+    const preview = new URL(`https://drive.google.com/file/d/${match[1]}/preview`);
+    const resourceKey = new URL(url).searchParams.get("resourcekey");
+    if (resourceKey) preview.searchParams.set("resourcekey", resourceKey);
+    return preview.href;
+  }
+  const mediaUrl = path => path.startsWith("/api/v1/product-media/") ? new URL(path, apiUrl).href : path;
   let products = [];
   const selectedVariants = new Map();
   const selectedMedia = new Map();
-  const spinFrames = new Map();
+  const quantities = new Map();
+  let addingToCart = false;
   let catalogReady = false;
   let catalogRequest = null;
   const draftKey = "oneinfo.storefront.orderDraft";
@@ -165,37 +175,67 @@ import { reconcileCartItems, productRoute, spinFrame } from "./catalog.js";
       const v = p.variants.find(v => v.id === selectedVariants.get(p.id)) ?? p.variants.find(v => v.available) ?? p.variants[0];
       selectedVariants.set(p.id, v.id);
       const media = productMedia(v);
-      const active = detail ? Math.min(selectedMedia.get(v.id) ?? v.defaultMediaIndex ?? 0, Math.max(0, media.length - 1)) : 0;
+      const preferred = detail ? Math.min(selectedMedia.get(v.id) ?? v.defaultMediaIndex ?? 0, Math.max(0, media.length - 1)) : 0;
+      const isGalleryMedia = m => m.type === "image" || m.type === "video";
+      const active = media[preferred] && isGalleryMedia(media[preferred]) ? preferred : media.findIndex(isGalleryMedia);
       const item = media[active];
-      const gallery = productGallery(p.variants, v);
-      const cover = media.find(m => m.type === "image" || (m.type === "video" && m.poster) || m.type === "spin");
-      const coverUrl = cover?.type === "image" ? cover.url : cover?.type === "video" ? cover.poster : cover?.frames[0];
-      const frame = item?.type === "spin" ? Math.min(spinFrames.get(item.id) ?? 0, item.frames.length - 1) : 0;
-      const imageUrl = !detail ? coverUrl : item?.type === "image" ? item.url : item?.type === "spin" ? item.frames[frame] : "";
+      const gallery = detail ? productGallery(p.variants, {...v, showAllColourMedia:true}) : [];
+      const thumbnails = gallery.filter(({media}) => isGalleryMedia(media));
+      const models = gallery.filter(({media}) => media.type === "model");
+      const model = models.find(({variant,index}) => variant.id === v.id && index === preferred)
+        ?? models.find(({variant}) => variant.id === v.id) ?? models[0];
+      const cover = media.find(m => m.type === "image" || (m.type === "video" && m.poster));
+      const coverUrl = cover?.type === "image" ? cover.url : cover?.poster;
+      const imageUrl = !detail ? coverUrl : item?.type === "image" ? item.url : "";
+      const drivePreview = detail && item?.type === "video" ? driveVideoPreview(item.url) : null;
       const hasMedia = imageUrl || (detail && item?.type === "video");
       const percent = discountPercent(v);
       const sale = v.salePriceMinor !== null;
+      const quantity = quantities.get(p.id) ?? 1;
       const illustration = `<div class="mini-product-card ${v.appearance}-card" style="background:${escapeHtml(v.colorHex)}"><span>ONEINFO</span><strong>YOUR NAME</strong><small>SMART BUSINESS CARD</small></div>`;
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}<div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
-          <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
-          ${illustration}${imageUrl ? `<img class="catalog-image ${detail && item?.type === "spin" ? "spin-image" : ""}" draggable="false" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
-          ${detail && item?.type === "video" ? `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(item.poster)}"` : ""} src="${escapeHtml(item.url)}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>` : ""}
-          ${detail && item?.type === "spin" ? `<div class="spin-controls"><label>Drag to rotate <input class="spin-slider" type="range" min="0" max="${item.frames.length - 1}" value="${frame}" aria-label="360° frame" aria-valuetext="Frame ${frame+1} of ${item.frames.length}" /></label><output>${frame+1} / ${item.frames.length}</output></div>` : ""}
+          <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
+          ${illustration}${imageUrl ? `<img class="catalog-image" draggable="false" src="${escapeHtml(mediaUrl(imageUrl))}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
+          ${detail && item?.type === "video" ? (drivePreview ? `<iframe class="gallery-video" src="${escapeHtml(drivePreview)}" title="${escapeHtml(item.label || p.name + ' video')}" allowfullscreen referrerpolicy="no-referrer"></iframe>` : `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(mediaUrl(item.poster))}"` : ""} src="${escapeHtml(mediaUrl(item.url))}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>`) : ""}
           ${detail && media.length ? `<p class="gallery-error" role="status" hidden>Media could not load. Choose another item or check the URL.</p>` : ""}
 
         </div>
-        ${detail && gallery.length ? `<div class="gallery-items" role="group" aria-label="Product media">${gallery.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'spin' ? '360° view' : m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(m.url)}" alt="" loading="lazy" />` : m.type === 'video' ? '<span>▶</span>' : '<span>360°</span>'}</button>`).join("")}</div>` : ""}
+        ${thumbnails.length ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(mediaUrl(m.url))}" alt="" loading="lazy" />` : '<span>▶</span>'}</button>`).join("")}</div>` : ""}
+        ${model ? `<section class="gallery-model-card" aria-label="Interactive 3D view">
+          <header><h2>3D View</h2><span>${escapeHtml(model.variant.name)}</span></header>
+          <div class="gallery-model-stage">
+            <model-viewer class="gallery-model" src="${escapeHtml(model.media.url)}" alt="${escapeHtml(p.name + " — " + model.variant.name + " 3D model")}" camera-controls touch-action="none" min-camera-orbit="auto 0deg auto" max-camera-orbit="auto 180deg auto" disable-pan></model-viewer>
+            <p class="gallery-model-instruction">Drag or swipe to rotate</p>
+          </div>
+          <p class="gallery-model-error" role="status" hidden>3D model could not load.</p>
+          ${models.length > 1 ? `<div class="gallery-model-actions" role="group" aria-label="3D views">${models.map(entry => `<button class="gallery-model-button" type="button" data-media="${entry.index}" data-media-variant="${escapeHtml(entry.variant.id)}" aria-pressed="${entry === model}">${escapeHtml(entry.media.label || entry.variant.name)}</button>`).join("")}</div>` : ""}
+        </section>` : ""}
         ${detail ? `</div><div class="product-details-copy">` : ""}
-        <div class="product-info"><div><p>${escapeHtml(p.subtitle)}</p>${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}</div></div>
-        <div class="product-colours"><div class="colour-caption"><span>Colour: <strong>${escapeHtml(v.name)}</strong></span><span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span></div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span></span></button>`).join("")}</div></div>
-        ${detail && p.description ? `<p class="product-description">${escapeHtml(p.description)}</p>` : ""}
-        ${detail ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ""}
-        ${detail ? `<button class="button add-to-cart" type="button" ${!catalogReady || !v.available ? "disabled" : ""}>${v.available ? 'Add to cart <span aria-hidden="true">+</span>' : "Unavailable in this colour"}</button>` : ""}${detail ? "</div>" : ""}</article>`;
+        <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((v.priceMinor - variantPrice(v)) / 100)}</span>` : ''}</div></div>
+        <div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>
+        ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>−</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>+</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(variantPrice(v) * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
+        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">+</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">+</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">+</span></summary><div><p>This preview saves an order draft on your device. Delivery and payment are confirmed separately.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">↗</span></a></div></div>` : ""}</article>`;
+  }
+
+  function reviewsMarkup() {
+    return `<section class="product-reviews" aria-labelledby="product-reviews-title">
+      <div class="review-overview">
+        <div>
+          <h2 id="product-reviews-title">Customer reviews</h2>
+          <p>No verified reviews yet.</p>
+        </div>
+        <aside class="review-eligibility">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 22s7-3.5 7-10V5l-7-3-7 3v7c0 6.5 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <div><h3>Verified buyers only</h3><p>Review submissions are currently unavailable.</p></div>
+        </aside>
+      </div>
+    </section>`;
   }
 
   function renderRoute(focus = false) {
     const route = productRoute(location.hash);
+    document.body.classList.toggle("product-page", Boolean(route));
     $$("#main > section").forEach(section => { section.hidden = route ? section.id !== "product-detail" : section.id === "product-detail"; });
     if (!route) {
       document.title = "Oneinfo Smart Business Cards";
@@ -210,10 +250,13 @@ import { reconcileCartItems, productRoute, spinFrame } from "./catalog.js";
     const mediaVariantFocused = focused?.dataset.mediaVariant;
     const mediaFocused = focused?.closest("#product-detail") ? focused.dataset.media : null;
     const addFocused = focused?.closest("#product-detail") && focused.classList.contains("add-to-cart");
-    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a>` + (product ? productMarkup(product, true) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
+    const quantityFocused = focused?.closest("#product-detail") ? focused.dataset.quantityStep : null;
+    const openDisclosures = new Map($$(".purchase-disclosure", host).map(el => [el.dataset.disclosure, el.open]));
+    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup() : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
     if (!catalogReady) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
     document.title = product ? `${product.name} | Oneinfo` : "Product | Oneinfo";
     watchImages();
+    $$(".purchase-disclosure", host).forEach(el => { el.open = openDisclosures.get(el.dataset.disclosure) ?? false; });
     const strip = $(".gallery-items", host);
     const activeThumb = strip && $("[aria-pressed=true]", strip);
     if (activeThumb) {
@@ -222,11 +265,19 @@ import { reconcileCartItems, productRoute, spinFrame } from "./catalog.js";
       if (itemRect.right > stripRect.right) strip.scrollLeft += itemRect.right - stripRect.right + 4;
       else if (itemRect.left < stripRect.left) strip.scrollLeft -= stripRect.left - itemRect.left + 4;
     }
-    $(".gallery-video", host)?.addEventListener("error", () => { $(".gallery-error", host).hidden = false; }, {once:true});
+    const model = $(".gallery-model", host);
+    if (model) {
+      const error = $(".gallery-model-error", host);
+      const showError = () => { error.hidden = false; };
+      model.addEventListener("error", showError, { once:true });
+      void import("@google/model-viewer").catch(showError);
+    }
+    $("video.gallery-video", host)?.addEventListener("error", () => { $(".gallery-error", host).hidden = false; }, {once:true});
     if (focus) { $("#product-title")?.focus({ preventScroll:true }); host.scrollIntoView({ behavior:"instant" }); }
     else if (variant) $$(".colour-swatch", host).find(el => el.dataset.variant === variant)?.focus({preventScroll:true});
-    else if (mediaFocused !== undefined && mediaFocused !== null) $$(".gallery-item", host).find(el => el.dataset.media === mediaFocused && el.dataset.mediaVariant === mediaVariantFocused)?.focus({preventScroll:true});
+    else if (mediaFocused !== undefined && mediaFocused !== null) $$("button[data-media-variant]", host).find(el => el.dataset.media === mediaFocused && el.dataset.mediaVariant === mediaVariantFocused)?.focus({preventScroll:true});
     else if (addFocused) $(".add-to-cart", host)?.focus({preventScroll:true});
+    else if (quantityFocused) $$("[data-quantity-step]", host).find(el => el.dataset.quantityStep === quantityFocused && !el.disabled)?.focus({preventScroll:true});
   }
   window.addEventListener("hashchange", () => renderRoute(true));
 
@@ -264,7 +315,13 @@ import { reconcileCartItems, productRoute, spinFrame } from "./catalog.js";
   $("#catalog-retry").addEventListener("click", () => void loadProducts());
   async function handleProductClick(event) {
     if (event.target.closest(".detail-retry")) { void loadProducts(); return; }
-    const mediaButton = event.target.closest(".gallery-item");
+    const quantityButton = event.target.closest("[data-quantity-step]");
+    if (quantityButton && !quantityButton.disabled) {
+      const id = quantityButton.closest(".product").dataset.id;
+      quantities.set(id, Math.min(99, Math.max(1, (quantities.get(id) ?? 1) + Number(quantityButton.dataset.quantityStep))));
+      renderRoute(); return;
+    }
+    const mediaButton = event.target.closest("button[data-media-variant]");
     if (mediaButton) {
       const productId = mediaButton.closest(".product").dataset.id;
       const variantId = mediaButton.dataset.mediaVariant;
@@ -286,56 +343,28 @@ import { reconcileCartItems, productRoute, spinFrame } from "./catalog.js";
       renderProducts(); return;
     }
     const button = event.target.closest(".add-to-cart");
-    if (!button || button.disabled || !catalogReady) return;
+    if (!button || button.disabled || !catalogReady || addingToCart) return;
     const productId = button.closest(".product").dataset.id;
     const variantId = selectedVariants.get(productId);
     const before = products.find(p => p.id === productId)?.variants.find(v => v.id === variantId);
+    const quantity = quantities.get(productId) ?? 1;
+    addingToCart = true;
     button.disabled = true;
-    if (!await loadProducts()) { toast("Please retry loading this product."); return; }
-    const product = products.find(p => p.id === productId);
-    const variant = product?.variants.find(v => v.id === variantId);
-    if (!variant?.available) { toast("This colour is no longer available."); return; }
-    if (!before || variantPrice(before) !== variantPrice(variant)) { toast("The price changed. Please review it before adding to cart."); return; }
-    const existing = cart.find(item => item.id === product.id && item.variantId === variant.id);
-    if (existing) existing.quantity = Math.min(99, existing.quantity + 1);
-    else cart.push({ id: product.id, variantId: variant.id, name: product.name, variantName: variant.name, colorHex: variant.colorHex, priceMinor: variantPrice(variant), quantity: 1 });
-    save(storageKey, cart); renderCart();
-    toast(`${product.name} · ${variant.name} added to cart`);
+    button.setAttribute("aria-busy", "true"); button.textContent = "Adding…";
+    try {
+      if (!await loadProducts()) { toast("Please retry loading this product."); return; }
+      const product = products.find(p => p.id === productId);
+      const variant = product?.variants.find(v => v.id === variantId);
+      if (!variant?.available) { toast("This colour is no longer available."); return; }
+      if (!before || variantPrice(before) !== variantPrice(variant)) { toast("The price changed. Please review it before adding to cart."); return; }
+      const nextCart = addCartVariant(cart, product, variant, quantity);
+      save(storageKey, nextCart); cart = nextCart; renderCart();
+      toast(`${quantity} × ${product.name} · ${variant.name} added to cart`);
+    } catch (error) { toast(error instanceof RangeError ? error.message : "Could not save the cart. Please try again."); }
+    finally { addingToCart = false; renderRoute(); }
   }
   $(".product-grid").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("click", event => void handleProductClick(event));
-  function activeSpin() {
-    const route = productRoute(location.hash);
-    const p = products.find(p=>p.slug === route?.slug);
-    const v = p?.variants.find(v=>v.id === selectedVariants.get(p.id));
-    const media = v ? productMedia(v) : [];
-    const item = media[Math.min(selectedMedia.get(v?.id) ?? v?.defaultMediaIndex ?? 0, Math.max(0,media.length-1))];
-    return item?.type === "spin" ? item : null;
-  }
-  function showSpinFrame(item, frame) {
-    spinFrames.set(item.id, frame);
-    const image = $("#product-detail .spin-image");
-    if (image) image.src = item.frames[frame];
-    const slider = $("#product-detail .spin-slider");
-    if (slider) { slider.value = frame; slider.setAttribute("aria-valuetext", `Frame ${frame+1} of ${item.frames.length}`); }
-    const output = $("#product-detail .spin-controls output");
-    if (output) output.textContent = `${frame+1} / ${item.frames.length}`;
-  }
-  $("#product-detail").addEventListener("input", event => {
-    if (!event.target.matches(".spin-slider")) return;
-    const item = activeSpin(); if (item) showSpinFrame(item, Number(event.target.value));
-  });
-  let spinDrag = null;
-  $("#product-detail").addEventListener("pointerdown", event => {
-    if (!event.target.matches(".spin-image") || event.button !== 0) return;
-    const item = activeSpin(); if (!item) return;
-    spinDrag = {item, x:event.clientX, frame:spinFrames.get(item.id) ?? 0};
-    event.target.setPointerCapture(event.pointerId);
-  });
-  $("#product-detail").addEventListener("pointermove", event => {
-    if (spinDrag) showSpinFrame(spinDrag.item, spinFrame(spinDrag.frame,event.clientX-spinDrag.x,spinDrag.item.frames.length));
-  });
-  for (const event of ["pointerup","pointercancel","lostpointercapture"]) $("#product-detail").addEventListener(event,()=>{spinDrag=null;});
   document.addEventListener("visibilitychange", () => { if (!document.hidden) void loadProducts(); });
   window.setInterval(() => { if (!document.hidden && !$(".modal.open")) void loadProducts(); }, 30000);
 

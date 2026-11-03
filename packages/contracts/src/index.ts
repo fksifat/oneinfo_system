@@ -182,12 +182,14 @@ export type NfcBridgeResultInput = z.infer<typeof NfcBridgeResultSchema>;
 export type NfcReadResultInput = z.infer<typeof NfcReadResultSchema>;
 
 export const ProductImageSchema = z.union([
+  z.string().regex(/^\/api\/v1\/product-media\/[a-f0-9-]{36}\.(?:png|jpg|webp|svg)$/),
   z.url().max(2048).refine(value => /^https:\/\//i.test(value), "Use an HTTPS image URL"),
   z.string().regex(/^\/assets\/[a-zA-Z0-9/_-]+\.(?:webp|png|jpe?g|svg)$/, "Use an HTTPS URL or a bundled /assets/ image"),
   z.literal(""),
 ]);
 const MediaImageUrlSchema = ProductImageSchema.refine(value => value !== "", "Enter an image URL");
 const VideoUrlSchema = z.union([
+  z.string().regex(/^\/api\/v1\/product-media\/[a-f0-9-]{36}\.(?:mp4|webm)$/),
   z.url().max(2048).refine(value => /^https:\/\//i.test(value), "Use an HTTPS video URL"),
   z.string().regex(/^\/assets\/[a-zA-Z0-9/_-]+\.(?:mp4|webm)$/, "Use an HTTPS URL or bundled MP4/WebM"),
 ]);
@@ -195,6 +197,10 @@ const mediaBase = { id: z.uuid(), label: z.string().trim().max(80).default("") }
 export const ProductMediaSchema = z.discriminatedUnion("type", [
   z.object({...mediaBase, type:z.literal("image"), url:MediaImageUrlSchema}),
   z.object({...mediaBase, type:z.literal("video"), url:VideoUrlSchema, poster:ProductImageSchema.default("")}),
+  z.object({...mediaBase, type:z.literal("model"), url:z.string().trim().max(2048).refine(value =>
+    /^\/assets\/[a-zA-Z0-9/_-]+\.glb$/.test(value) ||
+    (z.url().safeParse(value).success && /^https:\/\//i.test(value) && /\.glb$/i.test(new URL(value).pathname)),
+    "Use a direct HTTPS .glb URL or a bundled /assets/ path")}),
   z.object({...mediaBase, type:z.literal("spin"), frames:z.array(MediaImageUrlSchema).min(2).max(120)}),
 ]);
 export type ProductMedia = z.infer<typeof ProductMediaSchema>;
@@ -234,6 +240,8 @@ export const ProductInputSchema = z.object({
   name: z.string().trim().min(2).max(120),
   subtitle: z.string().trim().max(100).default(""),
   description: z.string().trim().max(1000).default(""),
+  warranty: z.string().trim().max(2000).default(""),
+  warrantyIsDemo: z.boolean().default(false),
   variants: z.array(ProductVariantSchema).min(1).max(40).superRefine((variants, ctx) => {
     if (new Set(variants.map(v => v.id)).size !== variants.length)
       ctx.addIssue({ code: "custom", message: "Colour IDs must be unique" });
