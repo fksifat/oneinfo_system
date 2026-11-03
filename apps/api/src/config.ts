@@ -10,7 +10,7 @@ const ConfigSchema = z
   HOST: z.string().default("127.0.0.1"),
   JWT_SECRET: z.string().min(32).default(developmentSecret),
   PUBLIC_CARD_BASE_URL: z.string().url().default("https://cards.oneinfo.example/c"),
-  CORS_ORIGIN: z.string().default("http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174"),
+  CORS_ORIGIN: z.string().default("http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175"),
   DEV_ADMIN_EMAIL: z.string().email().default("admin@oneinfo.local"),
   })
   .superRefine((value, context) => {

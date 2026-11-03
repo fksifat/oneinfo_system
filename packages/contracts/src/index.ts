@@ -180,3 +180,72 @@ export type PairNfcDeviceInput = z.infer<typeof PairNfcDeviceSchema>;
 export type CreateNfcBridgeSessionInput = z.infer<typeof CreateNfcBridgeSessionSchema>;
 export type NfcBridgeResultInput = z.infer<typeof NfcBridgeResultSchema>;
 export type NfcReadResultInput = z.infer<typeof NfcReadResultSchema>;
+
+export const ProductImageSchema = z.union([
+  z.url().max(2048).refine(value => /^https:\/\//i.test(value), "Use an HTTPS image URL"),
+  z.string().regex(/^\/assets\/[a-zA-Z0-9/_-]+\.(?:webp|png|jpe?g|svg)$/, "Use an HTTPS URL or a bundled /assets/ image"),
+  z.literal(""),
+]);
+const MediaImageUrlSchema = ProductImageSchema.refine(value => value !== "", "Enter an image URL");
+const VideoUrlSchema = z.union([
+  z.url().max(2048).refine(value => /^https:\/\//i.test(value), "Use an HTTPS video URL"),
+  z.string().regex(/^\/assets\/[a-zA-Z0-9/_-]+\.(?:mp4|webm)$/, "Use an HTTPS URL or bundled MP4/WebM"),
+]);
+const mediaBase = { id: z.uuid(), label: z.string().trim().max(80).default("") };
+export const ProductMediaSchema = z.discriminatedUnion("type", [
+  z.object({...mediaBase, type:z.literal("image"), url:MediaImageUrlSchema}),
+  z.object({...mediaBase, type:z.literal("video"), url:VideoUrlSchema, poster:ProductImageSchema.default("")}),
+  z.object({...mediaBase, type:z.literal("spin"), frames:z.array(MediaImageUrlSchema).min(2).max(120)}),
+]);
+export type ProductMedia = z.infer<typeof ProductMediaSchema>;
+
+export const ProductVariantSchema = z.object({
+  id: z.uuid(),
+  name: z.string().trim().min(1).max(60),
+  colorHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex colour"),
+  priceMinor: z.number().int().min(1).max(100_000_000),
+  salePriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null),
+  available: z.boolean().default(true),
+  finish: z.string().trim().max(80).default(""),
+  appearance: z.enum(["light", "dark", "metal"]).default("light"),
+  imageUrl: ProductImageSchema.default(""),
+  backImageUrl: ProductImageSchema.default(""),
+  showAllColourMedia: z.boolean().default(true),
+  defaultMediaIndex: z.number().int().min(0).max(19).default(0),
+  media: z.array(ProductMediaSchema).max(20).refine(items => new Set(items.map(m=>m.id)).size === items.length, "Media IDs must be unique").optional(),
+}).refine(v => v.salePriceMinor === null || v.salePriceMinor < v.priceMinor, {
+  path: ["salePriceMinor"], message: "Sale price must be lower than the regular price",
+});
+export type ProductVariant = z.infer<typeof ProductVariantSchema>;
+// Existing records are read as an ordinary image gallery until an admin saves it.
+export function productMedia(v: Pick<ProductVariant, "media" | "imageUrl" | "backImageUrl">): ProductMedia[] {
+  return v.media ?? [v.imageUrl, v.backImageUrl].filter(Boolean).map((url, i) => ({id:`legacy-${i}`,type:"image" as const,url,label:`Image ${i+1}`}));
+}
+export function productGallery(variants: ProductVariant[], selected: ProductVariant) {
+  return (selected.showAllColourMedia === false ? [selected] : variants)
+    .flatMap(variant => productMedia(variant).map((media, index) => ({variant, media, index})));
+}
+export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) => v.salePriceMinor ?? v.priceMinor;
+export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
+  v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
+
+export const ProductInputSchema = z.object({
+  slug: z.string().trim().min(3).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
+  name: z.string().trim().min(2).max(120),
+  subtitle: z.string().trim().max(100).default(""),
+  description: z.string().trim().max(1000).default(""),
+  variants: z.array(ProductVariantSchema).min(1).max(40).superRefine((variants, ctx) => {
+    if (new Set(variants.map(v => v.id)).size !== variants.length)
+      ctx.addIssue({ code: "custom", message: "Colour IDs must be unique" });
+    if (new Set(variants.map(v => v.name.toLowerCase())).size !== variants.length)
+      ctx.addIssue({ code: "custom", message: "Give each colour a unique name" });
+  }),
+  features: z.array(z.string().trim().min(1).max(160)).max(12).default([]),
+  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]).default("DRAFT"),
+  featured: z.boolean().default(false),
+  badge: z.string().trim().max(40).default(""),
+  sortOrder: z.number().int().min(0).max(100_000).default(0),
+});
+export const UpdateProductSchema = ProductInputSchema.extend({ version: z.number().int().positive() });
+export type ProductInput = z.infer<typeof ProductInputSchema>;
+export type Product = ProductInput & { id: string; version: number; createdAt: string; updatedAt: string };

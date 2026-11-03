@@ -10,11 +10,14 @@ import { profileRoutes } from "./routes/profiles.js";
 import { adminRoutes } from "./routes/admin.js";
 import { localNfcRoutes } from "./routes/local-nfc.js";
 
+import { productRoutes } from "./routes/products.js";
+
 export function buildApp() {
   const app = Fastify({ logger: true, requestIdHeader: "x-request-id" });
 
   app.register(cors, {
     origin: config.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
+    methods: ["GET", "POST", "PUT", "PATCH", "OPTIONS"],
     allowedHeaders: ["content-type", "authorization", "x-station-key", "x-request-id", "x-oneinfo-device-token"],
   });
   app.get("/health", async () => ({ status: "ok", service: "oneinfo-production-api" }));
@@ -24,6 +27,7 @@ export function buildApp() {
   app.register(jobRoutes, { prefix: "/api/v1/production/jobs" });
   app.register(cardRoutes, { prefix: "/api/v1/production/cards" });
   app.register(profileRoutes, { prefix: "/api/v1/profiles" });
+  app.register(productRoutes, { prefix: "/api/v1/products" });
   app.register(adminRoutes, { prefix: "/api/v1/admin" });
   app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
 

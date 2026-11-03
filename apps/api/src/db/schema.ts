@@ -1,3 +1,4 @@
+import type { ProductVariant } from "@oneinfo/contracts";
 import { randomUUID } from "node:crypto";
 import {
   boolean,
@@ -267,3 +268,23 @@ export const auditLogs = pgTable(
   },
   (table) => [index("audit_logs_target_idx").on(table.targetType, table.targetId)],
 );
+
+export const products = pgTable("products", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  slug: varchar("slug", { length: 80 }).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  subtitle: varchar("subtitle", { length: 100 }).notNull().default(""),
+  description: text("description").notNull().default(""),
+  priceMinor: integer("price_minor").notNull(),
+  variants: jsonb("variants").$type<ProductVariant[]>().notNull().default([]),
+  features: jsonb("features").$type<string[]>().notNull().default([]),
+  finish: varchar("finish", { length: 80 }).notNull().default(""),
+  appearance: varchar("appearance", { length: 10 }).notNull().default("light"),
+  imageUrl: text("image_url").notNull().default(""),
+  status: varchar("status", { length: 12 }).notNull().default("DRAFT"),
+  featured: boolean("featured").notNull().default(false),
+  badge: varchar("badge", { length: 40 }).notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, table => [uniqueIndex("products_slug_unique").on(table.slug), index("products_catalog_idx").on(table.status, table.sortOrder)]);

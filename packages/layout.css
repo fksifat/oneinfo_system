@@ -1,0 +1,7 @@
+/* Shared bounds for Oneinfo's storefront and operator applications. */
+:root {
+  --page-max-width: 1280px;
+  --workspace-max-width: 1440px;
+  --page-gutter: clamp(20px, 4vw, 48px);
+  --page-inset: max(var(--page-gutter), calc((100% - var(--page-max-width)) / 2));
+}

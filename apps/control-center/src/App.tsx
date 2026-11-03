@@ -1,7 +1,8 @@
+import { Products } from "./Products.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 
-type View = "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
+type View = "products" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
 
 interface Overview {
   profiles: number;
@@ -131,7 +132,7 @@ export function App() {
   if (profileSlug) return <PublicProfile slug={profileSlug} />;
 
   const [token, setToken] = useState(() => localStorage.getItem("oneinfo.admin.token") ?? "");
-  const [view, setView] = useState<View>("overview");
+  const [view, setView] = useState<View>(() => window.location.hash === "#products" ? "products" : "overview");
   const [overview, setOverview] = useState<Overview | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [cards, setCards] = useState<CardRow[]>([]);
@@ -142,6 +143,12 @@ export function App() {
   const [message, setMessage] = useState("System ready");
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const expired = () => { localStorage.removeItem("oneinfo.admin.token"); setToken(""); };
+    window.addEventListener("oneinfo-session-expired", expired);
+    return () => window.removeEventListener("oneinfo-session-expired", expired);
+  }, []);
 
   const bootstrap = async () => {
     setBusy(true);
@@ -231,6 +238,7 @@ export function App() {
 
   const nav: { id: View; label: string; icon: string }[] = [
     { id: "overview", label: "Overview", icon: "◫" },
+    { id: "products", label: "Products", icon: "▣" },
     { id: "profiles", label: "Client profiles", icon: "◎" },
     { id: "cards", label: "Cards & inventory", icon: "▱" },
     { id: "batches", label: "Production batches", icon: "▦" },
@@ -271,6 +279,8 @@ export function App() {
             </article>
           </div>
         </section> : null}
+
+        {view === "products" ? <Products token={token} /> : null}
 
         {view === "profiles" ? <section>
           <div className="list-toolbar"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => setEditing({ ...blankProfile })}>New client profile</button></div>
