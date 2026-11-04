@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "start": "node src/index.mjs"
+    "start": "node src/index.mjs",
+    "test": "python3 -m unittest discover -s src -p 'test_*.py'"
   },
   "engines": {
     "node": ">=22.12"

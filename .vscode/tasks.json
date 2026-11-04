@@ -2,9 +2,17 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Oneinfo: One-click production console",
+      "type": "npm",
+      "script": "start:local",
+      "isBackground": true,
+      "presentation": { "group": "oneinfo", "reveal": "always" },
+      "problemMatcher": []
+    },
+    {
       "label": "Oneinfo: Start database",
       "type": "shell",
-      "command": "docker compose up -d postgres",
+      "command": "docker compose up -d --wait postgres",
       "problemMatcher": []
     },
     {

@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { SignJWT, jwtVerify } from "jose";
-import type { OperatorRole } from "@oneinfo/contracts";
+import { OperatorRoleSchema, type OperatorRole } from "@oneinfo/contracts";
 import { and, eq } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { operators, productionStations } from "./db/schema.js";
@@ -53,13 +53,15 @@ export async function requireOperator(
       issuer: "oneinfo-production-api",
       audience: "oneinfo-production-console",
     });
-    const role = payload.role as OperatorRole;
+    const role = OperatorRoleSchema.parse(payload.role);
     const identity = {
       operatorId: payload.sub ?? "",
       email: String(payload.email ?? ""),
       role,
     };
     if (!identity.operatorId || !identity.email || !role) throw new Error("Invalid claims");
+    const [operator] = await db.select().from(operators).where(and(eq(operators.id, identity.operatorId), eq(operators.active, true))).limit(1);
+    if (!operator || operator.role !== role) throw new Error("Inactive operator or outdated role");
     if (allowedRoles && !allowedRoles.includes(role)) {
       throw Object.assign(new Error("Operator role is not permitted"), { statusCode: 403 });
     }
@@ -76,7 +78,7 @@ export async function requireStation(request: FastifyRequest): Promise<StationId
     throw Object.assign(new Error("Missing station credential"), { statusCode: 401 });
   }
   const stationId = rawCredential.split(".", 1)[0];
-  if (!stationId) throw Object.assign(new Error("Invalid station credential"), { statusCode: 401 });
+  if (!stationId || !/^[a-f0-9-]{36}$/i.test(stationId)) throw Object.assign(new Error("Invalid station credential"), { statusCode: 401 });
 
   const [station] = await db
     .select({ id: productionStations.id, code: productionStations.stationCode })

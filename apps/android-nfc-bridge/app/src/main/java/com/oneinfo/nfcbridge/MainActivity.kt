@@ -1,6 +1,14 @@
 package com.oneinfo.nfcbridge
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.view.View
+import android.widget.RadioButton
+import android.provider.Settings
+import com.google.zxing.integration.android.IntentIntegrator
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
 import android.nfc.NfcAdapter
@@ -21,6 +29,8 @@ import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     private val apiUrl = "http://127.0.0.1:3001/api/v1/local-nfc"
@@ -31,33 +41,80 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     private var poller: ScheduledFuture<*>? = null
     private var deviceToken: String? = null
     @Volatile private var activeTask: Task? = null
+    @Volatile private var pendingResult: Pair<String, JSONObject>? = null
+    private val processingTag = AtomicBoolean(false)
     private val nfcAdapter by lazy { NfcAdapter.getDefaultAdapter(this) }
+    @Volatile private var startingVerification = false
+    @Volatile private var cameraScanning = false
+    @Volatile private var scannedCard: JSONObject? = null
+    @Volatile private var qrForQc = false
+    @Volatile private var qcSessionId: String? = null
+    private var lastTagResult: JSONObject? = null
 
-    enum class TaskMode { WRITE, READ }
-    data class Task(val sessionId: String, val mode: TaskMode, val expectedUrl: String? = null)
+    enum class TaskMode { WRITE, READ, UTILITY_WRITE, VERIFY_NFC, VERIFY_CAMERA }
+    data class Task(val sessionId: String, val mode: TaskMode, val expiresAt: Instant, val expectedUrl: String? = null, val recordType: String = "URL")
+    class ApiException(val statusCode: Int, message: String) : Exception(message)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         setContentView(R.layout.activity_main)
         status = findViewById(R.id.status)
         pairingCode = findViewById(R.id.pairingCode)
         deviceToken = getPreferences(MODE_PRIVATE).getString("deviceToken", null)
         findViewById<Button>(R.id.pairButton).setOnClickListener { pair() }
+        findViewById<Button>(R.id.verifyQr).setOnClickListener { startQrVerification(false) }
+        findViewById<Button>(R.id.verifyQc).setOnClickListener { startQrVerification(true) }
+        findViewById<Button>(R.id.loadNfc).setOnClickListener { loadToNfc() }
+        findViewById<Button>(R.id.approveQc).setOnClickListener { approveQc() }
+        findViewById<Button>(R.id.tabProduction).setOnClickListener { showPanel(R.id.productionPanel) }
+        findViewById<Button>(R.id.tabTools).setOnClickListener { showPanel(R.id.toolsPanel) }
+        findViewById<Button>(R.id.tabConnect).setOnClickListener { showPanel(R.id.connectPanel) }
+        findViewById<Button>(R.id.readTag).setOnClickListener { startUtility("READ") }
+        findViewById<Button>(R.id.writeTag).setOnClickListener {
+            val value = findViewById<EditText>(R.id.tagValue).text.toString()
+            if (value.isBlank()) setStatus("Enter the link or text to write first.")
+            else AlertDialog.Builder(this).setTitle("Replace NFC content?")
+                .setMessage("This replaces existing NDEF records on the tag you tap. Production and QC records will not change.\n\n${value.take(200)}")
+                .setNegativeButton("Keep content", null).setPositiveButton("Replace and write") { _, _ -> startUtility("WRITE") }.show()
+        }
+        findViewById<Button>(R.id.eraseTag).setOnClickListener {
+            AlertDialog.Builder(this).setTitle("Erase NFC tag?")
+                .setMessage("This removes all NDEF links and text from the tag you tap. The tag stays reusable and its UID stays unchanged. This is not a secure wipe of chip memory. Production records will not change.")
+                .setNegativeButton("Keep content", null).setPositiveButton("Erase tag") { _, _ -> startUtility("ERASE") }.show()
+        }
+        findViewById<Button>(R.id.cancelTask).setOnClickListener { cancelUtility() }
+        findViewById<Button>(R.id.copyResult).setOnClickListener {
+            lastTagResult?.let { (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("NFC tag result", it.toString(2))); setStatus("Tag result copied.") }
+        }
+        findViewById<Button>(R.id.shareResult).setOnClickListener {
+            lastTagResult?.let { startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, it.toString(2)), "Share NFC result")) }
+        }
+        findViewById<Button>(R.id.nfcSettings).setOnClickListener { startActivity(Intent(Settings.ACTION_NFC_SETTINGS)) }
+        showPanel(if (deviceToken == null) R.id.connectPanel else R.id.productionPanel)
+        updateActions()
         if (nfcAdapter == null) setStatus("This device does not provide NFC hardware.")
         else if (deviceToken != null) {
-            setStatus("Paired. Waiting for NFC work from the workstation…")
+            setStatus("Paired. Scan a printed QR to detect its batch and card.")
             startPolling()
         }
     }
 
     override fun onResume() {
         super.onResume()
-        nfcAdapter?.enableReaderMode(this, this, NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B, null)
+        findViewById<TextView>(R.id.nfcStatus).text = if (nfcAdapter?.isEnabled == true) "NFC is on · Ready to scan" else "NFC is off · Enable it before scanning"
+        nfcAdapter?.enableReaderMode(this, this, NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_NFC_F or NfcAdapter.FLAG_READER_NFC_V, null)
     }
 
     override fun onPause() {
         nfcAdapter?.disableReaderMode(this)
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        poller?.cancel(false)
+        executor.shutdownNow()
+        super.onDestroy()
     }
 
     private fun pair() {
@@ -73,7 +130,8 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                 val response = request("POST", "/devices/pair", body)
                 deviceToken = response.getString("deviceToken")
                 getPreferences(MODE_PRIVATE).edit().putString("deviceToken", deviceToken).apply()
-                setStatus("Paired. Waiting for NFC work from the workstation…")
+                setStatus("Paired. Scan a printed QR to detect its batch and card.")
+                main.post { showPanel(R.id.productionPanel) }
                 startPolling()
             } catch (error: Exception) {
                 setStatus("Pairing failed: ${error.message}")
@@ -84,32 +142,190 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     private fun startPolling() {
         poller?.cancel(false)
         poller = executor.scheduleWithFixedDelay({
-            if (activeTask != null) return@scheduleWithFixedDelay
             try {
+                request("GET", "/device/status")
+                pendingResult?.let { (path, body) ->
+                    val response = request("POST", path, body)
+                    pendingResult = null
+                    activeTask = null
+                    val state = response.optString("state")
+                    if (path.contains("/verification-tasks/") && path.endsWith("/result")) {
+                        qcSessionId = if (state == "MATCHED") path.substringAfter("/verification-tasks/").substringBefore("/") else null
+                    }
+                    if (path.contains("/tasks/") && path.endsWith("/result")) scannedCard = null
+                    if (response.optString("qcStatus") == "PASSED") qcSessionId = null
+                    setStatus(when {
+                        path.contains("/read-tasks/") && state == "COMPLETED" && body.optJSONObject("deviceMetadata")?.optString("operation") == "ERASE" -> "Tag erased and verified empty. PC dashboard updated."
+                        path.contains("/read-tasks/") && state == "COMPLETED" -> "NFC tool completed. Tag details are available here and on the PC."
+                        path.contains("/read-tasks/") && state == "FAILED" -> "NFC tool failed. Check tag details and try again."
+                        response.optString("qcStatus") == "PASSED" -> "QC APPROVED. Card released to saleable inventory. PC dashboard updated."
+                        state == "MATCHED" -> "QR and NFC match. Tap Approve QC to finish. PC dashboard updated."
+                        state == "MISMATCH" -> "QC blocked: QR and NFC do not match. PC dashboard updated."
+                        state == "SUCCEEDED" -> "NFC link saved. Now scan QR for final QC, then tap NFC again."
+                        state == "FAILED" -> "NFC write failed. Scan the printed QR again to retry."
+                        else -> "NFC result delivered to the workstation."
+                    })
+                }
+                val current = activeTask
+                if (current != null && current.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE) && !processingTag.get()) {
+                    val remote = request("GET", "/device/read-tasks/${current.sessionId}")
+                    if (remote.optString("state") !in listOf("PENDING", "READING")) {
+                        activeTask = null
+                        setStatus("NFC tool stopped or expired. Ready for a new operation.")
+                    }
+                }
+                if (activeTask?.expiresAt?.isBefore(Instant.now()) == true && !processingTag.get()) {
+                    activeTask = null
+                    setStatus("Request expired. Scan the printed QR again.")
+                }
+                if (activeTask != null || startingVerification || cameraScanning) return@scheduleWithFixedDelay
+                val verification = request("GET", "/device/verification-tasks/next")
+                if (!verification.isNull("sessionId")) {
+                    val mode = if (verification.getString("method") == "QR_CAMERA") TaskMode.VERIFY_CAMERA else TaskMode.VERIFY_NFC
+                    val task = Task(verification.getString("sessionId"), mode, Instant.parse(verification.getString("expiresAt")), verification.getString("expectedUrl"))
+                    activeTask = task
+                    if (mode == TaskMode.VERIFY_CAMERA) main.post {
+                        cameraScanning = true
+                        setStatus("Scan the selected QR code with the camera.")
+                        IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+                            .setPrompt("Scan the selected Oneinfo QR code")
+                            .setOrientationLocked(false).setBeepEnabled(false).initiateScan()
+                    } else setStatus("Verification only. Lift the NFC tag away and tap it again.")
+                    return@scheduleWithFixedDelay
+                }
                 val response = request("GET", "/device/tasks/next")
                 if (!response.isNull("sessionId")) {
-                    activeTask = Task(response.getString("sessionId"), TaskMode.WRITE, response.getString("expectedUrl"))
+                    activeTask = Task(response.getString("sessionId"), TaskMode.WRITE, Instant.parse(response.getString("expiresAt")), response.getString("expectedUrl"))
                     setStatus("Ready to write. Hold the NFC card against the phone.")
                     return@scheduleWithFixedDelay
                 }
                 val readResponse = request("GET", "/device/read-tasks/next")
                 if (!readResponse.isNull("sessionId")) {
-                    activeTask = Task(readResponse.getString("sessionId"), TaskMode.READ)
-                    setStatus("Ready to read. Hold the NFC card against the phone.")
+                    acceptUtility(readResponse)
                 }
             } catch (error: Exception) {
-                setStatus("Local USB connection unavailable: ${error.message}")
+                if (error is ApiException && error.statusCode in listOf(400, 401, 403, 404, 409)) {
+                    pendingResult = null
+                    activeTask = null
+                    qcSessionId = null
+                    scannedCard = null
+                    if (error.statusCode == 401) {
+                        deviceToken = null
+                        getPreferences(MODE_PRIVATE).edit().remove("deviceToken").apply()
+                        poller?.cancel(false)
+                    }
+                }
+                setStatus("Workstation connection unavailable: ${error.message}")
+                main.post { findViewById<TextView>(R.id.connectionStatus).text = if (deviceToken == null) "Not paired · Open Connect" else "Workstation unavailable · Check ADB tunnel" }
             }
         }, 0, 1200, TimeUnit.MILLISECONDS)
     }
 
+    private fun showPanel(panelId: Int) {
+        listOf(R.id.productionPanel, R.id.toolsPanel, R.id.connectPanel).forEach { findViewById<View>(it).visibility = if (it == panelId) View.VISIBLE else View.GONE }
+        listOf(R.id.tabProduction to R.id.productionPanel, R.id.tabTools to R.id.toolsPanel, R.id.tabConnect to R.id.connectPanel).forEach { (buttonId, target) ->
+            findViewById<Button>(buttonId).alpha = if (target == panelId) 1f else 0.6f
+        }
+    }
+
+    private fun startUtility(operation: String) {
+        if (deviceToken == null) return setStatus("Pair the phone with your workstation first.")
+        if (activeTask != null || pendingResult != null || startingVerification || cameraScanning) return setStatus("Finish the current operation first.")
+        if (nfcAdapter?.isEnabled != true) return setStatus("Enable NFC in Connect → Open NFC settings.")
+        val input = JSONObject().put("operation", operation)
+        if (operation == "ERASE") input.put("overwriteConfirmed", true)
+        if (operation == "WRITE") input.put("recordType", if (findViewById<RadioButton>(R.id.urlType).isChecked) "URL" else "TEXT")
+            .put("value", findViewById<EditText>(R.id.tagValue).text.toString()).put("overwriteConfirmed", true)
+        startingVerification = true
+        setStatus("Preparing NFC tool…")
+        executor.execute {
+            try {
+                val response = request("POST", "/device/utility-sessions", input)
+                response.put("sessionId", response.getString("id"))
+                acceptUtility(response)
+            } catch (error: Exception) { setStatus(if (error is ApiException && error.statusCode == 400) "Use a valid HTTP(S) website link or nonempty plain text (up to 2048 characters)." else "Could not start NFC tool: ${error.message}") }
+            finally { startingVerification = false; main.post { updateActions() } }
+        }
+    }
+
+    private fun acceptUtility(response: JSONObject) {
+        val utility = response.optJSONObject("utility") ?: JSONObject().put("operation", "READ")
+        val erase = utility.optString("operation") == "ERASE"
+        val write = utility.optString("operation") in listOf("WRITE", "ERASE")
+        activeTask = Task(response.getString("sessionId"), if (write) TaskMode.UTILITY_WRITE else TaskMode.READ,
+            Instant.parse(response.getString("expiresAt")), if (write) utility.optString("value", "") else null, if (erase) "EMPTY" else utility.optString("recordType", "URL"))
+        main.post { showPanel(R.id.toolsPanel) }
+        setStatus(if (erase) "Ready to erase NDEF content. Tap ONLY the tag you want to empty." else if (write) "Ready to replace NDEF content with ${utility.getString("recordType")}: ${utility.getString("value").take(120)}. Tap the target tag." else "Ready to read. Tap an NFC tag to inspect it.")
+    }
+
+    private fun cancelUtility() {
+        val task = activeTask ?: return
+        if (task.mode !in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE) || processingTag.get() || pendingResult != null) return
+        startingVerification = true
+        setStatus("Stopping waiting task…")
+        executor.execute {
+            try { request("POST", "/device/read-tasks/${task.sessionId}/cancel", JSONObject()); activeTask = null; setStatus("Waiting task stopped.") }
+            catch (error: Exception) { setStatus("Could not stop task: ${error.message}") }
+            finally { startingVerification = false; main.post { updateActions() } }
+        }
+    }
+
+    private fun startQrVerification(forQc: Boolean) {
+        if (deviceToken == null) return setStatus("Pair the phone with the workstation first.")
+        if (activeTask != null || pendingResult != null || startingVerification || cameraScanning) return setStatus("Complete the current operation first.")
+        activeTask = Task("", TaskMode.VERIFY_CAMERA, Instant.now().plusSeconds(120))
+        qrForQc = forQc
+        scannedCard = null
+        qcSessionId = null
+        cameraScanning = true
+        findViewById<TextView>(R.id.verificationUrl).text = if (forQc) "Final QC: scan the printed QR again, then tap NFC to compare both links." else "Scan the printed QR to detect its batch and card. Then choose Load to NFC."
+        IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+            .setPrompt(if (forQc) "Final QC: scan QR, then tap NFC" else "Scan printed QR to identify card").setOrientationLocked(false).setBeepEnabled(false).initiateScan()
+    }
+
+    private fun loadToNfc() {
+        val card = scannedCard ?: return setStatus("Scan the printed QR first.")
+        if (activeTask != null || pendingResult != null || startingVerification) return
+        startingVerification = true
+        setStatus("Preparing to load this QR link to NFC…")
+        executor.execute {
+            try {
+                val response = request("POST", "/device/load-to-nfc", JSONObject().put("scanId", card.getString("scanId")))
+                if (response.getString("state") != "WRITING") throw IllegalStateException("Scan the QR again for a new write attempt.")
+                activeTask = Task(response.getString("sessionId"), TaskMode.WRITE, Instant.parse(response.getString("expiresAt")), response.getString("expectedUrl"))
+                setStatus("Load to NFC ready. Hold THIS card against the phone to write its QR link.")
+            } catch (error: Exception) { setStatus("Could not start NFC write: ${error.message}") }
+            finally { startingVerification = false; main.post { updateActions() } }
+        }
+    }
+
+    private fun approveQc() {
+        val sessionId = qcSessionId ?: return
+        if (activeTask != null || pendingResult != null || startingVerification) return
+        pendingResult = Pair("/device/verification-tasks/$sessionId/approve", JSONObject())
+        setStatus("Saving QC approval…")
+    }
+
     override fun onTagDiscovered(tag: Tag) {
         val task = activeTask ?: return setStatus("No NFC job is waiting on the workstation.")
+        if (task.expiresAt.isBefore(Instant.now())) {
+            activeTask = null
+            return setStatus("Request expired. Start a new operation on the workstation.")
+        }
+        if (pendingResult != null || !processingTag.compareAndSet(false, true)) return
+        if (task.mode == TaskMode.VERIFY_CAMERA) {
+            processingTag.set(false)
+            return
+        }
+        if (task.mode == TaskMode.VERIFY_NFC) return verifyNfc(task, tag)
         if (task.mode == TaskMode.READ) return readTag(task, tag)
+        if (task.mode == TaskMode.UTILITY_WRITE) return writeUtility(task, tag)
+        var connection: Ndef? = null
         try {
             val expectedUrl = task.expectedUrl ?: throw IllegalStateException("WRITE_FAILED")
             val message = NdefMessage(arrayOf(NdefRecord.createUri(expectedUrl)))
             val ndef = Ndef.get(tag)
+            connection = ndef
             if (ndef != null) {
                 ndef.connect()
                 if (!ndef.isWritable) throw IllegalStateException("TAG_READ_ONLY_OR_LOCKED")
@@ -123,19 +339,22 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                 submit(task, true, readback, null)
             } else {
                 val formatable = NdefFormatable.get(tag) ?: throw IllegalStateException("NOT_NDEF_FORMATTED")
-                formatable.connect()
-                formatable.format(message)
-                formatable.close()
-                throw IllegalStateException("READBACK_FAILED")
+                formatable.use {
+                    it.connect()
+                    it.format(message)
+                }
+                setStatus("Tag formatted. Lift the card and tap again to verify it.")
             }
         } catch (error: Exception) {
             val code = error.message?.takeIf { it.matches(Regex("[A-Z_]+")) } ?: "WRITE_FAILED"
             submit(task, false, null, code)
+        } finally {
+            try { connection?.close() } catch (_: Exception) {}
+            processingTag.set(false)
         }
     }
 
     private fun submit(task: Task, succeeded: Boolean, readback: String?, errorCode: String?) {
-        executor.execute {
             try {
                 val metadata = JSONObject()
                     .put("adapter", "android-usb")
@@ -149,54 +368,92 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                     .put("deviceMetadata", metadata)
                 if (readback != null) body.put("readbackUrl", readback)
                 if (errorCode != null) body.put("errorCode", errorCode)
-                request("POST", "/device/tasks/${task.sessionId}/result", body)
-                setStatus(if (succeeded) "Card written and verified. Waiting for the next job…" else "NFC write failed: $errorCode")
+                pendingResult = Pair("/device/tasks/${task.sessionId}/result", body)
+                setStatus(if (succeeded) "Card written and verified. Sending result…" else "NFC write failed: $errorCode")
             } catch (error: Exception) {
                 setStatus("Could not report NFC result: ${error.message}")
-            } finally {
-                activeTask = null
             }
+    }
+
+    private fun tagBase(tag: Tag) = JSONObject()
+        .put("uid", tag.id.joinToString("") { "%02X".format(it) })
+        .put("techList", JSONArray(tag.techList.toList())).put("ndefFormatted", false).put("records", JSONArray())
+        .put("deviceMetadata", JSONObject().put("adapter", "android-adb").put("model", Build.MODEL))
+
+    private fun inspectTag(tag: Tag): JSONObject {
+        val body = tagBase(tag)
+        val ndef = Ndef.get(tag) ?: return body
+        ndef.use {
+            it.connect()
+            val message = it.ndefMessage
+            val records = JSONArray()
+            message?.records?.forEach { record -> records.put(recordJson(record)) }
+            body.put("ndefFormatted", true).put("ndefType", it.type).put("writable", it.isWritable)
+                .put("maxSize", it.maxSize).put("messageSize", message?.toByteArray()?.size ?: 0).put("records", records)
         }
+        return body
+    }
+
+    private fun finishUtility(task: Task, body: JSONObject) {
+        if (task.recordType == "EMPTY") body.getJSONObject("deviceMetadata").put("operation", "ERASE")
+        pendingResult = Pair("/device/read-tasks/${task.sessionId}/result", body)
+        main.post {
+            lastTagResult = body
+            val records = body.optJSONArray("records") ?: JSONArray()
+            val content = (0 until records.length()).joinToString("\n\n") { index ->
+                val record = records.getJSONObject(index)
+                "Record ${index + 1}: " + if (record.optInt("tnf") == 0) "Empty NDEF record" else record.optString("uri", record.optString("payloadText", "Binary record; share JSON for raw data"))
+            }
+            findViewById<TextView>(R.id.tagDetails).text = "UID: ${body.optString("uid")}\nType: ${body.optString("ndefType", "Not NDEF formatted")}\nWritable: ${body.optString("writable", "Unknown")}\nSize: ${body.optString("messageSize", "0")} / ${body.optString("maxSize", "unknown")} bytes\nTechnologies: ${body.optJSONArray("techList")}\n\n$content" + if (body.has("errorCode")) "\n\nError: ${body.optString("errorCode")}" else ""
+            updateActions()
+        }
+        setStatus(if (body.has("errorCode")) "NFC tool failed: ${body.optString("errorCode")}. Sending result…" else "Tag ${if (task.recordType == "EMPTY") "erased and verified empty" else if (task.mode == TaskMode.UTILITY_WRITE) "written and read back" else "read"}. Sending details to the PC…")
     }
 
     private fun readTag(task: Task, tag: Tag) {
         executor.execute {
-            val body = JSONObject()
-                .put("uid", tag.id.joinToString("") { "%02X".format(it) })
-                .put("techList", JSONArray(tag.techList.toList()))
-                .put("ndefFormatted", false)
-                .put("records", JSONArray())
-                .put("deviceMetadata", JSONObject()
-                    .put("adapter", "android-usb")
-                    .put("manufacturer", Build.MANUFACTURER)
-                    .put("model", Build.MODEL)
-                    .put("androidVersion", Build.VERSION.RELEASE))
-            var ndef: Ndef? = null
+            try { finishUtility(task, inspectTag(tag)) }
+            catch (error: Exception) { finishUtility(task, tagBase(tag).put("errorCode", "READ_FAILED")) }
+            finally { processingTag.set(false); main.post { updateActions() } }
+        }
+    }
+
+    private fun writeUtility(task: Task, tag: Tag) {
+        executor.execute {
             try {
-                ndef = Ndef.get(tag)
-                if (ndef != null) {
-                    ndef.connect()
-                    val message = ndef.ndefMessage
-                    val records = JSONArray()
-                    message?.records?.forEach { record -> records.put(recordJson(record)) }
-                    body.put("ndefFormatted", true)
-                        .put("ndefType", ndef.type)
-                        .put("writable", ndef.isWritable)
-                        .put("maxSize", ndef.maxSize)
-                        .put("messageSize", message?.toByteArray()?.size ?: 0)
-                        .put("records", records)
+                if (request("GET", "/device/read-tasks/${task.sessionId}").getString("state") != "READING") throw IllegalStateException("OPERATION_CANCELLED")
+                val value = task.expectedUrl ?: throw IllegalStateException("MISSING_CONTENT")
+                val record = when (task.recordType) {
+                    "EMPTY" -> NdefRecord(NdefRecord.TNF_EMPTY, byteArrayOf(), byteArrayOf(), byteArrayOf())
+                    "TEXT" -> NdefRecord.createTextRecord("en", value)
+                    else -> NdefRecord.createUri(value)
                 }
-                request("POST", "/device/read-tasks/${task.sessionId}/result", body)
-                setStatus("Tag read successfully. Full details are visible on the workstation.")
+                val message = NdefMessage(arrayOf(record))
+                val ndef = Ndef.get(tag)
+                if (ndef == null) {
+                    val formatable = NdefFormatable.get(tag) ?: throw IllegalStateException("NOT_NDEF_FORMATTABLE")
+                    formatable.use { it.connect(); it.format(message) }
+                    setStatus("Tag formatted. Lift it away and tap again to confirm readback.")
+                    return@execute
+                }
+                ndef.use {
+                    it.connect()
+                    if (!it.isWritable) throw IllegalStateException("TAG_READ_ONLY_OR_LOCKED")
+                    if (it.maxSize < message.toByteArray().size) throw IllegalStateException("TAG_CAPACITY_TOO_SMALL")
+                    if (it.ndefMessage?.toByteArray()?.contentEquals(message.toByteArray()) != true) it.writeNdefMessage(message)
+                }
+                val body = inspectTag(tag)
+                val saved = body.getJSONArray("records")
+                val readback = if (saved.length() == 1) saved.getJSONObject(0).optString(if (task.recordType == "TEXT") "payloadText" else "uri") else ""
+                if (task.recordType == "EMPTY") {
+                    val empty = saved.length() == 1 && saved.getJSONObject(0).getInt("tnf") == 0 && saved.getJSONObject(0).getString("payloadHex").isEmpty()
+                    if (!empty) body.put("errorCode", "ERASE_READBACK_MISMATCH")
+                } else if (readback != value) body.put("errorCode", "READBACK_MISMATCH")
+                finishUtility(task, body)
             } catch (error: Exception) {
-                body.put("errorCode", "READ_FAILED")
-                body.getJSONObject("deviceMetadata").put("message", error.message ?: "Unknown read error")
-                try { request("POST", "/device/read-tasks/${task.sessionId}/result", body) } catch (_: Exception) {}
-                setStatus("NFC read failed: ${error.message}")
-            } finally {
-                try { ndef?.close() } catch (_: Exception) {}
-                activeTask = null
-            }
+                val code = error.message?.takeIf { it.matches(Regex("[A-Z_]+")) } ?: "WRITE_FAILED"
+                finishUtility(task, tagBase(tag).put("errorCode", code))
+            } finally { processingTag.set(false); main.post { updateActions() } }
         }
     }
 
@@ -213,10 +470,78 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         if (record.tnf == NdefRecord.TNF_WELL_KNOWN && record.type.contentEquals(NdefRecord.RTD_TEXT) && payload.isNotEmpty()) {
             val languageLength = payload[0].toInt() and 0x3F
             if (payload.size > languageLength + 1) {
-                result.put("payloadText", payload.copyOfRange(languageLength + 1, payload.size).toString(Charsets.UTF_8))
+                val encoding = if (payload[0].toInt() and 0x80 != 0) Charsets.UTF_16 else Charsets.UTF_8
+                result.put("payloadText", payload.copyOfRange(languageLength + 1, payload.size).toString(encoding))
             }
         }
         return result
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val scan = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (scan != null) {
+            cameraScanning = false
+            val task = activeTask
+            if (task?.mode == TaskMode.VERIFY_CAMERA) {
+                if (task.sessionId.isEmpty()) {
+                    if (scan.contents == null) { activeTask = null; setStatus("QR scan cancelled. Start a new scan when ready.") }
+                    else resolveScannedQr(scan.contents)
+                } else verificationResult(task, scan.contents ?: "", null, if (scan.contents == null) "CAMERA_SCAN_CANCELLED" else null)
+            }
+            return
+        }
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    private fun resolveScannedQr(value: String) {
+        startingVerification = true
+        findViewById<TextView>(R.id.verificationUrl).text = "QR link: $value"
+        setStatus("QR captured. Preparing NFC comparison…")
+        executor.execute {
+            try {
+                val response = request("POST", if (qrForQc) "/device/verification-from-qr" else "/device/resolve-qr", JSONObject()
+                    .put("scanId", java.util.UUID.randomUUID().toString()).put("scannedValue", value))
+                if (qrForQc) {
+                    activeTask = Task(response.getString("sessionId"), TaskMode.VERIFY_NFC,
+                        Instant.parse(response.getString("expiresAt")), value)
+                    setStatus("Final QC: QR captured. Lift the card away, then tap its NFC tag to compare links.")
+                } else {
+                    activeTask = null
+                    scannedCard = response
+                    main.post { findViewById<TextView>(R.id.verificationUrl).text = "Batch: ${response.getString("batchCode")}\nCard: ${response.getString("publicSlug")}\nQR link: $value\nNFC: ${response.getString("nfcStatus")} · QC: ${response.getString("qcStatus")}" }
+                    setStatus(if (response.getString("nfcStatus") == "WRITTEN") "Card detected. NFC is already written; use Scan QR for final QC." else "Printed QR recognized. Tap Load to NFC to write the same link to this card.")
+                }
+            } catch (error: Exception) {
+                activeTask = null
+                setStatus("Could not verify this QR: ${error.message}")
+            } finally { startingVerification = false; main.post { updateActions() } }
+        }
+    }
+
+    private fun verifyNfc(task: Task, tag: Tag) {
+        executor.execute {
+            var ndef: Ndef? = null
+            try {
+                ndef = Ndef.get(tag) ?: throw IllegalStateException("NOT_NDEF_FORMATTED")
+                ndef.connect()
+                val uri = ndef.ndefMessage?.records?.mapNotNull { it.toUri()?.toString() }?.firstOrNull() ?: ""
+                verificationResult(task, uri, tag.id.joinToString("") { "%02X".format(it) }, null)
+            } catch (error: Exception) {
+                verificationResult(task, "", null, "NFC_READ_FAILED")
+            } finally {
+                try { ndef?.close() } catch (_: Exception) {}
+                processingTag.set(false)
+            }
+        }
+    }
+
+    private fun verificationResult(task: Task, value: String, uid: String?, error: String?) {
+        val body = JSONObject().put("scannedValue", value)
+            .put("deviceMetadata", JSONObject().put("adapter", "android-usb").put("model", Build.MODEL))
+        if (uid != null) body.put("uid", uid)
+        if (error != null) body.put("errorCode", error)
+        pendingResult = Pair("/device/verification-tasks/${task.sessionId}/result", body)
+        setStatus(if (error == null && value == task.expectedUrl) "Scan matched. Sending result…" else "Scan did not match the selected card. Sending result…")
     }
 
     private fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
@@ -230,13 +555,39 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             connection.doOutput = true
             connection.outputStream.use { it.write(body.toString().toByteArray()) }
         }
-        val stream = if (connection.responseCode in 200..299) connection.inputStream else connection.errorStream
-        val text = stream.bufferedReader().use { it.readText() }
-        if (connection.responseCode !in 200..299) throw IllegalStateException(JSONObject(text).optString("message", "HTTP ${connection.responseCode}"))
-        return JSONObject(text)
+        try {
+            val code = connection.responseCode
+            val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+            val text = stream?.bufferedReader()?.use { it.readText() } ?: "{}"
+            if (code !in 200..299) throw ApiException(code, JSONObject(text).optString("message", "HTTP $code"))
+            main.post { findViewById<TextView>(R.id.connectionStatus).text = if (deviceToken != null) "Paired · Workstation connected" else "Not paired · Open Connect" }
+            return JSONObject(text)
+        } finally {
+            connection.disconnect()
+        }
     }
 
     private fun setStatus(value: String) {
-        main.post { status.text = value }
+        main.post { status.text = value; updateActions() }
+    }
+
+    private fun updateActions() {
+        val idle = deviceToken != null && activeTask == null && pendingResult == null && !startingVerification && !cameraScanning
+        findViewById<Button>(R.id.verifyQr).isEnabled = idle
+        findViewById<Button>(R.id.verifyQc).isEnabled = idle
+        findViewById<Button>(R.id.loadNfc).isEnabled = idle && scannedCard != null && scannedCard?.optString("nfcStatus") != "WRITTEN" && scannedCard?.optString("qcStatus") != "PASSED"
+        findViewById<Button>(R.id.approveQc).isEnabled = idle && qcSessionId != null
+        findViewById<Button>(R.id.readTag).isEnabled = idle
+        findViewById<Button>(R.id.writeTag).isEnabled = idle
+        findViewById<Button>(R.id.eraseTag).isEnabled = idle
+        findViewById<Button>(R.id.pairButton).isEnabled = activeTask == null && pendingResult == null && !startingVerification
+        findViewById<Button>(R.id.cancelTask).visibility = if (activeTask?.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE)) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.cancelTask).isEnabled = !processingTag.get() && pendingResult == null && !startingVerification
+        findViewById<Button>(R.id.copyResult).isEnabled = lastTagResult != null
+        findViewById<Button>(R.id.shareResult).isEnabled = lastTagResult != null
+        listOf(R.id.verifyQr, R.id.verifyQc, R.id.loadNfc, R.id.approveQc, R.id.readTag, R.id.writeTag, R.id.eraseTag, R.id.pairButton, R.id.copyResult, R.id.shareResult).forEach {
+            val button = findViewById<Button>(it)
+            button.alpha = if (button.isEnabled) 1f else 0.4f
+        }
     }
 }

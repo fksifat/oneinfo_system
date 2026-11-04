@@ -1,10 +1,17 @@
 import type { FastifyPluginAsync } from "fastify";
 import { AssignCardSchema, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardEvents, cards, customerProfiles, profileLinks } from "../db/schema.js";
 import { parseBody, sendCreated } from "../http.js";
+
+const publicProfileFields = {
+  id: customerProfiles.id, publicSlug: customerProfiles.publicSlug, displayName: customerProfiles.displayName,
+  headline: customerProfiles.headline, company: customerProfiles.company, bio: customerProfiles.bio,
+  phone: customerProfiles.phone, email: customerProfiles.email, website: customerProfiles.website,
+  avatarUrl: customerProfiles.avatarUrl, theme: customerProfiles.theme,
+};
 
 async function profileWithLinks(profileId: string) {
   const [profile] = await db.select().from(customerProfiles).where(eq(customerProfiles.id, profileId)).limit(1);
@@ -22,7 +29,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   app.get("/public/:slug", async (request) => {
     const { slug } = request.params as { slug: string };
     const [profile] = await db
-      .select()
+      .select(publicProfileFields)
       .from(customerProfiles)
       .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true)))
       .limit(1);
@@ -38,10 +45,10 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   app.get("/card/:cardSlug", async (request) => {
     const { cardSlug } = request.params as { cardSlug: string };
     const [result] = await db
-      .select({ profile: customerProfiles, card: cards })
+      .select({ profile: publicProfileFields, card: { publicSlug: cards.publicSlug, canonicalUrl: cards.canonicalUrl } })
       .from(cards)
       .innerJoin(customerProfiles, eq(customerProfiles.id, cards.profileId))
-      .where(and(eq(cards.publicSlug, cardSlug), eq(customerProfiles.published, true)))
+      .where(and(eq(cards.publicSlug, cardSlug), eq(cards.lifecycleStatus, "ACTIVATED"), eq(customerProfiles.published, true)))
       .limit(1);
     if (!result) throw Object.assign(new Error("Active card profile not found"), { statusCode: 404 });
     const links = await db
@@ -129,7 +136,10 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
 
     await db.transaction(async (tx) => {
-      await tx.update(cards).set({ profileId, lifecycleStatus: "ACTIVATED", updatedAt: new Date() }).where(eq(cards.id, card.id));
+      if (card.profileId === profileId && card.lifecycleStatus === "ACTIVATED") return;
+      const [assigned] = await tx.update(cards).set({ profileId, lifecycleStatus: "ACTIVATED", updatedAt: new Date() })
+        .where(and(eq(cards.id, card.id), isNull(cards.profileId), eq(cards.qcStatus, "PASSED"), eq(cards.lifecycleStatus, "QC_PASSED"))).returning();
+      if (!assigned) throw Object.assign(new Error("Card is already assigned or is not available for activation"), { statusCode: 409 });
       await tx.insert(cardEvents).values({
         cardId: card.id,
         eventType: "PROFILE_ASSIGNED",
