@@ -1,4 +1,4 @@
-import { variantPrice, discountPercent, productMedia, productGallery } from "@oneinfo/contracts";
+import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 
 (function () {
@@ -16,9 +16,11 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     return preview.href;
   }
   const mediaUrl = path => path.startsWith("/api/v1/product-media/") ? new URL(path, apiUrl).href : path;
+  const imageSource = path => mediaUrl(resolveProductImageUrl(path));
   let products = [];
   const selectedVariants = new Map();
   const selectedMedia = new Map();
+  const selectedModels = new Map();
   const quantities = new Map();
   let addingToCart = false;
   let catalogReady = false;
@@ -168,7 +170,24 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   }
 
   function watchImages() {
-    $$(".catalog-image").forEach(img => img.addEventListener("error", () => { img.closest(".product-art")?.classList.remove("has-image"); img.remove(); const error = $(".gallery-error", $("#product-detail")); if (error) error.hidden = false; }, { once: true }));
+    $$(".catalog-image, .gallery-item img").forEach(img => {
+      const handleError = () => {
+        if (img.closest(".gallery-item")) {
+          const fallback = document.createElement("span");
+          fallback.textContent = "Unavailable";
+          fallback.setAttribute("aria-hidden", "true");
+          img.replaceWith(fallback);
+          return;
+        }
+        const art = img.closest(".product-art");
+        art?.classList.remove("has-image");
+        const error = art?.querySelector(".gallery-error");
+        if (error) error.hidden = false;
+        img.remove();
+      };
+      if (img.complete && img.naturalWidth === 0) handleError();
+      else img.addEventListener("error", handleError, { once:true });
+    });
   }
 
   function productMarkup(p, detail = false) {
@@ -182,7 +201,9 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const gallery = detail ? productGallery(p.variants, {...v, showAllColourMedia:true}) : [];
       const thumbnails = gallery.filter(({media}) => isGalleryMedia(media));
       const models = gallery.filter(({media}) => media.type === "model");
-      const model = models.find(({variant,index}) => variant.id === v.id && index === preferred)
+      const selectedModel = selectedModels.get(p.id);
+      const model = models.find(({variant,media}) => variant.id === selectedModel?.variantId && media.id === selectedModel.mediaId)
+        ?? models.find(({variant,index}) => variant.id === v.id && index === preferred)
         ?? models.find(({variant}) => variant.id === v.id) ?? models[0];
       const cover = media.find(m => m.type === "image" || (m.type === "video" && m.poster));
       const coverUrl = cover?.type === "image" ? cover.url : cover?.poster;
@@ -196,16 +217,16 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}<div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
           <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
-          ${illustration}${imageUrl ? `<img class="catalog-image" draggable="false" src="${escapeHtml(mediaUrl(imageUrl))}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
-          ${detail && item?.type === "video" ? (drivePreview ? `<iframe class="gallery-video" src="${escapeHtml(drivePreview)}" title="${escapeHtml(item.label || p.name + ' video')}" allowfullscreen referrerpolicy="no-referrer"></iframe>` : `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(mediaUrl(item.poster))}"` : ""} src="${escapeHtml(mediaUrl(item.url))}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>`) : ""}
+          ${illustration}${imageUrl ? `<img class="catalog-image" draggable="false" src="${escapeHtml(imageSource(imageUrl))}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
+          ${detail && item?.type === "video" ? (drivePreview ? `<iframe class="gallery-video" src="${escapeHtml(drivePreview)}" title="${escapeHtml(item.label || p.name + ' video')}" allowfullscreen referrerpolicy="no-referrer"></iframe>` : `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(imageSource(item.poster))}"` : ""} src="${escapeHtml(mediaUrl(item.url))}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>`) : ""}
           ${detail && media.length ? `<p class="gallery-error" role="status" hidden>Media could not load. Choose another item or check the URL.</p>` : ""}
 
         </div>
-        ${thumbnails.length ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(mediaUrl(m.url))}" alt="" loading="lazy" />` : '<span>▶</span>'}</button>`).join("")}</div>` : ""}
+        ${thumbnails.length ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(imageSource(m.url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : '<span>▶</span>'}</button>`).join("")}</div>` : ""}
         ${model ? `<section class="gallery-model-card" aria-label="Interactive 3D view">
           <header><h2>3D View</h2><span>${escapeHtml(model.variant.name)}</span></header>
-          <div class="gallery-model-stage">
-            <model-viewer class="gallery-model" src="${escapeHtml(model.media.url)}" alt="${escapeHtml(p.name + " — " + model.variant.name + " 3D model")}" camera-controls touch-action="none" min-camera-orbit="auto 0deg auto" max-camera-orbit="auto 180deg auto" disable-pan></model-viewer>
+          <div class="gallery-model-stage" data-appearance="${escapeHtml(model.variant.appearance)}">
+            <model-viewer class="gallery-model" src="${escapeHtml(model.media.url)}" alt="${escapeHtml(p.name + " — " + model.variant.name + " 3D model")}" camera-controls camera-orbit="0deg 85deg 105%" interaction-prompt="none" touch-action="none" min-camera-orbit="auto 0deg auto" max-camera-orbit="auto 180deg auto" disable-pan></model-viewer>
             <p class="gallery-model-instruction">Drag or swipe to rotate</p>
           </div>
           <p class="gallery-model-error" role="status" hidden>3D model could not load.</p>
@@ -231,6 +252,13 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         </aside>
       </div>
     </section>`;
+  }
+
+  function watchModel(viewer) {
+    const error = $(".gallery-model-error", viewer.closest(".gallery-model-card"));
+    const showError = () => { error.hidden = false; };
+    viewer.addEventListener("error", showError);
+    void import("@google/model-viewer").catch(showError);
   }
 
   function renderRoute(focus = false) {
@@ -266,12 +294,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       else if (itemRect.left < stripRect.left) strip.scrollLeft -= stripRect.left - itemRect.left + 4;
     }
     const model = $(".gallery-model", host);
-    if (model) {
-      const error = $(".gallery-model-error", host);
-      const showError = () => { error.hidden = false; };
-      model.addEventListener("error", showError, { once:true });
-      void import("@google/model-viewer").catch(showError);
-    }
+    if (model) watchModel(model);
     $("video.gallery-video", host)?.addEventListener("error", () => { $(".gallery-error", host).hidden = false; }, {once:true});
     if (focus) { $("#product-title")?.focus({ preventScroll:true }); host.scrollIntoView({ behavior:"instant" }); }
     else if (variant) $$(".colour-swatch", host).find(el => el.dataset.variant === variant)?.focus({preventScroll:true});
@@ -326,6 +349,26 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const productId = mediaButton.closest(".product").dataset.id;
       const variantId = mediaButton.dataset.mediaVariant;
       const product = products.find(p=>p.id === productId);
+      if (!product) return;
+      if (mediaButton.classList.contains("gallery-model-button")) {
+        const variant = product.variants.find(v => v.id === variantId);
+        const model = variant && productMedia(variant)[Number(mediaButton.dataset.media)];
+        if (model?.type !== "model") return;
+
+        selectedModels.set(productId, { variantId, mediaId:model.id });
+        const card = mediaButton.closest(".gallery-model-card");
+        const viewer = $(".gallery-model", card);
+        $(".gallery-model-error", card).hidden = true;
+        $("header > span", card).textContent = variant.name;
+        $(".gallery-model-stage", card).dataset.appearance = variant.appearance;
+        const nextViewer = viewer.cloneNode(false);
+        nextViewer.setAttribute("alt", `${product.name} — ${variant.name} 3D model`);
+        nextViewer.setAttribute("src", model.url);
+        viewer.replaceWith(nextViewer);
+        watchModel(nextViewer);
+        $$(".gallery-model-button", card).forEach(button => button.setAttribute("aria-pressed", String(button === mediaButton)));
+        return;
+      }
       selectedVariants.set(productId, variantId);
       history.replaceState(null, "", `#product/${encodeURIComponent(product.slug)}?colour=${encodeURIComponent(variantId)}`);
       selectedMedia.set(variantId, Number(mediaButton.dataset.media));

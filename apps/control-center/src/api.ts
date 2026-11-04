@@ -1,3 +1,5 @@
+import { resolveProductImageUrl } from "@oneinfo/contracts";
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 export async function api<T>(path: string, token?: string, init: RequestInit = {}): Promise<T> {
@@ -13,6 +15,7 @@ export async function api<T>(path: string, token?: string, init: RequestInit = {
 }
 
 export function productMediaUrl(path: string) {
-  const base = path.startsWith("/api/v1/product-media/") ? API_URL : import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175";
-  return new URL(path, base).href;
+  const source = resolveProductImageUrl(path);
+  const base = source.startsWith("/api/v1/product-media/") ? API_URL : import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175";
+  return new URL(source, base).href;
 }

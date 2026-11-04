@@ -181,6 +181,19 @@ export type CreateNfcBridgeSessionInput = z.infer<typeof CreateNfcBridgeSessionS
 export type NfcBridgeResultInput = z.infer<typeof NfcBridgeResultSchema>;
 export type NfcReadResultInput = z.infer<typeof NfcReadResultSchema>;
 
+export function resolveProductImageUrl(path: string): string {
+  if (!path.startsWith("https://drive.google.com/")) return path;
+  const share = new URL(path);
+  const fileId = /^\/file\/d\/([\w-]+)(?:\/(?:view|preview))?\/?$/.exec(share.pathname)?.[1]
+    ?? (share.pathname === "/open" ? share.searchParams.get("id") : null);
+  if (!fileId || !/^[\w-]+$/.test(fileId)) return path;
+
+  const image = new URL(`/api/v1/product-media/drive/${fileId}`, share.origin);
+  const resourceKey = share.searchParams.get("resourcekey");
+  if (resourceKey) image.searchParams.set("resourcekey", resourceKey);
+  return image.pathname + image.search;
+}
+
 export const ProductImageSchema = z.union([
   z.string().regex(/^\/api\/v1\/product-media\/[a-f0-9-]{36}\.(?:png|jpg|webp|svg)$/),
   z.url().max(2048).refine(value => /^https:\/\//i.test(value), "Use an HTTPS image URL"),

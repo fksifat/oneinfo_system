@@ -13,8 +13,8 @@ function ImagePreview({url}: {url:string}) {
   const sameRatio = size && Math.abs(size.width / size.height - 4 / 3) <= .01;
   const lowResolution = size && !vector && (size.width < 1600 || size.height < 1200);
   return <figure className="media-image-preview">
-    <div><img src={productMediaUrl(url)} alt="Artwork in the storefront frame" onLoad={e=>setSize({width:e.currentTarget.naturalWidth,height:e.currentTarget.naturalHeight})} onError={()=>setFailed(true)} /></div>
-    <figcaption role="status" className={failed || (size && (!sameRatio || lowResolution)) ? "media-size-warning" : ""}>{failed ? "Image could not load. Check the URL before saving." : !size ? "Loading image dimensions…" : <>{vector ? "SVG · scalable" : `${size.width} × ${size.height} px`}{!sameRatio ? " · Different ratio: extra space will appear. Use a 1600 × 1200 canvas." : lowResolution ? " · For a sharper image, use 1600 × 1200 px or larger." : " · Fits the storefront frame."}</>}</figcaption>
+    <div><img src={productMediaUrl(url)} alt="Artwork in the storefront frame" referrerPolicy="no-referrer" onLoad={e=>setSize({width:e.currentTarget.naturalWidth,height:e.currentTarget.naturalHeight})} onError={()=>setFailed(true)} /></div>
+    <figcaption role="status" className={failed || (size && (!sameRatio || lowResolution)) ? "media-size-warning" : ""}>{failed ? "Image could not load. For Google Drive, check that Anyone with the link can view it." : !size ? "Loading image dimensions…" : <>{vector ? "SVG · scalable" : `${size.width} × ${size.height} px`}{!sameRatio ? " · Different ratio: extra space will appear. Use a 1600 × 1200 canvas." : lowResolution ? " · For a sharper image, use 1600 × 1200 px or larger." : " · Fits the storefront frame."}</>}</figcaption>
   </figure>;
 }
 
@@ -38,6 +38,6 @@ export function ProductMediaEditor({items, onChange}: {items:ProductMedia[]; onC
       {m.type !== "model" && <ImagePreview key={m.type === "image" ? m.url : m.type === "video" ? m.poster : m.frames[0]} url={m.type === "image" ? m.url : m.type === "video" ? m.poster : m.frames[0] ?? ""} />}
     </div>)}</div>
     <div className="media-editor-add">{(["image","video","model"] as const).map(type=><button className="catalog-secondary" type="button" key={type} disabled={items.length>=20} onClick={()=>add(type)}>+ {mediaNames[type]}</button>)}</div>
-    <small>Paste a direct HTTPS media URL or a bundled /assets/ path.</small>
+    <small>Use a direct HTTPS URL, a public Google Drive image link, or a bundled /assets/ path.</small>
   </div>;
 }

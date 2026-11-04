@@ -1,10 +1,20 @@
 import { describe, it, expect } from "vitest";
-import { ProductInputSchema, UpdateProductSchema, productMedia, productGallery, discountPercent, variantPrice } from "../../../packages/contracts/src/index.js";
+import { ProductInputSchema, UpdateProductSchema, productMedia, productGallery, discountPercent, variantPrice, resolveProductImageUrl } from "../../../packages/contracts/src/index.js";
 import { addCartVariant, reconcileCartItems, productRoute, spinFrame } from "../../../sites/storefront/catalog.js";
 const variant = { id:"01800000-0000-4000-8000-000000000011", name:"White", colorHex:"#ffffff", priceMinor:129000, salePriceMinor:null, available:true, finish:"Satin", appearance:"light", imageUrl:"" };
 const product = { id:"01800000-0000-4000-8000-000000000001", name:"Example card", slug:"example-card", variants:[variant] };
 const blue = {...variant, id:"01800000-0000-4000-8000-000000000012", name:"Blue", colorHex:"#193c66", priceMinor:200000, salePriceMinor:150000};
 describe("catalog input boundaries", () => {
+  it("resolves public Drive image links while preserving direct and bundled sources", () => {
+    expect(resolveProductImageUrl("https://drive.google.com/file/d/sample-id/view?usp=sharing&resourcekey=0-abc"))
+      .toBe("/api/v1/product-media/drive/sample-id?resourcekey=0-abc");
+    expect(resolveProductImageUrl("https://drive.google.com/open?id=sample-id"))
+      .toBe("/api/v1/product-media/drive/sample-id");
+    for (const path of ["/assets/card.webp", "https://cdn.example.com/card.png", "https://drive.google.com.example.com/file/d/sample-id/view", "https://drive.google.com/open?id=bad%2Fid"]) {
+      expect(resolveProductImageUrl(path)).toBe(path);
+    }
+  });
+
   it("defaults products to drafts and permits an empty image", () => {
     const parsed=ProductInputSchema.parse(product);
     expect(parsed.status).toBe("DRAFT"); expect(parsed.variants[0].imageUrl).toBe("");
