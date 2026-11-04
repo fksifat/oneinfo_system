@@ -15,6 +15,7 @@ let pairingCode = args.get("pairing") ?? process.env.ONEINFO_PAIRING_CODE;
 let deviceToken = "";
 let pendingTask = null;
 let busy = false;
+let polling = false;
 let readerName = "Python PC/SC desktop bridge";
 
 if (!pairingCode) {
@@ -99,7 +100,8 @@ async function writeWithPcsc(task) {
 }
 
 async function poll() {
-  if (pendingTask || busy) return;
+  if (pendingTask || busy || polling) return;
+  polling = true;
   try {
     const task = await request("GET", "/device/tasks/next");
     if (!task.sessionId) return;
@@ -107,6 +109,8 @@ async function poll() {
     await writeWithPcsc(task);
   } catch (error) {
     console.error("Bridge poll failed:", error instanceof Error ? error.message : error);
+  } finally {
+    polling = false;
   }
 }
 

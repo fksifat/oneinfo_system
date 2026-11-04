@@ -38,13 +38,14 @@ export function buildApp() {
   app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
 
   app.setErrorHandler((error, request, reply) => {
-    const normalized = error as Error & { statusCode?: number; details?: unknown };
-    const statusCode = normalized.statusCode ?? 500;
+    const normalized = error as Error & { statusCode?: number; details?: unknown; code?: string; cause?: { code?: string } };
+    const dbCode = normalized.cause?.code ?? normalized.code;
+    const statusCode = normalized.statusCode ?? (dbCode === "23505" ? 409 : dbCode === "22P02" ? 400 : 500);
     const details = normalized.details;
     request.log.error({ error, statusCode }, "request failed");
     return reply.code(statusCode).send({
       error: statusCode >= 500 ? "InternalServerError" : normalized.name,
-      message: statusCode >= 500 ? "An unexpected error occurred" : normalized.message,
+      message: dbCode === "23505" ? "This identifier already exists" : dbCode === "22P02" ? "Invalid identifier" : statusCode >= 500 ? "An unexpected error occurred" : normalized.message,
       requestId: request.id,
       ...(details ? { details } : {}),
     });

@@ -4,6 +4,7 @@ import { Reviews } from "./Reviews.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
+import { contactVcard } from "./contact.js";
 
 type View = "orders" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
 const viewIds: View[] = ["overview", "products", "orders", "reviews", "profiles", "cards", "batches", "production", "stations", "audit"];
@@ -145,7 +146,14 @@ function PublicProfile({ slug }: { slug: string }) {
           {profile.website ? <a href={profile.website} target="_blank" rel="noreferrer"><span>Website</span><b>↗</b></a> : null}
           {links.map((link) => <a key={link.id ?? link.url} href={link.url} target="_blank" rel="noreferrer"><span>{link.label}</span><b>↗</b></a>)}
         </div>
-        <button className="save-contact" type="button" onClick={() => window.location.href = `mailto:${profile.email}?subject=Contact%20from%20Oneinfo`}>Save contact details</button>
+        <button className="save-contact" type="button" onClick={() => {
+          const url = URL.createObjectURL(new Blob([contactVcard(profile)], { type: "text/vcard;charset=utf-8" }));
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = `${profile.publicSlug}.vcf`;
+          link.click();
+          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }}>Save contact details</button>
         <small className="profile-footer">Powered by Oneinfo · NFC + QR</small>
       </main>
     </div>
@@ -367,7 +375,7 @@ function DataPanel({ title, columns, rows }: { title: string; columns: string[];
 function ProfileEditor({ value, setValue, onClose, onSave, busy }: { value: ProfileDraft & { id?: string }; setValue: (value: ProfileDraft & { id?: string }) => void; onClose: () => void; onSave: () => void; busy: boolean }) {
   const update = (field: keyof typeof blankProfile, next: unknown) => setValue({ ...value, [field]: next });
   const addLink = () => update("links", [...value.links, { label: "", url: "https://", sortOrder: value.links.length, active: true }]);
-  return <div className="editor-overlay"><div className="editor-panel"><header><div><p className="eyebrow">CLIENT PROFILE</p><h2>{value.id ? "Edit digital identity" : "Create digital identity"}</h2></div><button onClick={onClose}>×</button></header><div className="editor-layout"><form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
+  return <div className="editor-overlay"><div className="editor-panel" role="dialog" aria-modal="true" aria-label="Client profile editor"><header><div><p className="eyebrow">CLIENT PROFILE</p><h2>{value.id ? "Edit digital identity" : "Create digital identity"}</h2></div><button aria-label="Close profile editor" onClick={onClose}>×</button></header><div className="editor-layout"><form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
     <div className="form-grid"><label>Public slug<input required disabled={Boolean(value.id)} value={value.publicSlug} onChange={(event) => update("publicSlug", event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} /></label><label>Display name<input required value={value.displayName} onChange={(event) => update("displayName", event.target.value)} /></label><label>Headline<input value={value.headline} onChange={(event) => update("headline", event.target.value)} /></label><label>Company<input value={value.company} onChange={(event) => update("company", event.target.value)} /></label><label>Email<input type="email" value={value.email} onChange={(event) => update("email", event.target.value)} /></label><label>Phone<input value={value.phone} onChange={(event) => update("phone", event.target.value)} /></label><label>Website<input type="url" value={value.website} onChange={(event) => update("website", event.target.value)} /></label><label>Theme<select value={value.theme} onChange={(event) => update("theme", event.target.value)}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label><label className="full">Bio<textarea rows={3} value={value.bio} onChange={(event) => update("bio", event.target.value)} /></label></div>
     <div className="links-editor"><div><h3>Profile links</h3><button type="button" onClick={addLink}>Add link</button></div>{value.links.map((link, index) => <div className="link-row" key={index}><input placeholder="Label" value={link.label} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input placeholder="https://" value={link.url} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} /><button type="button" onClick={() => update("links", value.links.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div>
     <label className="publish-toggle"><input type="checkbox" checked={value.published} onChange={(event) => update("published", event.target.checked)} /><span></span><div><strong>Publish profile</strong><small>Allow assigned NFC and QR cards to resolve publicly</small></div></label>

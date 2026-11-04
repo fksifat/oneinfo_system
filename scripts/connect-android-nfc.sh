@@ -12,7 +12,7 @@ else
   exit 1
 fi
 
-device_count="$($adb_command devices | awk 'NR > 1 && $2 == "device" { count++ } END { print count+0 }')"
+device_count="$("$adb_command" devices | awk 'NR > 1 && $2 == "device" { count++ } END { print count+0 }')"
 if [ "$device_count" -ne 1 ]; then
   echo "Connect exactly one authorized Android device with USB debugging enabled."
   "$adb_command" devices

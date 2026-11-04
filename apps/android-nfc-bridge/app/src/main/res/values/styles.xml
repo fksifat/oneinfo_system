@@ -1,0 +1,13 @@
+<resources>
+    <style name="BodyText">
+        <item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">14sp</item><item name="android:textColor">#536D78</item><item name="android:lineSpacingExtra">3dp</item>
+    </style>
+    <style name="Eyebrow" parent="BodyText"><item name="android:textSize">10sp</item><item name="android:textStyle">bold</item><item name="android:letterSpacing">0.12</item><item name="android:textColor">#117B78</item></style>
+    <style name="SectionTitle" parent="BodyText"><item name="android:textSize">20sp</item><item name="android:textStyle">bold</item><item name="android:textColor">#123344</item><item name="android:layout_marginTop">8dp</item><item name="android:layout_marginBottom">8dp</item></style>
+    <style name="ResultText" parent="BodyText"><item name="android:layout_marginTop">16dp</item><item name="android:layout_marginBottom">8dp</item><item name="android:textColor">#123344</item><item name="android:fontFamily">monospace</item><item name="android:textSize">12sp</item></style>
+    <style name="PanelLayout"><item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item><item name="android:orientation">vertical</item><item name="android:layout_marginTop">16dp</item><item name="android:padding">18dp</item><item name="android:background">@drawable/panel</item></style>
+    <style name="PrimaryButton"><item name="android:layout_width">match_parent</item><item name="android:layout_height">wrap_content</item><item name="android:minHeight">50dp</item><item name="android:layout_marginTop">8dp</item><item name="android:textAllCaps">false</item><item name="android:textSize">14sp</item><item name="android:backgroundTint">#117B78</item><item name="android:textColor">#FFFFFF</item></style>
+    <style name="SecondaryButton" parent="PrimaryButton"><item name="android:backgroundTint">#E5EFF0</item><item name="android:textColor">#123344</item></style>
+    <style name="TabButton" parent="SecondaryButton"><item name="android:layout_width">0dp</item><item name="android:layout_weight">1</item><item name="android:textSize">12sp</item><item name="android:layout_marginTop">0dp</item></style>
+</resources>

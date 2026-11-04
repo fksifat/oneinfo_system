@@ -197,6 +197,7 @@ export const qrArtifacts = pgTable(
     width: integer("width"),
     height: integer("height"),
     generatorVersion: varchar("generator_version", { length: 100 }).notNull(),
+    imageData: text("image_data"),
     generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("qr_artifacts_idempotency_unique").on(table.idempotencyKey)],
@@ -239,6 +240,19 @@ export const qualityChecks = pgTable(
   },
   (table) => [uniqueIndex("quality_checks_idempotency_unique").on(table.idempotencyKey)],
 );
+
+export const cardVerifications = pgTable("card_verifications", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  cardId: uuid("card_id").notNull().references(() => cards.id, { onDelete: "restrict" }),
+  stationId: uuid("station_id").notNull().references(() => productionStations.id, { onDelete: "restrict" }),
+  method: varchar("method", { length: 20 }).notNull(),
+  expectedUrl: text("expected_url").notNull(),
+  scannedValue: text("scanned_value").notNull(),
+  matched: boolean("matched").notNull(),
+  uid: varchar("uid", { length: 128 }),
+  deviceMetadata: jsonb("device_metadata").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [index("card_verifications_card_idx").on(table.cardId, table.createdAt)]);
 
 export const cardEvents = pgTable(
   "card_events",

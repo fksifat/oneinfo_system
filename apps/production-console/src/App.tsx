@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import QRCode from "qrcode";
-import { api, sha256, type Credentials } from "./api.js";
-import { nfcAdapter } from "./nfc.js";
+import { api, type Credentials } from "./api.js";
+import { NfcTools } from "./NfcTools.js";
+import { ProductionDesk } from "./ProductionDesk.js";
 
 type JobType = "QR_GENERATION" | "NFC_ENCODING" | "QUALITY_CONTROL";
 
 interface Card {
   id: string;
+  batchId: string;
   publicSlug: string;
   canonicalUrl: string;
   qrStatus: string;
@@ -28,39 +29,6 @@ interface QueueItem {
   card: Card;
 }
 
-interface ActiveWork {
-  job: Job;
-  card: Card;
-}
-
-interface NfcReadRecord {
-  tnf: number;
-  type: string;
-  idHex: string;
-  payloadHex: string;
-  payloadText?: string;
-  uri?: string;
-}
-
-interface NfcReadResult {
-  uid: string;
-  techList: string[];
-  ndefFormatted: boolean;
-  ndefType?: string;
-  writable?: boolean;
-  maxSize?: number;
-  messageSize?: number;
-  records: NfcReadRecord[];
-  deviceMetadata: Record<string, unknown>;
-  errorCode?: string;
-}
-
-interface NfcReadSession {
-  id: string;
-  state: "PENDING" | "READING" | "COMPLETED" | "FAILED";
-  result?: NfcReadResult;
-}
-
 const emptyCredentials: Credentials = { accessToken: "", stationKey: "" };
 
 function getStoredCredentials(): Credentials {
@@ -74,15 +42,13 @@ function getStoredCredentials(): Credentials {
 export function App() {
   const [credentials, setCredentials] = useState<Credentials>(getStoredCredentials);
   const [stationCode, setStationCode] = useState("PROD-01");
-  const [batchCode, setBatchCode] = useState(`BATCH-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`);
-  const [quantity, setQuantity] = useState(3);
   const [jobs, setJobs] = useState<QueueItem[]>([]);
-  const [active, setActive] = useState<ActiveWork | null>(null);
-  const [qrPreview, setQrPreview] = useState("");
   const [message, setMessage] = useState("Ready");
   const [busy, setBusy] = useState(false);
   const [pairing, setPairing] = useState<{ pairingCode: string; expiresAt: string } | null>(null);
-  const [readResult, setReadResult] = useState<NfcReadResult | null>(null);
+  const [activeTab, setActiveTab] = useState("production");
+  const [devices, setDevices] = useState<{ id: string; name: string; online: boolean; lastSeenAt: string }[]>([]);
+  const [connectionError, setConnectionError] = useState("");
 
   const configured = Boolean(credentials.accessToken && credentials.stationKey);
 
@@ -92,16 +58,7 @@ export function App() {
   };
 
   async function stationApi<T>(path: string, init: RequestInit = {}): Promise<T> {
-    try {
-      return await api<T>(path, init, credentials);
-    } catch (error) {
-      const expired = error instanceof Error && error.message === "Invalid or expired operator token";
-      if (!expired) throw error;
-      const token = await api<{ accessToken: string }>("/api/v1/dev/token", { method: "POST" });
-      const renewed = { ...credentials, accessToken: token.accessToken };
-      saveCredentials(renewed);
-      return api<T>(path, init, renewed);
-    }
+    return api<T>(path, init, credentials);
   }
 
   const bootstrap = async () => {
@@ -125,39 +82,22 @@ export function App() {
     }
   };
 
-  const refreshJobs = useCallback(async () => {
+  const refreshJobs = useCallback(async (quiet = false) => {
     if (!configured) return;
     try {
       const response = await stationApi<{ items: QueueItem[] }>("/api/v1/production/jobs");
       setJobs(response.items);
-      setMessage(`${response.items.length} available or assigned jobs`);
+      if (!quiet) setMessage(`${response.items.length} available or assigned jobs`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not load jobs");
+      if (!quiet) setMessage(error instanceof Error ? error.message : "Could not load jobs");
     }
   }, [configured, credentials]);
 
   useEffect(() => {
     void refreshJobs();
+    const interval = window.setInterval(() => void refreshJobs(true), 5000);
+    return () => window.clearInterval(interval);
   }, [refreshJobs]);
-
-  const createBatch = async () => {
-    setBusy(true);
-    try {
-      await stationApi(
-        "/api/v1/production/batches",
-        {
-          method: "POST",
-          body: JSON.stringify({ batchCode, productVariantId: "ONEINFO-NFC-CARD", quantity }),
-        },
-      );
-      setMessage(`Created ${batchCode} with ${quantity} cards and ${quantity * 3} production jobs.`);
-      await refreshJobs();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Batch creation failed");
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const createDesktopPairing = async () => {
     setBusy(true);
@@ -175,145 +115,23 @@ export function App() {
     }
   };
 
-  const readNfcTag = async () => {
-    setBusy(true);
-    setReadResult(null);
-    try {
-      const created = await stationApi<NfcReadSession>("/api/v1/local-nfc/read-sessions", { method: "POST" });
-      setMessage("Read request sent. Hold the NFC tag against the back of the Android phone.");
-      const deadline = Date.now() + 2 * 60_000;
-      while (Date.now() < deadline) {
-        await new Promise((resolve) => window.setTimeout(resolve, 900));
-        const session = await stationApi<NfcReadSession>(`/api/v1/local-nfc/read-sessions/${created.id}`);
-        if (session.state === "FAILED") throw new Error(session.result?.errorCode ?? "NFC read failed");
-        if (session.state === "COMPLETED" && session.result) {
-          setReadResult(session.result);
-          setMessage(`NFC tag ${session.result.uid || "without UID"} read successfully.`);
-          return;
-        }
-      }
-      throw new Error("Timed out waiting for an NFC tag");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "NFC read failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const claim = async (item: QueueItem) => {
-    setBusy(true);
-    try {
-      const response = await stationApi<ActiveWork>(
-        `/api/v1/production/jobs/${item.job.id}/claim`,
-        { method: "POST", body: JSON.stringify({ idempotencyKey: crypto.randomUUID() }) },
-      );
-      setActive({ job: response.job, card: response.card });
-      if (response.job.type === "QR_GENERATION") {
-        setQrPreview(await QRCode.toDataURL(response.card.canonicalUrl, { errorCorrectionLevel: "H", margin: 4, width: 320 }));
-      } else {
-        setQrPreview("");
-      }
-      setMessage(`Claimed ${response.job.type} job`);
-      await refreshJobs();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not claim job");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const completeQr = async () => {
-    if (!active || !qrPreview) return;
-    setBusy(true);
-    try {
-      const blob = await (await fetch(qrPreview)).blob();
-      await stationApi(
-        `/api/v1/production/jobs/${active.job.id}/qr-results`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: crypto.randomUUID(),
-            format: "PNG",
-            storageKey: `${batchCode}/${active.card.id}_qr.png`,
-            checksumSha256: await sha256(blob),
-            width: 320,
-            height: 320,
-            generatorVersion: "qrcode-js/1.5.4",
-          }),
-        },
-      );
-      setMessage("QR generated, checksummed, and recorded.");
-      setActive(null);
-      await refreshJobs();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "QR submission failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const completeNfc = async () => {
-    if (!active) return;
-    setBusy(true);
-    try {
-      setMessage("Waiting for the paired NFC device. Present the card when prompted.");
-      const result = await nfcAdapter.writeAndReadBack({
-        jobId: active.job.id,
-        url: active.card.canonicalUrl,
-        credentials,
-      });
-      const expectedUrlHash = await sha256(result.expectedUrl);
-      const readbackUrlHash = result.readbackUrl ? await sha256(result.readbackUrl) : undefined;
-      const verified = result.result === "SUCCEEDED" && expectedUrlHash === readbackUrlHash;
-      await stationApi(
-        `/api/v1/production/jobs/${active.job.id}/nfc-attempts`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: crypto.randomUUID(),
-            result: verified ? "SUCCEEDED" : "FAILED",
-            expectedUrlHash,
-            ...(readbackUrlHash ? { readbackUrlHash } : {}),
-            ...(!verified ? { errorCode: result.errorCode ?? "READBACK_MISMATCH" } : {}),
-            deviceMetadata: result.deviceMetadata,
-          }),
-        },
-      );
-      setMessage(verified ? "The paired NFC device wrote the NDEF URI and verified it by read-back." : `NFC write failed: ${result.errorCode ?? "READBACK_MISMATCH"}`);
-      setActive(null);
-      await refreshJobs();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "NFC attempt failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const completeQc = async (result: "PASSED" | "FAILED") => {
-    if (!active) return;
-    setBusy(true);
-    try {
-      await stationApi(
-        `/api/v1/production/jobs/${active.job.id}/quality-checks`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            idempotencyKey: crypto.randomUUID(),
-            result,
-            ...(result === "FAILED" ? { reason: "Manual inspection failed" } : {}),
-            evidenceReference: `console://${active.card.id}/${new Date().toISOString()}`,
-          }),
-        },
-      );
-      setMessage(result === "PASSED" ? "QC passed; card released to saleable inventory." : "QC failed; card quarantined.");
-      setActive(null);
-      await refreshJobs();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Quality check failed");
-    } finally {
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    if (!configured) return;
+    let disposed = false;
+    let pending = false;
+    const sync = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const result = await stationApi<{ items: typeof devices }>("/api/v1/local-nfc/devices");
+        if (!disposed) { setDevices(result.items); setConnectionError(""); }
+      } catch (error) { if (!disposed) setConnectionError(error instanceof Error ? error.message : "API unavailable"); }
+      finally { pending = false; }
+    };
+    void sync();
+    const interval = window.setInterval(() => void sync(), 5000);
+    return () => { disposed = true; window.clearInterval(interval); };
+  }, [configured, credentials]);
 
   const groupedJobs = useMemo(
     () => ({
@@ -334,6 +152,7 @@ export function App() {
         <span className={configured ? "status online" : "status"}>{configured ? "Station ready" : "Setup required"}</span>
       </header>
 
+      {configured ? <nav className="workspace-nav" aria-label="Workspace">{([["production", "01", "Production"], ["tools", "02", "NFC tools"], ["connection", "03", "Connection"]] as const).map(([id, number, label]) => <button key={id} aria-pressed={activeTab === id} onClick={() => setActiveTab(id)}><span>{number}</span>{label}</button>)}<span className="connection-indicator">{connectionError ? "API unavailable" : devices.some((device) => device.online) ? "Phone connected" : "No phone online"}</span></nav> : null}
       <main>
         {!configured ? (
           <section className="panel setup-panel">
@@ -348,85 +167,36 @@ export function App() {
           </section>
         ) : (
           <>
-            <section className="panel batch-panel">
-              <div>
-                <p className="section-label">Batch control</p>
-                <h2>Create production work</h2>
-              </div>
-              <label>Batch code<input value={batchCode} onChange={(event) => setBatchCode(event.target.value)} /></label>
-              <label>Cards<input type="number" min="1" max="1000" value={quantity} onChange={(event) => setQuantity(Number(event.target.value))} /></label>
-              <button disabled={busy} onClick={() => void createBatch()}>Create batch</button>
-            </section>
+            <ProductionDesk visible={activeTab === "production"} credentials={credentials} busy={busy} onBusy={setBusy} onMessage={setMessage} onChanged={refreshJobs} />
 
-            <section className="panel desktop-nfc-panel">
-              <div><p className="section-label">LOCAL NFC DEVICE</p><h2>NFC bridge</h2><p>Connect an NFC-capable Android phone through <code>adb reverse</code>, or use a PC/SC USB reader.</p></div>
+            <div hidden={activeTab !== "tools"}><NfcTools credentials={credentials} onMessage={setMessage} /></div>
+            <section hidden={activeTab !== "connection"} className="panel desktop-nfc-panel">
+              <div><p className="section-label">LOCAL NFC DEVICE</p><h2>Your connected workstation</h2><p>Pair your Android companion over USB or wireless ADB. Keep the API and port 3001 tunnel running.</p></div>
               {pairing ? <div className="pairing-code"><small>PAIRING CODE</small><strong>{pairing.pairingCode}</strong><span>Expires {new Date(pairing.expiresAt).toLocaleTimeString()}</span></div> : null}
-              <div className="nfc-bridge-actions"><button disabled={busy} onClick={() => void readNfcTag()}>Read NFC tag</button><button className="secondary" disabled={busy} onClick={() => void createDesktopPairing()}>{pairing ? "New pairing code" : "Pair NFC device"}</button></div>
+              <div className="nfc-bridge-actions"><button className="secondary" disabled={busy} onClick={() => void createDesktopPairing()}>{pairing ? "New pairing code" : "Pair NFC device"}</button></div>
             </section>
 
-            {readResult ? <NfcInspector result={readResult} onClose={() => setReadResult(null)} /> : null}
+            <section hidden={activeTab !== "connection"} className="panel connection-details"><h2>Devices &amp; connection help</h2>{connectionError ? <p role="alert">{connectionError}</p> : null}{devices.length ? devices.map((device) => <div className="device-row" key={device.id}><span><strong>{device.name}</strong><small>Last seen {new Date(device.lastSeenAt).toLocaleTimeString()}</small></span><span className={device.online ? "pill success" : "pill"}>{device.online ? "ONLINE" : "OFFLINE"}</span></div>) : <p>No paired phones yet. Create a pairing code and enter it in the phone's Connect tab.</p>}<ol><li>Enable NFC and USB or wireless debugging on the phone.</li><li>Connect ADB, then forward phone port 3001 with <code>adb reverse tcp:3001 tcp:3001</code>. Select a device with <code>-s</code> if ADB lists more than one.</li><li>Enter this dashboard's pairing code in the companion app.</li></ol><p>API restarts require a new app pairing. Session activity is kept for one hour while the API runs.</p></section>
 
-            <section className="queue-grid">
+            <section hidden={activeTab !== "production"} className="queue-grid">
               {(Object.entries(groupedJobs) as [JobType, QueueItem[]][]).map(([type, items]) => (
                 <article className="panel queue" key={type}>
                   <div className="queue-heading"><h2>{type.replaceAll("_", " ")}</h2><strong>{items.length}</strong></div>
                   {items.length === 0 ? <p className="empty">No pending work</p> : items.slice(0, 8).map((item) => (
-                    <button className="job" key={item.job.id} disabled={busy} onClick={() => void claim(item)}>
+                    <div className="job" key={item.job.id}>
                       <span>{item.card.publicSlug}</span><small>{item.job.status}</small>
-                    </button>
+                    </div>
                   ))}
                 </article>
               ))}
             </section>
 
-            {active ? (
-              <section className="panel workbench">
-                <div>
-                  <p className="section-label">Active work</p>
-                  <h2>{active.job.type.replaceAll("_", " ")}</h2>
-                  <p className="url">{active.card.canonicalUrl}</p>
-                </div>
-                {active.job.type === "QR_GENERATION" && qrPreview ? <img src={qrPreview} alt="Generated QR preview" /> : null}
-                {active.job.type === "NFC_ENCODING" ? <p className="device-note">Device: {nfcAdapter.name}. Connect Android through ADB or run the PC/SC USB-reader task, then pair it with this station.</p> : null}
-                <div className="actions">
-                  {active.job.type === "QR_GENERATION" ? <button disabled={busy} onClick={() => void completeQr()}>Verify and record QR</button> : null}
-                  {active.job.type === "NFC_ENCODING" ? <button disabled={busy} onClick={() => void completeNfc()}>Write and verify NFC</button> : null}
-                  {active.job.type === "QUALITY_CONTROL" ? <><button disabled={busy} onClick={() => void completeQc("PASSED")}>Pass QC</button><button className="secondary" disabled={busy} onClick={() => void completeQc("FAILED")}>Quarantine</button></> : null}
-                  <button className="secondary" onClick={() => setActive(null)}>Close</button>
-                </div>
-              </section>
-            ) : null}
+
           </>
         )}
       </main>
 
-      <footer><span>{busy ? "Working…" : message}</span><button className="text-button" disabled={!configured || busy} onClick={() => void refreshJobs()}>Refresh queue</button></footer>
+      <footer><span role="status" aria-live="polite">{busy ? `Working… ${message}` : message}</span><button className="text-button" disabled={!configured || busy} onClick={() => void refreshJobs()}>Refresh queue</button></footer>
     </div>
   );
-}
-
-function NfcInspector({ result, onClose }: { result: NfcReadResult; onClose: () => void }) {
-  return <section className="panel nfc-inspector">
-    <div className="inspector-head"><div><p className="section-label">LIVE TAG INSPECTION</p><h2>NFC tag details</h2></div><span className={result.ndefFormatted ? "tag-state formatted" : "tag-state"}>{result.ndefFormatted ? "NDEF formatted" : "Not NDEF formatted"}</span><button className="secondary" onClick={onClose}>Close</button></div>
-    <div className="tag-facts">
-      <div><small>Tag UID</small><strong>{result.uid || "Unavailable"}</strong></div>
-      <div><small>NDEF type</small><strong>{result.ndefType ?? "—"}</strong></div>
-      <div><small>Writable</small><strong>{result.writable === undefined ? "Unknown" : result.writable ? "Yes" : "No"}</strong></div>
-      <div><small>Capacity</small><strong>{result.maxSize === undefined ? "—" : `${result.maxSize} bytes`}</strong></div>
-      <div><small>Message size</small><strong>{result.messageSize === undefined ? "—" : `${result.messageSize} bytes`}</strong></div>
-      <div><small>Records</small><strong>{result.records.length}</strong></div>
-    </div>
-    <div className="tech-list"><small>Technologies</small><div>{result.techList.map((tech) => <code key={tech}>{tech.split(".").at(-1)}</code>)}</div></div>
-    <div className="ndef-records">
-      {result.records.map((record, index) => <article key={`${index}-${record.payloadHex}`}>
-        <div><span>Record {index + 1}</span><b>TNF {record.tnf} · {record.type || "Unknown type"}</b></div>
-        {record.uri ? <p><small>Resolved URI</small><a href={record.uri} target="_blank" rel="noreferrer">{record.uri}</a></p> : null}
-        {record.payloadText ? <p><small>Text</small><strong>{record.payloadText}</strong></p> : null}
-        <p><small>Payload (hex)</small><code>{record.payloadHex || "Empty"}</code></p>
-        {record.idHex ? <p><small>Record ID (hex)</small><code>{record.idHex}</code></p> : null}
-      </article>)}
-      {result.records.length === 0 ? <p className="empty">No NDEF records were found on this tag.</p> : null}
-    </div>
-    <details><summary>Raw device result</summary><pre>{JSON.stringify(result, null, 2)}</pre></details>
-  </section>;
 }

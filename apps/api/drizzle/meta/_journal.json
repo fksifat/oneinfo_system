@@ -61,8 +61,15 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1793800011195,
-      "tag": "0008_uneven_betty_ross",
+      "when": 1793788793354,
+      "tag": "0008_qr_nfc_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793809249260,
+      "tag": "0009_store_reviews",
       "breakpoints": true
     }
   ]
