@@ -10,6 +10,7 @@ import { profileRoutes } from "./routes/profiles.js";
 import { adminRoutes } from "./routes/admin.js";
 import { localNfcRoutes } from "./routes/local-nfc.js";
 
+import { orderRoutes } from "./routes/orders.js";
 import { productRoutes } from "./routes/products.js";
 import { productMediaRoutes } from "./routes/product-media.js";
 
@@ -28,6 +29,7 @@ export function buildApp() {
   app.register(jobRoutes, { prefix: "/api/v1/production/jobs" });
   app.register(cardRoutes, { prefix: "/api/v1/production/cards" });
   app.register(profileRoutes, { prefix: "/api/v1/profiles" });
+  app.register(orderRoutes, { prefix: "/api/v1/orders" });
   app.register(productRoutes, { prefix: "/api/v1/products" });
   app.register(productMediaRoutes, { prefix: "/api/v1/product-media" });
   app.register(adminRoutes, { prefix: "/api/v1/admin" });

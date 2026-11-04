@@ -46,6 +46,146 @@
 
     <main id="main">
       <section id="product-detail" class="section-pad product-detail" hidden aria-label="Product details"></section>
+      <section id="order-draft" class="order-page" hidden aria-labelledby="order-title">
+        <div class="order-shell">
+          <a class="back-to-products" href="#products">← Back to cards</a>
+          <header class="order-heading">
+            <h1 id="order-title" tabindex="-1">Checkout</h1>
+            <p>Review your cards and delivery total before placing your order.</p>
+          </header>
+          <div class="order-unavailable" hidden>
+            <p class="order-availability" role="status"></p>
+            <button class="button order-retry" type="button" hidden>Retry</button>
+            <a class="button button-primary order-browse" href="#products" hidden>Explore cards</a>
+          </div>
+          <div class="order-details order-recovery" hidden>
+            <h2>Confirm your order</h2>
+            <p>We didn’t receive confirmation. Retry to check or finish the same order.</p>
+            <button class="button button-primary order-resume" type="button">Retry order</button>
+          </div>
+          <div class="order-details order-saved" hidden>
+            <span aria-hidden="true">✓</span>
+            <h2 tabindex="-1">Order received</h2>
+            <p class="order-receipt-payment"></p>
+            <p class="order-receipt-email" role="status" hidden></p>
+            <dl class="order-saved-details">
+              <div><dt>Order ID</dt><dd class="order-receipt-id"></dd></div>
+              <div><dt>Shipping</dt><dd class="order-receipt-shipping"></dd></div>
+              <div class="order-receipt-coupon" hidden><dt>Coupon discount</dt><dd></dd></div>
+              <div><dt>Order total</dt><dd class="order-receipt-total"></dd></div>
+              <div class="order-receipt-advance" hidden><dt>bKash payment</dt><dd></dd></div>
+              <div class="order-receipt-balance"><dt>Amount due on delivery</dt><dd></dd></div>
+            </dl>
+            <a class="button button-primary" href="#products">Continue shopping</a>
+          </div>
+          <div class="order-layout" hidden>
+            <div class="order-details">
+              <form id="order-form" novalidate>
+                <section class="order-form-section" aria-labelledby="order-contact-title">
+                  <h2 id="order-contact-title">Contact details</h2>
+                  <div class="order-fields">
+                    <label>Full name<input name="name" autocomplete="section-order name" maxlength="120" required /></label>
+                    <div class="order-contact-field">
+                      <label for="order-phone">Mobile number</label>
+                      <div class="order-contact-input">
+                        <input id="order-phone" name="phone" type="tel" autocomplete="section-order tel" maxlength="30" required />
+                        <div class="order-field-help">
+                          <button class="order-help-icon" type="button" aria-label="Why we ask for your phone number" aria-describedby="order-phone-hint">?</button>
+                          <span id="order-phone-hint" role="tooltip">Oneinfo may call this number to confirm your order or coordinate delivery.</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="order-field-wide order-contact-field">
+                      <label for="order-email">Email address</label>
+                      <div class="order-contact-input">
+                        <input id="order-email" name="email" type="email" autocomplete="section-order email" aria-describedby="order-email-hint" maxlength="254" required />
+                        <div class="order-field-help">
+                          <button class="order-help-icon" type="button" aria-label="Why we ask for your email address" aria-describedby="order-email-hint">?</button>
+                          <span id="order-email-hint" role="tooltip">We use this email for your order details.</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <section class="order-form-section" aria-labelledby="order-address-title">
+                  <div class="order-delivery-head"><h2 id="order-address-title">Delivery address</h2><span>Bangladesh</span></div>
+                  <div class="order-fields">
+                    <label class="order-field-wide">Full address<textarea name="addressLine" autocomplete="section-order shipping street-address" rows="2" maxlength="400" placeholder="House, road or village, area, and thana or upazila" required></textarea></label>
+                    <label>District<input name="district" autocomplete="section-order shipping address-level2" maxlength="100" placeholder="e.g. Dhaka" required /></label>
+                    <label><span>Postal code <small>Optional</small></span><input name="postalCode" autocomplete="section-order shipping postal-code" inputmode="numeric" maxlength="4" placeholder="e.g. 1216" /></label>
+                  </div>
+                </section>
+                <div class="order-form-section order-form-actions">
+                  <label><span>Order note <small>Optional</small></span><textarea name="note" rows="2" maxlength="1000" placeholder="Add card design or delivery instructions"></textarea></label>
+                </div>
+                <section class="order-form-section order-payment" aria-labelledby="order-payment-title">
+                  <h2 id="order-payment-title">Payment</h2>
+                  <div class="order-payment-options" role="radiogroup" aria-labelledby="order-payment-title">
+                    <label class="order-payment-option">
+                      <input type="radio" name="paymentMethod" value="BKASH" />
+                      <strong>ArisePay</strong>
+                      <span class="order-payment-brands">
+                        <img src="/assets/payment/bkash.png" alt="bKash" width="24" height="24" />
+                        <img src="/assets/payment/nagad.png" alt="Nagad" width="24" height="24" />
+                        <img src="/assets/payment/rocket.png" alt="Rocket" width="24" height="24" />
+                      </span>
+                    </label>
+                    <label class="order-payment-option">
+                      <input type="radio" name="paymentMethod" value="COD" checked />
+                      <strong>Cash on Delivery (COD)</strong>
+                      <small class="order-cod-advance"></small>
+                    </label>
+                  </div>
+                </section>
+              </form>
+            </div>
+            <aside class="order-summary" aria-labelledby="order-summary-title">
+              <div class="order-summary-head"><h2 id="order-summary-title">Order summary</h2><button class="order-edit-cart" type="button">Edit cart</button></div>
+              <div class="order-items"></div>
+              <div class="order-coupon-disclosure">
+                <button class="order-coupon-toggle" type="button" aria-controls="order-coupon-form">Do you have a coupon code?</button>
+                <form id="order-coupon-form" class="order-coupon" aria-label="Apply coupon" hidden>
+                  <label for="order-coupon-code">Coupon code</label>
+                  <div><input id="order-coupon-code" name="code" autocomplete="off" maxlength="32" placeholder="Enter code" required /><button class="button" type="submit">Apply</button></div>
+                  <p class="order-coupon-status" role="status"></p>
+                  <button class="order-edit-cart order-remove-coupon" type="button" hidden>Remove coupon</button>
+                </form>
+              </div>
+              <div class="order-summary-totals">
+                <div class="order-subtotal"><span>Items subtotal</span><strong class="order-total"></strong></div>
+                <div class="order-shipping"><span>Shipping<span class="order-shipping-zone"></span></span><span class="order-shipping-price">–</span></div>
+                <button class="order-edit-cart order-refresh-rates" type="button" hidden>Retry shipping rates</button>
+                <div class="order-shipping order-discount" hidden><span>Coupon discount</span><strong></strong></div>
+                <div class="order-subtotal order-payable"><span>Total before shipping</span><strong></strong></div>
+                <div class="order-shipping order-due-now" hidden><span></span><strong></strong></div>
+                <div class="order-shipping order-due-delivery" hidden><span>Due on delivery</span><strong></strong></div>
+              </div>
+              <div class="order-summary-actions">
+                <p id="order-message" class="order-message" role="alert" hidden></p>
+                <button class="button button-primary order-submit" type="submit" form="order-form">Place order</button>
+              </div>
+            </aside>
+          </div>
+        </div>
+      </section>
+      <section id="arisepay" class="order-page" hidden aria-labelledby="arisepay-title">
+        <div class="order-shell arisepay-shell">
+          <a class="back-to-products" href="#order-draft">← Back to checkout</a>
+          <header class="order-heading">
+            <h1 id="arisepay-title" tabindex="-1">ArisePay</h1>
+            <p>Pay for your Oneinfo order.</p>
+          </header>
+          <form id="arisepay-form" class="order-details" hidden novalidate>
+            <div class="order-subtotal"><span class="arisepay-amount-label">Amount to pay</span><strong class="arisepay-amount"></strong></div>
+            <p>Pay with bKash to <strong class="arisepay-number"></strong>, then enter your transaction ID.</p>
+            <label for="arisepay-transaction">bKash transaction ID</label>
+            <input id="arisepay-transaction" name="transactionId" autocomplete="off" autocapitalize="characters" maxlength="20" placeholder="Enter TrxID" aria-describedby="arisepay-error" required />
+            <p id="arisepay-error" class="order-message" role="alert" hidden></p>
+            <button class="button button-primary" type="submit">Submit payment for verification</button>
+          </form>
+          <p class="order-unavailable arisepay-unavailable" hidden>Return to checkout and select Pay to start a payment.</p>
+        </div>
+      </section>
       <section class="hero section-pad">
         <div class="hero-copy reveal">
           <p class="kicker"><span></span> NFC + QR SMART CARD</p>
@@ -220,18 +360,18 @@
     <footer class="site-footer">
       <div class="footer-brand"><a class="brand light-brand" href="#top"><span class="brand-mark"><i></i></span><span>ONEINFO</span></a><p>Smart profiles. Memorable introductions.</p></div>
       <div><strong>Explore</strong><a href="#how">How it works</a><a href="#products">Cards</a><a href="#teams">Teams</a></div>
-      <div><strong>Support</strong><a href="#faq">FAQ</a><button class="plain-link contact-trigger" type="button">Contact</button><button class="plain-link policy-trigger" type="button">Ordering note</button></div>
-      <div class="footer-note"><strong>Launch preview</strong><p>Product prices and contact channels require confirmation before public commerce launch.</p></div>
+      <div><strong>Support</strong><a href="#faq">FAQ</a><a href="#order-draft">Checkout</a><button class="plain-link policy-trigger" type="button">Ordering note</button></div>
+      <div class="footer-note"><strong>Ordering</strong><p>See your delivery charge at checkout and pay when your order arrives.</p></div>
       <p class="copyright">© <span id="year"></span> Oneinfo. All rights reserved.</p>
     </footer>
 
-    <aside class="cart-drawer" id="cart-drawer" aria-hidden="true" aria-labelledby="cart-title">
+    <aside class="cart-drawer" id="cart-drawer" aria-hidden="true">
       <div class="drawer-backdrop"></div>
-      <div class="drawer-panel" role="dialog" aria-modal="true">
-        <div class="drawer-head"><div><p class="kicker"><span></span> YOUR SELECTION</p><h2 id="cart-title">Cart</h2></div><button class="icon-button cart-close" type="button" aria-label="Close cart">×</button></div>
-        <div class="cart-items"></div>
-        <div class="cart-empty"><span>◌</span><h3>Your cart is waiting</h3><p>Choose a finish to begin your Oneinfo order.</p><button class="button cart-shop" type="button">Explore cards</button></div>
-        <div class="cart-summary" hidden><div><span>Subtotal</span><strong class="cart-total">৳0</strong></div><small>Delivery and final pricing will be confirmed before payment.</small><button class="button button-primary checkout-trigger" type="button">Prepare order</button></div>
+      <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+        <div class="drawer-head"><div><h2 id="cart-title">Your cart</h2><span class="cart-item-count" aria-live="polite"></span></div><button class="icon-button cart-close" type="button" aria-label="Close cart">×</button></div>
+        <div class="cart-items" hidden></div>
+        <div class="cart-empty"><h3>Your cart is empty</h3><p>Find a Oneinfo card and choose your finish.</p><button class="button cart-shop" type="button">Explore cards</button></div>
+        <div class="cart-summary" hidden><div><span>Subtotal</span><strong class="cart-total">৳0</strong></div><small>Delivery is calculated at checkout.</small><button class="button button-primary checkout-trigger" type="button">Continue to checkout</button></div>
       </div>
     </aside>
 
@@ -246,24 +386,6 @@
           <button class="demo-phone" type="button" aria-label="Tap phone to card"><span class="demo-screen"><i></i><b>Ready to tap</b><small>Click the phone</small></span></button>
         </div>
         <p class="demo-caption">The NFC chip opens the card’s permanent profile address. QR is available as a fallback.</p>
-      </div>
-    </div>
-
-    <div class="modal" id="order-modal" aria-hidden="true">
-      <div class="modal-backdrop"></div>
-      <div class="modal-card order-modal-card" role="dialog" aria-modal="true" aria-labelledby="order-title">
-        <button class="icon-button modal-close" type="button" aria-label="Close">×</button>
-        <p class="kicker"><span></span> ORDER DRAFT</p>
-        <h2 id="order-title">Tell us where to follow up.</h2>
-        <p>This preview saves an order draft on your device. Connect Oneinfo’s payment or messaging channel before public launch.</p>
-        <form id="order-form">
-          <label>Full name<input name="name" autocomplete="name" required /></label>
-          <label>Mobile number<input name="phone" autocomplete="tel" inputmode="tel" required /></label>
-          <label>Email address<input name="email" type="email" autocomplete="email" /></label>
-          <label>Order note<textarea name="note" rows="3" placeholder="Design, quantity, delivery area…"></textarea></label>
-          <button class="button button-primary" type="submit">Save order draft</button>
-        </form>
-        <div class="order-success" hidden><span>✓</span><h3>Order draft saved</h3><p>No information has been sent. Your draft is stored only in this browser until a real order channel is connected.</p><button class="button modal-close-button" type="button">Done</button></div>
       </div>
     </div>
 

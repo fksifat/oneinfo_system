@@ -1,8 +1,9 @@
+import { Orders } from "./Orders.js";
 import { Products } from "./Products.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 
-type View = "products" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
+type View = "orders" | "products" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
 
 interface Overview {
   profiles: number;
@@ -239,6 +240,7 @@ export function App() {
   const nav: { id: View; label: string; icon: string }[] = [
     { id: "overview", label: "Overview", icon: "◫" },
     { id: "products", label: "Products", icon: "▣" },
+    { id: "orders", label: "Orders", icon: "≡" },
     { id: "profiles", label: "Client profiles", icon: "◎" },
     { id: "cards", label: "Cards & inventory", icon: "▱" },
     { id: "batches", label: "Production batches", icon: "▦" },
@@ -281,6 +283,7 @@ export function App() {
         </section> : null}
 
         {view === "products" ? <Products token={token} /> : null}
+        {view === "orders" ? <Orders token={token} /> : null}
 
         {view === "profiles" ? <section>
           <div className="list-toolbar"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => setEditing({ ...blankProfile })}>New client profile</button></div>

@@ -1,4 +1,4 @@
-import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl } from "@oneinfo/contracts";
+import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 
 (function () {
@@ -17,6 +17,10 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   }
   const mediaUrl = path => path.startsWith("/api/v1/product-media/") ? new URL(path, apiUrl).href : path;
   const imageSource = path => mediaUrl(resolveProductImageUrl(path));
+  function variantCover(variant) {
+    const cover = productMedia(variant).find(m => (m.type === "image" && m.url) || (m.type === "video" && m.poster));
+    return cover?.type === "image" ? cover.url : cover?.poster;
+  }
   let products = [];
   const selectedVariants = new Map();
   const selectedMedia = new Map();
@@ -24,6 +28,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   const quantities = new Map();
   let addingToCart = false;
   let catalogReady = false;
+  let catalogFailed = false;
   let catalogRequest = null;
   const draftKey = "oneinfo.storefront.orderDraft";
   const teamDraftKey = "oneinfo.storefront.teamDraft";
@@ -31,14 +36,13 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   if (!Array.isArray(cart)) cart = [];
   cart = cart.filter(item => item && Number.isInteger(item.quantity) && item.quantity > 0 && item.quantity <= 99);
   let lastFocused = null;
-  let checkoutCartSnapshot = "";
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
-  function load(key, fallback) {
+  function load(key, fallback, session = false) {
     try {
-      const value = JSON.parse(localStorage.getItem(key));
+      const value = JSON.parse((session ? sessionStorage : localStorage).getItem(key));
       return value ?? fallback;
     } catch {
       return fallback;
@@ -82,7 +86,6 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   }
 
   function openModal(id) {
-    if (id === "order-modal") checkoutCartSnapshot = JSON.stringify(cart);
     lastFocused = document.activeElement;
     const modal = $(`#${id}`);
     modal.classList.add("open");
@@ -107,23 +110,14 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     countElement.setAttribute("aria-label", `${count} ${count === 1 ? "item" : "items"}`);
 
     const items = $(".cart-items");
-    items.innerHTML = cart
-      .map(
-        (item) => `
-          <div class="cart-item" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}">
-            <div class="cart-item-art" style="background:${escapeHtml(item.colorHex)}"></div>
-            <div class="cart-item-info">
-              <strong>${escapeHtml(item.name)}</strong>
-              <span>${escapeHtml(item.variantName)} · ${money.format(item.priceMinor / 100)} · Qty ${item.quantity}</span>
-            </div>
-            <button class="remove-item" type="button" aria-label="Remove ${escapeHtml(item.name)} ${escapeHtml(item.variantName)}">×</button>
-          </div>`,
-      )
-      .join("");
+    items.hidden = count === 0;
+    $(".cart-item-count").textContent = `${count} ${count === 1 ? "card" : "cards"}`;
+    renderCartItems(items, true);
 
     $(".cart-empty").hidden = cart.length > 0;
     $(".cart-summary").hidden = cart.length === 0;
     $(".cart-total").textContent = money.format(total);
+    if (location.hash === "#order-draft") renderOrder();
 
     $$(".remove-item", items).forEach((button) => {
       button.addEventListener("click", () => {
@@ -135,6 +129,34 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         toast("Removed from cart");
       });
     });
+  }
+
+  function renderCartItems(items, removable = false) {
+    items.innerHTML = cart.map(item => {
+      const variant = products.find(p => p.id === item.id)?.variants.find(v => v.id === item.variantId);
+      const cover = variant && variantCover(variant);
+      return `
+          <div class="cart-item" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}">
+            <div class="cart-item-art" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/></svg>
+              ${cover ? `<img src="${escapeHtml(imageSource(cover))}" alt="" referrerpolicy="no-referrer">` : ""}
+            </div>
+            <div class="cart-item-info">
+              <strong>${escapeHtml(item.name)}</strong>
+              <span>${escapeHtml(item.variantName)}</span>
+              <span>Qty ${item.quantity}</span>
+            </div>
+            <div class="cart-item-actions">
+              ${removable ? `<button class="remove-item" type="button" aria-label="Remove ${escapeHtml(item.name)} ${escapeHtml(item.variantName)}">×</button>` : ""}
+              <strong>${money.format(item.priceMinor * item.quantity / 100)}</strong>
+            </div>
+          </div>`;
+    }).join("");
+    $$(".cart-item-art img", items).forEach(img => {
+      if (img.complete && img.naturalWidth === 0) img.remove();
+      else img.addEventListener("error", () => img.remove(), { once:true });
+    });
+
   }
 
   function escapeHtml(value) {
@@ -205,9 +227,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const model = models.find(({variant,media}) => variant.id === selectedModel?.variantId && media.id === selectedModel.mediaId)
         ?? models.find(({variant,index}) => variant.id === v.id && index === preferred)
         ?? models.find(({variant}) => variant.id === v.id) ?? models[0];
-      const cover = media.find(m => m.type === "image" || (m.type === "video" && m.poster));
-      const coverUrl = cover?.type === "image" ? cover.url : cover?.poster;
-      const imageUrl = !detail ? coverUrl : item?.type === "image" ? item.url : "";
+      const imageUrl = !detail ? variantCover(v) : item?.type === "image" ? item.url : "";
       const drivePreview = detail && item?.type === "video" ? driveVideoPreview(item.url) : null;
       const hasMedia = imageUrl || (detail && item?.type === "video");
       const percent = discountPercent(v);
@@ -236,7 +256,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((v.priceMinor - variantPrice(v)) / 100)}</span>` : ''}</div></div>
         <div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>
         ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>−</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>+</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(variantPrice(v) * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
-        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">+</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">+</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">+</span></summary><div><p>This preview saves an order draft on your device. Delivery and payment are confirmed separately.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">↗</span></a></div></div>` : ""}</article>`;
+        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">+</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">+</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">+</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">↗</span></a></div></div>` : ""}</article>`;
   }
 
   function reviewsMarkup() {
@@ -262,9 +282,38 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   }
 
   function renderRoute(focus = false) {
+    const order = location.hash === "#order-draft";
+    const payment = location.hash === "#arisepay";
     const route = productRoute(location.hash);
     document.body.classList.toggle("product-page", Boolean(route));
-    $$("#main > section").forEach(section => { section.hidden = route ? section.id !== "product-detail" : section.id === "product-detail"; });
+    const page = order ? "order-draft" : payment ? "arisepay" : route ? "product-detail" : "";
+    $$("#main > section").forEach(section => {
+      section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail"].includes(section.id);
+    });
+    if (payment) {
+      if (pendingOrder) {
+        location.replace("#order-draft");
+        return;
+      }
+      document.title = "ArisePay | Oneinfo";
+      renderArisepay();
+      if (focus) {
+        $("#arisepay-title").focus({ preventScroll: true });
+        $("#arisepay").scrollIntoView({ behavior: "instant" });
+      }
+      return;
+    }
+    if (order) {
+      document.title = "Checkout | Oneinfo";
+      renderOrder();
+      if (focus || !shippingRates) void refreshShippingRates();
+      if (focus) {
+        const heading = $(".order-saved").hidden ? $("#order-title") : $(".order-saved h2");
+        heading.focus({preventScroll:true});
+        $("#order-draft").scrollIntoView({behavior:"instant"});
+      }
+      return;
+    }
     if (!route) {
       document.title = "Oneinfo Smart Business Cards";
       if (focus) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior:"instant" });
@@ -318,6 +367,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const changed = JSON.stringify(products) !== JSON.stringify(data.items) || !catalogReady;
       products = data.items;
       catalogReady = true;
+      catalogFailed = false;
       if (changed) renderProducts();
       $("#catalog-status").textContent = products.length ? "" : "New cards are coming soon.";
       $("#catalog-retry").hidden = true;
@@ -327,6 +377,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       return true;
     } catch {
       catalogReady = false;
+      catalogFailed = true;
       $("#catalog-status").textContent = "We couldn’t refresh the collection. Please retry.";
       $("#catalog-retry").hidden = false;
       $(".checkout-trigger").disabled = true;
@@ -416,14 +467,17 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   $(".drawer-backdrop").addEventListener("click", closeCart);
   $(".cart-shop").addEventListener("click", () => {
     closeCart();
-    $("#products").scrollIntoView({ behavior: "smooth" });
+    if (location.hash === "#products") $("#products").scrollIntoView({ behavior: "smooth" });
+    else location.hash = "products";
   });
   $(".checkout-trigger").addEventListener("click", async () => {
     const previousCart = JSON.stringify(cart);
     if (!await loadProducts() || !cart.length) return;
     if (JSON.stringify(cart) !== previousCart) { toast("Your cart changed. Please review it before continuing."); return; }
     closeCart();
-    openModal("order-modal");
+    showNewReceipt = false;
+    if (location.hash === "#order-draft") renderOrder();
+    else location.hash = "order-draft";
   });
 
   $$(".modal").forEach((modal) => {
@@ -437,23 +491,426 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     requestAnimationFrame(() => event.currentTarget.classList.add("tapped"));
   });
   $(".team-trigger").addEventListener("click", () => openModal("team-modal"));
-  $(".contact-trigger").addEventListener("click", () => openModal("order-modal"));
-  $(".policy-trigger").addEventListener("click", () => toast("Pricing and order channels must be confirmed before launch"));
+  $(".policy-trigger").addEventListener("click", () => toast("Delivery charges and payment options are shown at checkout."));
 
   function formToObject(form) {
     return Object.fromEntries(new FormData(form).entries());
   }
 
-  $("#order-form").addEventListener("submit", async (event) => {
+  function renderOrder() {
+    const showReceipt = Boolean(lastReceipt && (showNewReceipt || (catalogReady && !cart.length)));
+    $(".order-recovery").hidden = !pendingOrder;
+    $(".order-saved").hidden = !showReceipt || Boolean(pendingOrder);
+    const hasItems = !showReceipt && !pendingOrder && catalogReady && cart.length > 0;
+    $(".order-layout").hidden = !hasItems;
+    $(".order-unavailable").hidden = hasItems || showReceipt || Boolean(pendingOrder);
+    if (pendingOrder || showReceipt) return;
+    $(".order-retry").hidden = !catalogFailed;
+    $(".order-browse").hidden = !catalogReady;
+    if (!hasItems) {
+      $(".order-availability").textContent = catalogFailed ? "We couldn’t check your cart. Please try again."
+        : catalogReady ? "Your cart is empty. Choose a card to get started." : "Checking your cart…";
+      return;
+    }
+    renderCartItems($(".order-items"));
+    const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
+    $(".order-total").textContent = money.format(subtotal / 100);
+    renderDelivery();
+  }
+
+  const orderForm = $("#order-form");
+  const orderSubmit = $(".order-submit");
+  const orderMessage = $("#order-message");
+  const arisepayForm = $("#arisepay-form");
+  const arisepayError = $("#arisepay-error");
+  const arisepaySubmit = $('button[type="submit"]', arisepayForm);
+  const arisepayKey = "oneinfo.storefront.arisepay";
+  const pendingOrderKey = "oneinfo.storefront.pendingOrder";
+  const receiptKey = "oneinfo.storefront.lastReceipt";
+  let pendingOrder = load(pendingOrderKey, null);
+  let lastReceipt = load(receiptKey, null);
+  let showNewReceipt = false;
+  let shippingRates;
+  let paymentSettings;
+  let shippingRequest;
+  let shippingFailed = false;
+  let placingOrder = false;
+  let arisepayDraft = load(arisepayKey, null, true);
+  let appliedCoupon = arisepayDraft?.coupon ?? null;
+  let applyingCoupon = false;
+  const savedDraft = pendingOrder ?? arisepayDraft?.request ?? load(draftKey, {});
+  const savedFields = { ...savedDraft.customer, ...savedDraft.deliveryAddress };
+  // Older drafts stored the area separately.
+  savedFields.addressLine = [savedFields.addressLine, savedFields.area]
+    .filter(value => typeof value === "string" && value.trim()).join(", ");
+  for (const field of $$("input, textarea, select", orderForm)) {
+    if (typeof savedFields[field.name] === "string") field.value = savedFields[field.name];
+  }
+
+  if (savedDraft.payment) {
+    orderForm.elements.paymentMethod.value = savedDraft.payment.method;
+  }
+  if (appliedCoupon) {
+    $(".order-coupon-toggle").hidden = true;
+    $("#order-coupon-form").hidden = false;
+    $("#order-coupon-code").value = appliedCoupon.code;
+    $(".order-coupon-status").textContent = `${appliedCoupon.code} applied (${appliedCoupon.percent}% off items).`;
+  }
+
+  function renderArisepay() {
+    arisepayForm.hidden = !arisepayDraft;
+    $(".arisepay-unavailable").hidden = Boolean(arisepayDraft);
+    if (!arisepayDraft) return;
+    const { payment } = arisepayDraft.request;
+    $(".arisepay-amount-label").textContent = payment.method === "COD" ? "COD advance" : "Amount to pay";
+    $(".arisepay-amount").textContent = money.format(payment.amountMinor / 100);
+    $(".arisepay-number").textContent = arisepayDraft.bkashNumber;
+  }
+
+  function clearArisepayDraft() {
+    if (!arisepayDraft) return;
+    arisepayDraft = null;
+    sessionStorage.removeItem(arisepayKey);
+    arisepayForm.reset();
+    arisepayError.hidden = true;
+    arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
+  }
+
+  function showReceiptDetails() {
+    if (!lastReceipt) return;
+    $(".order-receipt-id").textContent = lastReceipt.id;
+    const emailStatus = $(".order-receipt-email");
+    emailStatus.hidden = !lastReceipt.confirmationEmail;
+    emailStatus.textContent = lastReceipt.confirmationEmail === "accepted"
+      ? "Your order details were sent to your email address." : "Email confirmation couldn’t be sent. Keep your order ID for reference.";
+    $(".order-receipt-shipping").textContent = money.format(lastReceipt.shippingMinor / 100);
+    $(".order-receipt-coupon").hidden = !lastReceipt.couponCode;
+    $(".order-receipt-coupon dd").textContent = lastReceipt.couponCode
+      ? `${lastReceipt.couponCode} · −${money.format(lastReceipt.discountMinor / 100)}` : "";
+    $(".order-receipt-total").textContent = money.format(lastReceipt.totalMinor / 100);
+    const advance = lastReceipt.paymentAmountMinor ?? 0;
+    const pending = lastReceipt.paymentStatus === "PENDING_VERIFICATION";
+    $(".order-receipt-payment").textContent = pending ? "We’ll verify your bKash payment before processing your order."
+      : lastReceipt.totalMinor > advance ? "Pay the remaining amount when your order is delivered." : "Keep your order ID for reference.";
+    $(".order-receipt-advance").hidden = !advance;
+    $(".order-receipt-advance dd").textContent = `${money.format(advance / 100)} · ${pending ? "Pending verification" : "Verified"}`;
+    $(".order-receipt-balance").hidden = lastReceipt.totalMinor <= advance;
+    $(".order-receipt-balance dt").textContent = pending ? "Remaining on delivery after verification" : "Amount due on delivery";
+    $(".order-receipt-balance dd").textContent = money.format((lastReceipt.totalMinor - advance) / 100);
+  }
+  showReceiptDetails();
+
+  function renderDelivery() {
+    const { district, addressLine } = orderForm.elements;
+    const zone = checkoutDeliveryZone(district.value, addressLine.value);
+    const fee = zone && shippingRates?.[zone];
+    const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
+    const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
+    $(".order-discount").hidden = !appliedCoupon;
+    $(".order-discount strong").textContent = `−${money.format(discount / 100)}`;
+    $(".order-remove-coupon").hidden = !appliedCoupon;
+    $(".order-shipping-zone").textContent = zone ? ` (${shippingZoneLabels[zone]})` : "";
+    $(".order-shipping-price").textContent = !zone ? "–"
+      : shippingFailed ? "Couldn’t load rates"
+      : fee === undefined ? "Checking rates…" : money.format(fee / 100);
+    $(".order-refresh-rates").hidden = !zone || !shippingFailed;
+    const total = subtotal + (fee ?? 0) - discount;
+    const method = orderForm.elements.paymentMethod.value;
+    const dueNow = paymentSettings && typeof fee === "number" && !applyingCoupon
+      ? paymentDueNow(total, method, paymentSettings.codAdvanceTaka) : null;
+    $(".order-payable span").textContent = typeof fee !== "number" ? "Total before shipping"
+      : dueNow === 0 && method === "COD" ? "Total due on delivery" : "Order total";
+    $(".order-payable strong").textContent = money.format(total / 100);
+    const codAdvanceTaka = paymentSettings?.codAdvanceTaka ?? defaultCodAdvanceTaka;
+    const codAdvance = typeof fee === "number" ? paymentDueNow(total, "COD", codAdvanceTaka) / 100 : codAdvanceTaka;
+    $(".order-cod-advance").textContent = codAdvance > 0 ? `Pay ${money.format(codAdvance)} to confirm order` : "";
+    const needsPayment = dueNow > 0;
+    orderSubmit.textContent = needsPayment ? "Pay" : "Place order";
+    $(".order-due-now").hidden = !needsPayment;
+    $(".order-due-now span").textContent = method === "BKASH" ? "Pay now with ArisePay" : "Pay now";
+    $(".order-due-now strong").textContent = money.format(dueNow / 100);
+    $(".order-due-delivery").hidden = !needsPayment || method !== "COD" || dueNow === total;
+    $(".order-due-delivery strong").textContent = money.format((total - dueNow) / 100);
+  }
+
+  function refreshShippingRates() {
+    if (shippingRequest) return shippingRequest;
+    shippingRequest = (async () => {
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/orders/shipping`, { cache: "no-store", signal: AbortSignal.timeout(8000) });
+        if (!response.ok) throw new Error("Shipping rates unavailable");
+        const checkout = await response.json();
+        shippingRates = ShippingRatesSchema.parse(checkout.rates);
+        if (typeof checkout.bkashNumber !== "string" || !/^01\d{9}$/.test(checkout.bkashNumber)) throw new Error("Invalid bKash number");
+        paymentSettings = { bkashNumber: checkout.bkashNumber, codAdvanceTaka: CodAdvanceSchema.parse(checkout.codAdvanceTaka) };
+        $("#order-email-hint").textContent = checkout.confirmationEmailEnabled
+          ? "We’ll email your order details to this address." : "We use this email for your order details.";
+        shippingFailed = false;
+      } catch {
+        shippingRates = paymentSettings = undefined;
+        shippingFailed = true;
+      } finally {
+        shippingRequest = undefined;
+        if (location.hash === "#order-draft") renderDelivery();
+      }
+    })();
+    return shippingRequest;
+  }
+
+  function checkoutItems(items) {
+    return items.map(item => ({
+      productId: item.id, variantId: item.variantId, quantity: item.quantity, unitPriceMinor: item.priceMinor,
+    }));
+  }
+
+  async function submitOrder() {
+    if (placingOrder || !pendingOrder) return;
+    placingOrder = true;
+    const request = pendingOrder;
+    const retryButton = $(".order-resume");
+    orderSubmit.disabled = retryButton.disabled = arisepaySubmit.disabled = true;
+    retryButton.textContent = "Checking order…";
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/orders`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(request),
+        signal: AbortSignal.timeout(12000),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        if (response.status === 400 || response.status === 409) {
+          localStorage.removeItem(pendingOrderKey);
+          pendingOrder = null;
+          if (location.hash === "#arisepay") location.replace("#order-draft");
+          clearArisepayDraft();
+          if (/coupon/i.test(result.message || "")) {
+            appliedCoupon = null;
+            $(".order-coupon-status").textContent = "Apply a valid coupon to see the discount.";
+          }
+          await Promise.all([loadProducts(), refreshShippingRates()]);
+          renderOrder();
+          setOrderMessage(result.message || "Review your details and try again.");
+          return;
+        }
+        throw new Error("Confirmation unavailable");
+      }
+      if (!result.id || !Number.isSafeInteger(result.totalMinor)) throw new Error("Invalid order receipt");
+      save(receiptKey, result);
+      if (JSON.stringify(checkoutItems(load(storageKey, []))) === JSON.stringify(request.items)) {
+        save(storageKey, []);
+        cart = [];
+      }
+      localStorage.removeItem(pendingOrderKey);
+      pendingOrder = null;
+      clearArisepayDraft();
+      appliedCoupon = null;
+      $(".order-coupon").reset();
+      $(".order-coupon-status").textContent = "";
+      lastReceipt = result;
+      showNewReceipt = true;
+      showReceiptDetails();
+      renderCart();
+      if (location.hash === "#arisepay") location.replace("#order-draft");
+      else if (location.hash === "#order-draft") $(".order-saved h2").focus();
+      else toast("Order received");
+    } catch {
+      if (location.hash === "#arisepay") location.replace("#order-draft");
+      else if (location.hash === "#order-draft") {
+        renderOrder();
+        retryButton.focus();
+      }
+    } finally {
+      placingOrder = false;
+      orderSubmit.disabled = retryButton.disabled = arisepaySubmit.disabled = false;
+      retryButton.textContent = "Retry order";
+      if (!pendingOrder) renderDelivery();
+    }
+  }
+
+  function setOrderMessage(message, field) {
+    const previousField = $('[aria-invalid="true"]', orderForm);
+    previousField?.removeAttribute("aria-invalid");
+    if (previousField) {
+      const descriptions = (previousField.getAttribute("aria-describedby") ?? "").split(" ").filter(id => id && id !== orderMessage.id);
+      if (descriptions.length) previousField.setAttribute("aria-describedby", descriptions.join(" "));
+      else previousField.removeAttribute("aria-describedby");
+    }
+    $(".order-field-error", orderForm)?.remove();
+    orderMessage.textContent = message;
+    orderMessage.hidden = !message;
+    orderMessage.classList.toggle("order-message-announcement", Boolean(field));
+    if (field) {
+      const inlineError = document.createElement("span");
+      inlineError.className = "order-field-error";
+      inlineError.setAttribute("aria-hidden", "true");
+      inlineError.textContent = message;
+      field.after(inlineError);
+      field.setAttribute("aria-invalid", "true");
+      field.setAttribute("aria-describedby", [field.getAttribute("aria-describedby"), orderMessage.id].filter(Boolean).join(" "));
+      field.focus();
+    }
+  }
+
+  $(".order-edit-cart").addEventListener("click", openCart);
+  $(".skip-link").addEventListener("click", event => {
+    if (location.hash === "#arisepay") {
+      event.preventDefault();
+      $("#arisepay-title").focus();
+      return;
+    }
+    if (location.hash !== "#order-draft") return;
     event.preventDefault();
+    $("#order-title").focus();
+  });
+  $(".order-retry").addEventListener("click", () => void loadProducts());
+  $(".order-refresh-rates").addEventListener("click", () => void refreshShippingRates());
+  for (const help of $$(".order-field-help", orderForm)) {
+    const button = $(".order-help-icon", help);
+    button.addEventListener("click", () => {
+      const opened = help.classList.toggle("is-open");
+      help.classList.toggle("is-dismissed", !opened);
+    });
+    help.addEventListener("pointerleave", () => help.classList.remove("is-dismissed"));
+    button.addEventListener("blur", () => help.classList.remove("is-open", "is-dismissed"));
+  }
+  const retryShipping = () => {
+    if (location.hash === "#order-draft" && !shippingRates) void refreshShippingRates();
+  };
+  window.addEventListener("online", retryShipping);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) retryShipping(); });
+  $(".order-coupon-toggle").addEventListener("click", event => {
+    event.currentTarget.hidden = true;
+    $("#order-coupon-form").hidden = false;
+    $("#order-coupon-code").focus();
+  });
+  $(".order-coupon").addEventListener("submit", async event => {
+    event.preventDefault();
+    if (applyingCoupon || placingOrder) return;
     const form = event.currentTarget;
-    const previousCart = checkoutCartSnapshot;
-    if (!await loadProducts() || !cart.length) { toast("Please check your cart before saving."); return; }
-    if (JSON.stringify(cart) !== previousCart) { closeModal($("#order-modal")); openCart(); toast("Your cart changed. Please review it before continuing."); return; }
-    save(draftKey, { customer: formToObject(form), cart, savedAt: new Date().toISOString() });
-    form.hidden = true;
-    $(".order-success", form.parentElement).hidden = false;
-    toast("Order draft saved locally");
+    const status = $(".order-coupon-status");
+    const code = CouponCodeSchema.safeParse(form.elements.code.value);
+    if (!code.success) {
+      status.textContent = "Enter a valid coupon code.";
+      return;
+    }
+    const button = $('[type="submit"]', form);
+    applyingCoupon = button.disabled = true;
+    renderDelivery();
+    status.textContent = "Checking coupon…";
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/orders/coupon`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: code.data }), signal: AbortSignal.timeout(8000),
+      });
+      if (!response.ok) {
+        status.textContent = response.status === 404 ? "This coupon is invalid or inactive." : "Couldn’t check your coupon. Try again.";
+        return;
+      }
+      appliedCoupon = await response.json();
+      form.elements.code.value = appliedCoupon.code;
+      status.textContent = `${appliedCoupon.code} applied (${appliedCoupon.percent}% off items).`;
+      renderDelivery();
+    } catch {
+      status.textContent = "Couldn’t check your coupon. Try again.";
+    } finally {
+      applyingCoupon = button.disabled = false;
+      renderDelivery();
+    }
+  });
+  $(".order-remove-coupon").addEventListener("click", () => {
+    if (placingOrder || applyingCoupon) return;
+    appliedCoupon = null;
+    $(".order-coupon").reset();
+    $(".order-coupon-status").textContent = "";
+    renderDelivery();
+  });
+  $(".order-resume").addEventListener("click", () => void submitOrder());
+  orderForm.addEventListener("input", event => {
+    setOrderMessage("");
+    if (["district", "addressLine", "paymentMethod"].includes(event.target.name)) renderDelivery();
+  });
+  async function placeOrder(request, onStorageError) {
+    try {
+      save(pendingOrderKey, request);
+      pendingOrder = request;
+    } catch {
+      onStorageError("Allow browser storage and try again.");
+      return;
+    }
+    setOrderMessage("");
+    orderSubmit.textContent = "Placing order…";
+    await submitOrder();
+  }
+
+  arisepayForm.addEventListener("input", () => {
+    arisepayError.hidden = true;
+    arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
+  });
+  arisepayForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!arisepayDraft || placingOrder || pendingOrder) return;
+    const field = arisepayForm.elements.transactionId;
+    const showError = message => {
+      arisepayError.textContent = message;
+      arisepayError.hidden = false;
+    };
+    const transaction = BkashTransactionIdSchema.safeParse(field.value);
+    if (!transaction.success) {
+      field.setAttribute("aria-invalid", "true");
+      showError("Enter a valid bKash transaction ID.");
+      field.focus();
+      return;
+    }
+    const { request } = arisepayDraft;
+    await placeOrder({ ...request, payment: { ...request.payment, transactionId: transaction.data } }, showError);
+  });
+
+  orderForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (orderSubmit.disabled || !cart.length) return;
+    if (applyingCoupon) return setOrderMessage("Wait for the coupon check before placing your order.");
+    const fields = Object.fromEntries(Object.entries(formToObject(orderForm)).map(([key, value]) => [key, value.trim()]));
+    const { addressLine, district, postalCode, paymentMethod, ...customer } = fields;
+    const method = PaymentMethodSchema.safeParse(paymentMethod);
+    if (!method.success) return setOrderMessage("Choose a payment method.");
+    if (!customer.name) return setOrderMessage("Enter your full name.", orderForm.elements.name);
+    if (!/^\+?[\d(). -]+$/.test(customer.phone) || !/^\d{7,15}$/.test(customer.phone.replace(/\D/g, ""))) {
+      return setOrderMessage("Enter a valid mobile number.", orderForm.elements.phone);
+    }
+    if (!customer.email) return setOrderMessage("Enter your email address.", orderForm.elements.email);
+    if (!orderForm.elements.email.validity.valid) return setOrderMessage("Enter a valid email address.", orderForm.elements.email);
+    if (!addressLine) return setOrderMessage("Enter your full address.", orderForm.elements.addressLine);
+    if (!district) return setOrderMessage("Enter your district.", orderForm.elements.district);
+    const postal = PostalCodeSchema.optional().safeParse(postalCode || undefined);
+    if (!postal.success) return setOrderMessage("Enter a 4-digit postal code.", orderForm.elements.postalCode);
+    const zone = checkoutDeliveryZone(district, addressLine);
+    if (!zone) return;
+    if (!shippingRates || !paymentSettings) return setOrderMessage("Wait for checkout details or retry loading them.");
+    if (cart.length > 50) return setOrderMessage("You can order up to 50 different card options at a time.");
+
+    const request = { requestId: crypto.randomUUID(), customer, deliveryAddress: { addressLine, district, postalCode: postal.data },
+      shippingMinor: shippingRates[zone], items: checkoutItems(cart) };
+    const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
+    const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
+    if (appliedCoupon) request.coupon = { code: appliedCoupon.code, discountMinor: discount };
+    const amountMinor = paymentDueNow(subtotal + request.shippingMinor - discount, method.data, paymentSettings.codAdvanceTaka);
+    request.payment = { method: method.data, amountMinor };
+    if (amountMinor > 0) {
+      const draft = { request, bkashNumber: paymentSettings.bkashNumber, coupon: appliedCoupon };
+      try {
+        sessionStorage.setItem(arisepayKey, JSON.stringify(draft));
+      } catch {
+        return setOrderMessage("Allow browser storage and try again.");
+      }
+      arisepayDraft = draft;
+      arisepayForm.reset();
+      arisepayError.hidden = true;
+      arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
+      location.hash = "arisepay";
+      return;
+    }
+    await placeOrder(request, setOrderMessage);
   });
 
   $("#team-form").addEventListener("submit", (event) => {
@@ -479,6 +936,12 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
+    const help = $(".order-field-help.is-open, .order-field-help:hover, .order-field-help:focus-within", orderForm);
+    if (help && !help.classList.contains("is-dismissed")) {
+      help.classList.remove("is-open");
+      help.classList.add("is-dismissed");
+      return;
+    }
     const modal = $(".modal.open");
     if (modal) closeModal(modal);
     else if ($(".cart-drawer.open")) closeCart();

@@ -1,6 +1,7 @@
-import type { ProductVariant } from "@oneinfo/contracts";
+import type { OrderLine, PlaceOrderInput, ProductVariant, ShippingRates, ShippingZone } from "@oneinfo/contracts";
 import { randomUUID } from "node:crypto";
 import {
+  bigint,
   boolean,
   index,
   integer,
@@ -290,3 +291,38 @@ export const products = pgTable("products", {
   version: integer("version").notNull().default(1),
   ...timestamps,
 }, table => [uniqueIndex("products_slug_unique").on(table.slug), index("products_catalog_idx").on(table.status, table.sortOrder)]);
+
+export const storeShippingSettings = pgTable("store_shipping_settings", {
+  id: text("id").primaryKey(),
+  rates: jsonb("rates").$type<ShippingRates>().notNull(),
+  codAdvanceTaka: integer("cod_advance_taka").notNull().default(100),
+});
+
+export const storeCoupons = pgTable("store_coupons", {
+  code: varchar("code", { length: 32 }).primaryKey(),
+  percent: integer("percent").notNull(),
+  active: boolean("active").notNull(),
+});
+
+export const storeOrders = pgTable("store_orders", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  requestId: uuid("request_id").notNull(),
+  requestHash: varchar("request_hash", { length: 64 }).notNull(),
+  customer: jsonb("customer").$type<PlaceOrderInput["customer"]>().notNull(),
+  deliveryAddress: jsonb("delivery_address").$type<PlaceOrderInput["deliveryAddress"]>().notNull(),
+  items: jsonb("items").$type<OrderLine[]>().notNull(),
+  shippingZone: text("shipping_zone").$type<ShippingZone>().notNull(),
+  subtotalMinor: bigint("subtotal_minor", { mode: "number" }).notNull(),
+  shippingMinor: integer("shipping_minor").notNull(),
+  couponCode: varchar("coupon_code", { length: 32 }),
+  discountMinor: bigint("discount_minor", { mode: "number" }).notNull().default(0),
+  paymentMethod: text("payment_method").$type<NonNullable<PlaceOrderInput["payment"]>["method"]>().notNull().default("COD"),
+  paymentAmountMinor: bigint("payment_amount_minor", { mode: "number" }).notNull().default(0),
+  transactionId: varchar("transaction_id", { length: 20 }),
+  paymentVerifiedAt: timestamp("payment_verified_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex("store_orders_transaction_unique").on(table.transactionId),
+  uniqueIndex("store_orders_request_unique").on(table.requestId),
+  index("store_orders_created_idx").on(table.createdAt, table.id),
+]);

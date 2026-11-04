@@ -12,6 +12,8 @@ const ConfigSchema = z
   PUBLIC_CARD_BASE_URL: z.string().url().default("https://cards.oneinfo.example/c"),
   CORS_ORIGIN: z.string().default("http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175"),
   DEV_ADMIN_EMAIL: z.string().email().default("admin@oneinfo.local"),
+    RESEND_API_KEY: z.string().trim().min(1).optional(),
+    ORDER_EMAIL_FROM: z.string().trim().min(1).optional(),
   })
   .superRefine((value, context) => {
     if (value.NODE_ENV === "production" && value.JWT_SECRET === developmentSecret) {

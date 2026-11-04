@@ -336,3 +336,19 @@ input:focus, textarea:focus, select:focus { border-color: #27849a; box-shadow: 0
 @media (max-width:540px) {
   .catalog-form-grid label.catalog-default-preview { grid-template-columns:minmax(0, 1fr); }
 }
+
+.store-orders { display: grid; gap: 20px; }
+.store-order-rates { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
+.store-order-rates label { display: grid; gap: 5px; flex: 1 1 135px; }
+.store-order-rates input { width: 100%; }
+.store-order { border-top: 1px solid #dce5e4; padding: 12px 0; }
+.store-order summary { display: flex; justify-content: space-between; gap: 16px; cursor: pointer; }
+.store-order summary small { display: block; }
+.store-order dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 12px; }
+.store-order dt { font-weight: 700; }
+.store-order dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.store-order ul { padding-inline-start: 20px; }
+
+.store-coupon-form .store-coupon-active { display: flex; align-items: center; flex: 0 0 auto; padding-block: 10px; }
+.store-coupon-form .store-coupon-active input { width: auto; }
+.store-coupon-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #dce5e4; }

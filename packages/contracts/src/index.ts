@@ -270,3 +270,120 @@ export const ProductInputSchema = z.object({
 export const UpdateProductSchema = ProductInputSchema.extend({ version: z.number().int().positive() });
 export type ProductInput = z.infer<typeof ProductInputSchema>;
 export type Product = ProductInput & { id: string; version: number; createdAt: string; updatedAt: string };
+
+export const ShippingZoneSchema = z.enum(["insideDhaka", "subDhaka", "outsideDhaka"]);
+export type ShippingZone = z.infer<typeof ShippingZoneSchema>;
+const ShippingFeeSchema = z.number().int().min(0).max(1_000_000);
+export const ShippingRatesSchema = z.object({
+  insideDhaka: ShippingFeeSchema,
+  subDhaka: ShippingFeeSchema,
+  outsideDhaka: ShippingFeeSchema,
+});
+export type ShippingRates = z.infer<typeof ShippingRatesSchema>;
+export const defaultShippingRates: ShippingRates = { insideDhaka: 6000, subDhaka: 10000, outsideDhaka: 12000 };
+export const CodAdvanceSchema = z.number().int().min(0).max(10_000);
+export const defaultCodAdvanceTaka = 100;
+export const bkashNumber = "01760320810";
+export const PaymentMethodSchema = z.enum(["COD", "BKASH"]);
+export const BkashTransactionIdSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{8,20}$/);
+
+export function paymentDueNow(totalMinor: number, method: z.infer<typeof PaymentMethodSchema>, codAdvanceTaka: number) {
+  return method === "BKASH" ? totalMinor : Math.min(totalMinor, codAdvanceTaka * 100);
+}
+
+export const shippingZoneLabels: Record<ShippingZone, string> = {
+  insideDhaka: "Inside Dhaka",
+  subDhaka: "Sub-Dhaka",
+  outsideDhaka: "Outside Dhaka",
+};
+
+export const DhakaAreaSchema = z.enum(["city", "suburb"]);
+const normalizeDistrict = (district: string) => district.trim().toLowerCase().replace(/\s+(?:district|জেলা)$/u, "");
+export const isDhakaDistrict = (district: string) => /^(?:dhaka|dacca|ঢাকা)(?:\s+(?:city|metro|সিটি))?$/u.test(normalizeDistrict(district));
+const subDhakaName = /^(?:savar|ashulia|keraniganj|gazipur|gajipur|tongi|narayanganj|narayangonj|সাভার|আশুলিয়া|আশুলিয়া|কেরানীগঞ্জ|কেরানিগঞ্জ|গাজীপুর|গাজিপুর|টঙ্গী|টঙ্গি|নারায়ণগঞ্জ|নারায়ণগঞ্জ|নারায়নগঞ্জ|নারায়নগঞ্জ)$/u;
+const dhakaCityName = /^(?:dhanmondi|gulshan|banani|motijheel|shahbagh|tejgaon|kathalbagan|ধানমন্ডি|ধানমণ্ডি|গুলশান|বনানী|মতিঝিল|শাহবাগ|তেজগাঁও|কাঁঠালবাগান|কাঠালবাগান)$/u;
+export function suggestDhakaArea(address: string): z.infer<typeof DhakaAreaSchema> | undefined {
+  const words = address.toLowerCase().split(/[^\p{L}\p{M}]+/u);
+  if (words.some(word => subDhakaName.test(word))) return "suburb";
+  if (words.some(word => dhakaCityName.test(word))) return "city";
+  return undefined;
+}
+export function deliveryZone(district: string, area?: z.infer<typeof DhakaAreaSchema>): ShippingZone | null {
+  if (!district.trim()) return null;
+  if (isDhakaDistrict(district)) return area ? (area === "city" ? "insideDhaka" : "subDhaka") : null;
+  return subDhakaName.test(normalizeDistrict(district)) ? "subDhaka" : "outsideDhaka";
+}
+
+export function checkoutDeliveryZone(district: string, address: string): ShippingZone | null {
+  if (!address.trim()) return null;
+  return deliveryZone(district, suggestDhakaArea(address) ?? "city");
+}
+
+const OrderLineSchema = z.object({
+  productId: z.uuid(),
+  variantId: z.uuid(),
+  quantity: z.number().int().min(1).max(99),
+  unitPriceMinor: z.number().int().min(1).max(100_000_000),
+});
+export const CouponCodeSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9_-]{2,31}$/);
+export const StoreCouponSchema = z.object({
+  code: CouponCodeSchema,
+  percent: z.number().int().min(1).max(100),
+  active: z.boolean(),
+});
+export type StoreCoupon = z.infer<typeof StoreCouponSchema>;
+export function couponDiscount(subtotalMinor: number, percent: number): number {
+  const roundedTaka = Math.round(subtotalMinor * percent / 10_000);
+  const subtotalTaka = Math.floor(subtotalMinor / 100);
+  return Math.min(roundedTaka, subtotalTaka) * 100;
+}
+export const PostalCodeSchema = z.string().trim().regex(/^[0-9০-৯]{4}$/)
+  .transform(value => value.replace(/[০-৯]/g, digit => String("০১২৩৪৫৬৭৮৯".indexOf(digit))));
+
+export const PlaceOrderSchema = z.object({
+  requestId: z.uuid(),
+  customer: z.object({
+    name: z.string().trim().min(1).max(120),
+    phone: z.string().trim().max(30).refine(value => /^\+?[\d(). -]+$/.test(value) && /^\d{7,15}$/.test(value.replace(/\D/g, ""))),
+    email: z.string().trim().max(254).email(),
+    note: z.string().trim().max(1000).default(""),
+  }),
+  deliveryAddress: z.object({
+    addressLine: z.string().trim().min(1).max(400),
+    district: z.string().trim().min(1).max(100),
+    postalCode: PostalCodeSchema.optional(),
+    dhakaArea: DhakaAreaSchema.optional(),
+  }),
+  shippingMinor: ShippingFeeSchema,
+  coupon: z.object({
+    code: CouponCodeSchema,
+    discountMinor: z.number().int().nonnegative().max(495_000_000_000),
+  }).optional(),
+  payment: z.object({
+    method: PaymentMethodSchema,
+    amountMinor: z.number().int().nonnegative().max(495_001_000_000),
+    transactionId: BkashTransactionIdSchema.optional(),
+  }).optional(),
+  items: z.array(OrderLineSchema).min(1).max(50).refine(
+    items => new Set(items.map(item => `${item.productId}:${item.variantId}`)).size === items.length,
+    "Order lines must be unique",
+  ),
+});
+export type PlaceOrderInput = z.infer<typeof PlaceOrderSchema>;
+export type OrderLine = z.infer<typeof OrderLineSchema> & { name: string; variantName: string };
+export type OrderReceipt = {
+  id: string;
+  paymentMethod: z.infer<typeof PaymentMethodSchema>;
+  paymentAmountMinor?: number;
+  paymentStatus?: "PENDING_VERIFICATION" | "VERIFIED";
+  status: "RECEIVED";
+  shippingZone: ShippingZone;
+  subtotalMinor: number;
+  shippingMinor: number;
+  couponCode: string | null;
+  discountMinor: number;
+  totalMinor: number;
+  createdAt: string;
+  confirmationEmail?: "accepted" | "failed";
+};
+export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null };

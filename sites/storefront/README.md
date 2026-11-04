@@ -32,7 +32,7 @@ Catalog errors show Retry and disable ordering until a successful refresh.
 Set `VITE_API_URL` when building against a different API. Add the actual storefront
 origin to API `CORS_ORIGIN`. Run `npm run db:migrate` before starting the updated API.
 `npm run build` includes the storefront; its output is `sites/storefront/dist`.
-Orders remain local drafts; this catalog does not introduce payment or fulfilment.
+Checkout submits orders to the API for processing in Control Center.
 
 ## Verification
 
@@ -60,11 +60,10 @@ Unavailable colours remain viewable but cannot be added to the cart. Separate
 colours of the same product become separate cart lines. Refreshes preserve colour
 selection; cart reconciliation updates prices and removes unavailable/deleted
 variants without substituting another colour. Legacy carts select the original
-colour once. Checkout compares against the cart shown when checkout opened.
+colour once. Checkout verifies the displayed product prices and delivery charge before accepting an order.
 
 Availability is a manual switch, not stock quantity tracking or reservation.
-Uploaded file storage, scheduled promotions, coupons, payments and backend orders
-are not part of this catalogue; checkout still saves a browser-local draft.
+Uploaded file storage, scheduled promotions and online payments are outside this catalogue.
 
 ## Page width
 
@@ -145,3 +144,28 @@ thumbnail is larger. Admin can select **Gallery thumbnails → every colour /
 only this colour** and **Default large preview** for each colour.
 
 Previously uploaded product media is stored in `PRODUCT_MEDIA_DIR` (default `.product-media` under the API working directory). In production, point it to a persistent volume and include it in backups. The storefront loads uploaded media from its configured API origin.
+
+## Checkout and delivery
+
+Checkout supports cash on delivery and full payment through the ArisePay page.
+When a payment or COD advance is due, the customer submits a bKash transaction ID
+on ArisePay. A super administrator checks the payment before marking it verified.
+Checkout returns an order ID. Apply the
+checkout database migration before serving the updated API. The **Orders** view
+in Control Center lists incoming orders and lets a super administrator update
+the three delivery charges. New installs start at ৳60 for Inside Dhaka, ৳100
+for Sub-Dhaka, and ৳120 for Outside Dhaka. Orders retain the charges shown at
+checkout even when rates are edited later.
+
+The Sub-Dhaka defaults use Savar (including Ashulia), Keraniganj, Gazipur, and
+Narayanganj. Checkout checks the full address for suburb names within Dhaka
+district and uses the Inside Dhaka rate for other Dhaka addresses. The store records the order for manual
+processing in Control Center.
+
+Super administrators can create or deactivate coupon codes in **Orders → Coupons**.
+A coupon discounts the items subtotal. Checkout verifies the discount on the
+server and keeps it with the order receipt.
+
+For confirmation emails, set `RESEND_API_KEY` and `ORDER_EMAIL_FROM` on the API.
+Use a verified sender domain. Checkout shows whether an email was submitted
+to Resend after saving the order.
