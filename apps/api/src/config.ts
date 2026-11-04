@@ -14,6 +14,7 @@ const ConfigSchema = z
   DEV_ADMIN_EMAIL: z.string().email().default("admin@oneinfo.local"),
     RESEND_API_KEY: z.string().trim().min(1).optional(),
     ORDER_EMAIL_FROM: z.string().trim().min(1).optional(),
+    STOREFRONT_URL: z.string().url().optional(),
   })
   .superRefine((value, context) => {
     if (value.NODE_ENV === "production" && value.JWT_SECRET === developmentSecret) {

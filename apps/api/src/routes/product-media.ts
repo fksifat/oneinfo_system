@@ -1,9 +1,12 @@
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
+import { requireOperator } from "../auth.js";
 
-const directory = resolve(process.env.PRODUCT_MEDIA_DIR || ".product-media");
+const directory = resolve(process.env.PRODUCT_MEDIA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.product-media"));
 const formats = {
   png: { mime: "image/png" },
   jpg: { mime: "image/jpeg" },
@@ -11,15 +14,18 @@ const formats = {
   svg: { mime: "image/svg+xml" },
   mp4: { mime: "video/mp4" },
   webm: { mime: "video/webm" },
+  glb: { mime: "model/gltf-binary" },
 };
 
 const driveId = z.string().regex(/^[\w-]{1,128}$/);
-const driveQuery = z.object({ resourcekey: driveId.optional() });
+const driveQuery = z.object({ resourcekey: driveId.optional(), format: z.literal("glb").optional() });
 const imageTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif"]);
-const maxImageBytes = 10 * 1024 * 1024;
+const modelTypes = new Set(["model/gltf-binary", "application/octet-stream"]);
+const maxMediaBytes = 10 * 1024 * 1024;
 const maxDriveRequests = 8;
 
 export const productMediaRoutes: FastifyPluginAsync = async app => {
+  app.addContentTypeParser("application/octet-stream", { parseAs: "buffer", bodyLimit: maxMediaBytes }, (_request, body, done) => done(null, body));
   let activeDriveRequests = 0;
   app.get<{ Params: { fileId: string } }>("/drive/:fileId", async (request, reply) => {
     const id = driveId.safeParse(request.params.fileId);
@@ -27,6 +33,8 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     if (!id.success || !query.success) return reply.code(400).send();
     if (activeDriveRequests >= maxDriveRequests) return reply.code(503).header("Retry-After", "5").send();
 
+    const isModel = query.data.format === "glb";
+    const allowedTypes = isModel ? modelTypes : imageTypes;
     const source = new URL("https://drive.usercontent.google.com/download");
     source.searchParams.set("id", id.data);
     source.searchParams.set("export", "download");
@@ -36,11 +44,11 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     try {
       const response = await fetch(source, { redirect:"error", signal:AbortSignal.timeout(25_000) });
       const type = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
-      if (!response.ok || !response.body || !type || !imageTypes.has(type)) {
+      if (!response.ok || !response.body || !type || !allowedTypes.has(type)) {
         await response.body?.cancel();
         return reply.code(404).send();
       }
-      if (Number(response.headers.get("content-length")) > maxImageBytes) {
+      if (Number(response.headers.get("content-length")) > maxMediaBytes) {
         await response.body.cancel();
         return reply.code(413).send();
       }
@@ -52,30 +60,57 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
         const { value, done } = await reader.read();
         if (done) break;
         size += value.byteLength;
-        if (size > maxImageBytes) {
+        if (size > maxMediaBytes) {
           await reader.cancel();
           return reply.code(413).send();
         }
         chunks.push(value);
       }
 
-      return reply.type(type)
+      const body = Buffer.concat(chunks, size);
+      if (isModel && (size < 20 || body.toString("ascii", 0, 4) !== "glTF" ||
+        body.readUInt32LE(4) !== 2 || body.readUInt32LE(8) !== size)) {
+        return reply.code(415).send();
+      }
+
+      return reply.type(isModel ? "model/gltf-binary" : type)
         .header("X-Content-Type-Options", "nosniff")
         .header("Content-Security-Policy", "sandbox; default-src 'none'")
         .header("Cache-Control", "public, max-age=300")
-        .send(Buffer.concat(chunks, size));
+        .send(body);
     } catch (error) {
       const failure = error as { name?: string; cause?: { code?: string } };
-      request.log.warn({ name:failure.name, code:failure.cause?.code }, "Drive image fetch failed");
+      request.log.warn({ name:failure.name, code:failure.cause?.code }, "Drive media fetch failed");
       return reply.code(502).send();
     } finally {
       activeDriveRequests--;
     }
   });
 
+  app.post<{ Params: { extension: string } }>("/upload/:extension", { bodyLimit: maxMediaBytes }, async (request, reply) => {
+    await requireOperator(request, ["SUPER_ADMIN"]);
+    const extension = request.params.extension.toLowerCase();
+    if (!Object.hasOwn(formats, extension)) return reply.code(415).send({ message: "Unsupported media format" });
+    if (!Buffer.isBuffer(request.body) || request.body.length === 0) return reply.code(400).send({ message: "Choose a media file to upload" });
+    const body = request.body;
+    const isValid = extension === "png" ? body.toString("hex", 0, 8) === "89504e470d0a1a0a"
+      : extension === "jpg" ? body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff
+      : extension === "webp" ? body.toString("ascii", 0, 4) === "RIFF" && body.toString("ascii", 8, 12) === "WEBP"
+      : extension === "svg" ? (() => { const text = body.toString("utf8"); return /<svg\b/i.test(text) && !/<script\b|<foreignObject\b|\bon[a-z]+\s*=|(?:href|src)\s*=\s*["']\s*(?:javascript:|https?:|\/\/)/i.test(text); })()
+      : extension === "mp4" ? body.length >= 12 && body.toString("ascii", 4, 8) === "ftyp"
+      : extension === "webm" ? body.toString("hex", 0, 4) === "1a45dfa3"
+      : body.length >= 20 && body.toString("ascii", 0, 4) === "glTF" && body.readUInt32LE(4) === 2 && body.readUInt32LE(8) === body.length;
+    if (!isValid) return reply.code(415).send({ message: "The file content does not match its format" });
+
+    const filename = `${randomUUID()}.${extension}`;
+    await mkdir(directory, { recursive: true });
+    await writeFile(resolve(directory, filename), body, { flag: "wx" });
+    return reply.code(201).send({ url: `/api/v1/product-media/${filename}` });
+  });
+
   app.get<{ Params: { filename: string } }>("/:filename", async (request, reply) => {
     const { filename } = request.params;
-    const match = /^[a-f0-9-]{36}\.(png|jpg|webp|svg|mp4|webm)$/.exec(filename);
+    const match = /^[a-f0-9-]{36}\.(png|jpg|webp|svg|mp4|webm|glb)$/.exec(filename);
     if (!match) return reply.code(404).send();
     const format = formats[match[1] as keyof typeof formats];
     try {

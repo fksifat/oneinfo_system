@@ -123,7 +123,7 @@ export function Products({ token }: { token: string }) {
               </div>
               <div className="catalog-form-grid" hidden={section !== "media"}>
                 <label className="full catalog-default-preview"><span>Default large preview<small>Opens first when this colour is selected.</small></span><select value={v.defaultMediaIndex} onChange={e=>changeVariant(v.id,{defaultMediaIndex:Number(e.target.value)})}>{(v.media?.length ? v.media : [null]).map((m,i)=><option value={i} key={m?.id ?? "empty"}>{m ? `${i+1}. ${m.label || (m.type === "model" ? "3D View" : m.type)}` : "Card illustration"}</option>)}</select></label>
-                <ProductMediaEditor items={v.media ?? []} onChange={media=>changeVariant(v.id,{media,defaultMediaIndex:Math.min(v.defaultMediaIndex,Math.max(0,media.length-1)),imageUrl:"",backImageUrl:""})} />
+                <ProductMediaEditor items={v.media ?? []} token={token} onChange={media=>changeVariant(v.id,{media,defaultMediaIndex:Math.min(v.defaultMediaIndex,Math.max(0,media.length-1)),imageUrl:"",backImageUrl:""})} />
               </div><div className="variant-footer" hidden={section === "media"}><label className="catalog-check"><input type="checkbox" checked={v.available} onChange={e => changeVariant(v.id,{available:e.target.checked})} />Available to order</label><button type="button" className="catalog-remove" disabled={editing.variants.length === 1} onClick={() => { const variants=editing.variants.filter(x => x.id !== v.id); setEditing({...editing,variants}); setActiveVariant(variants[0]!.id); }}>Remove colour</button></div></div>}
             </div>)}</div>
           </section>

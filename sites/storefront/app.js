@@ -1,4 +1,4 @@
-import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
+import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 
 (function () {
@@ -17,6 +17,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   }
   const mediaUrl = path => path.startsWith("/api/v1/product-media/") ? new URL(path, apiUrl).href : path;
   const imageSource = path => mediaUrl(resolveProductImageUrl(path));
+  const modelSource = path => mediaUrl(resolveProductModelUrl(path));
   function variantCover(variant) {
     const cover = productMedia(variant).find(m => (m.type === "image" && m.url) || (m.type === "video" && m.poster));
     return cover?.type === "image" ? cover.url : cover?.poster;
@@ -246,7 +247,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         ${model ? `<section class="gallery-model-card" aria-label="Interactive 3D view">
           <header><h2>3D View</h2><span>${escapeHtml(model.variant.name)}</span></header>
           <div class="gallery-model-stage" data-appearance="${escapeHtml(model.variant.appearance)}">
-            <model-viewer class="gallery-model" src="${escapeHtml(model.media.url)}" alt="${escapeHtml(p.name + " — " + model.variant.name + " 3D model")}" camera-controls camera-orbit="0deg 85deg 105%" interaction-prompt="none" touch-action="none" min-camera-orbit="auto 0deg auto" max-camera-orbit="auto 180deg auto" disable-pan></model-viewer>
+            <model-viewer class="gallery-model" src="${escapeHtml(modelSource(model.media.url))}" alt="${escapeHtml(p.name + " — " + model.variant.name + " 3D model")}" camera-controls camera-orbit="0deg 85deg 105%" interaction-prompt="none" touch-action="none" min-camera-orbit="auto 0deg auto" max-camera-orbit="auto 180deg auto" disable-pan></model-viewer>
             <p class="gallery-model-instruction">Drag or swipe to rotate</p>
           </div>
           <p class="gallery-model-error" role="status" hidden>3D model could not load.</p>
@@ -259,19 +260,57 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">+</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">+</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">+</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">↗</span></a></div></div>` : ""}</article>`;
   }
 
-  function reviewsMarkup() {
+  function reviewsMarkup(product) {
     return `<section class="product-reviews" aria-labelledby="product-reviews-title">
       <div class="review-overview">
         <div>
           <h2 id="product-reviews-title">Customer reviews</h2>
-          <p>No verified reviews yet.</p>
+          <p class="review-summary" data-review-summary>Loading reviews…</p>
         </div>
         <aside class="review-eligibility">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 22s7-3.5 7-10V5l-7-3-7 3v7c0 6.5 7 10 7 10Z"/><path d="m9 12 2 2 4-4"/></svg>
-          <div><h3>Verified buyers only</h3><p>Review submissions are currently unavailable.</p></div>
+          <div><h3>Verified buyers</h3><p>After delivery, buyers receive a private link to review this card.</p></div>
         </aside>
       </div>
+      <div class="review-list" data-review-list></div>
+      <div class="review-examples">
+        <div class="review-examples-heading"><div><h3>Review examples</h3><p>Examples of the feedback buyers can share after delivery.</p></div><span class="review-example-label">Sample content</span></div>
+        <div class="review-example-list">
+          <article class="review-card"><div class="review-example-meta"><span class="review-example-name">A. Rahman</span><span class="review-stars" aria-label="5 out of 5 stars">★★★★★</span></div><h3>Easy to share</h3><p>One tap opens my contact page, making it quick to share my details.</p></article>
+          <article class="review-card"><div class="review-example-meta"><span class="review-example-name">N. Sultana</span><span class="review-stars" aria-label="5 out of 5 stars">★★★★★</span></div><h3>Clean, professional finish</h3><p>The neat design feels right at home when I meet a new client.</p></article>
+          <article class="review-card"><div class="review-example-meta"><span class="review-example-name">T. Hasan</span><span class="review-stars" aria-label="4 out of 5 stars">★★★★☆</span></div><h3>Convenient at events</h3><p>It is handy to share my profile without carrying paper cards.</p></article>
+        </div>
+      </div>
     </section>`;
+  }
+
+  async function loadProductReviews(product, host) {
+    const summary = $(`[data-review-summary]`, host), list = $(`[data-review-list]`, host);
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/reviews/products/${encodeURIComponent(product.slug)}`, { signal: AbortSignal.timeout(7000) });
+      if (!response.ok) throw new Error("Reviews unavailable");
+      const data = await response.json();
+      summary.textContent = data.count ? `${data.average.toFixed(1)} out of 5 · ${data.count} ${data.count === 1 ? "review" : "reviews"}` : "No verified reviews yet.";
+      list.innerHTML = data.items.map(review => `<article class="review-card"><div class="review-stars" aria-label="${review.rating} out of 5 stars">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</div><h3>${escapeHtml(review.title)}</h3><p>${escapeHtml(review.body)}</p><small>${escapeHtml(review.displayName)} · Verified buyer · ${new Date(review.createdAt).toLocaleDateString("en-BD")}</small></article>`).join("");
+    } catch { summary.textContent = "Reviews could not load. Please try again later."; }
+  }
+
+  async function renderReviewPortal(token) {
+    const host = $("#review-portal");
+    host.hidden = false;
+    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a><div class="review-portal-card"><p class="eyebrow">VERIFIED PURCHASE</p><h1 id="review-portal-title">Your Oneinfo review</h1><p class="review-portal-lead">Share your experience with products from your delivered order. Edits return to moderation before publishing.</p><div data-review-portal-content role="status">Checking your private review link…</div></div>`;
+    const content = $(`[data-review-portal-content]`, host);
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/reviews/portal`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({token}), signal:AbortSignal.timeout(7000) });
+      const data = await response.json(); if (!response.ok) throw new Error(data.message || "This review link is invalid or has expired.");
+      content.innerHTML = data.products.map(product => `<article class="review-form-card" data-product-id="${escapeHtml(product.id)}"><h2>${escapeHtml(product.name)}</h2>${product.review ? `<p class="review-state">Your review is ${product.review.status.toLowerCase()}.</p>` : ""}<form class="buyer-review-form"><label>Your name<input name="displayName" maxlength="60" required value="${escapeHtml(product.review?.displayName || "")}"></label><label>Rating<select name="rating" required>${[5,4,3,2,1].map(value=>`<option value="${value}" ${product.review?.rating === value ? "selected" : ""}>${value} ${value === 1 ? "star" : "stars"}</option>`).join("")}</select></label><label>Review title<input name="title" maxlength="100" required value="${escapeHtml(product.review?.title || "")}"></label><label>Your review<textarea name="body" minlength="5" maxlength="1200" required>${escapeHtml(product.review?.body || "")}</textarea></label><button class="button" type="submit">${product.review ? "Save changes" : "Submit review"}</button>${product.review ? `<button class="plain-link review-delete" type="button">Delete review</button>` : ""}<p class="review-form-message" role="status"></p></form></article>`).join("") || "<p>This order has no products available to review.</p>";
+      content.querySelectorAll(".buyer-review-form").forEach(form => form.addEventListener("submit", async event => {
+        event.preventDefault(); const formData = new FormData(form), productId = form.closest("[data-product-id]").dataset.productId, message = $(".review-form-message", form), button = $("button[type=submit]", form); button.disabled = true;
+        try { const result = await fetch(`${apiUrl}/api/v1/reviews/portal/reviews`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({token, productId, displayName:formData.get("displayName"), rating:Number(formData.get("rating")), title:formData.get("title"), body:formData.get("body")}) }); const payload=await result.json(); if(!result.ok) throw new Error(payload.message || "Could not save review."); message.textContent="Thanks. Your review is awaiting approval."; }
+        catch(error) { message.textContent=error.message || "Could not save review."; } finally { button.disabled=false; }
+      }));
+      content.querySelectorAll(".review-delete").forEach(button => button.addEventListener("click", async () => { const form=button.closest("form"), productId=button.closest("[data-product-id]").dataset.productId, message=$(".review-form-message",form); if(!window.confirm("Delete your review?")) return; button.disabled=true; try { const res=await fetch(`${apiUrl}/api/v1/reviews/portal/reviews`,{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({token,productId})}); if(!res.ok) throw new Error("Could not delete review."); message.textContent="Review deleted."; form.reset(); } catch(error){message.textContent=error.message;} finally{button.disabled=false;} }));
+    } catch (error) { content.textContent = error.message || "This private review link could not be verified."; }
   }
 
   function watchModel(viewer) {
@@ -284,12 +323,14 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   function renderRoute(focus = false) {
     const order = location.hash === "#order-draft";
     const payment = location.hash === "#arisepay";
+    const reviewToken = location.hash.startsWith("#review/") ? location.hash.slice(8) : "";
     const route = productRoute(location.hash);
     document.body.classList.toggle("product-page", Boolean(route));
-    const page = order ? "order-draft" : payment ? "arisepay" : route ? "product-detail" : "";
+    const page = order ? "order-draft" : payment ? "arisepay" : reviewToken ? "review-portal" : route ? "product-detail" : "";
     $$("#main > section").forEach(section => {
-      section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail"].includes(section.id);
+      section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail", "review-portal"].includes(section.id);
     });
+    if (reviewToken) { document.title = "Your review | Oneinfo"; void renderReviewPortal(reviewToken); return; }
     if (payment) {
       if (pendingOrder) {
         location.replace("#order-draft");
@@ -329,7 +370,8 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     const addFocused = focused?.closest("#product-detail") && focused.classList.contains("add-to-cart");
     const quantityFocused = focused?.closest("#product-detail") ? focused.dataset.quantityStep : null;
     const openDisclosures = new Map($$(".purchase-disclosure", host).map(el => [el.dataset.disclosure, el.open]));
-    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup() : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
+    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup(product) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
+    if (product) void loadProductReviews(product, host);
     if (!catalogReady) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
     document.title = product ? `${product.name} | Oneinfo` : "Product | Oneinfo";
     watchImages();
@@ -414,7 +456,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         $(".gallery-model-stage", card).dataset.appearance = variant.appearance;
         const nextViewer = viewer.cloneNode(false);
         nextViewer.setAttribute("alt", `${product.name} — ${variant.name} 3D model`);
-        nextViewer.setAttribute("src", model.url);
+        nextViewer.setAttribute("src", modelSource(model.url));
         viewer.replaceWith(nextViewer);
         watchModel(nextViewer);
         $$(".gallery-model-button", card).forEach(button => button.setAttribute("aria-pressed", String(button === mediaButton)));

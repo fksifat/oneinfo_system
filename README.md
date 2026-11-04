@@ -25,6 +25,8 @@ This repository implements an end-to-end QR/NFC card platform from the technical
 
 The NFC/QR management system is local-only. PostgreSQL, the API, admin control center, production console, and NFC bridge run from VS Code on the workstation. Real card encoding uses an NFC-capable Android phone over USB or a PC/SC-compatible USB NFC reader. Only the customer-facing selling website and published profile/card URLs need public hosting.
 
+Product media uploaded in the control center is stored under the repository's `.product-media` directory by default and served by the API with immutable browser caching. Before publishing uploaded media, deploy the media endpoint on a customer-reachable host and set `PRODUCT_MEDIA_DIR` to persistent storage; the local workstation API binds to `127.0.0.1` and is not publicly reachable. Keep the production workstation private.
+
 ## Run locally
 
 Requirements: Node.js 22.12 or newer and Docker.

@@ -181,18 +181,22 @@ export type CreateNfcBridgeSessionInput = z.infer<typeof CreateNfcBridgeSessionS
 export type NfcBridgeResultInput = z.infer<typeof NfcBridgeResultSchema>;
 export type NfcReadResultInput = z.infer<typeof NfcReadResultSchema>;
 
-export function resolveProductImageUrl(path: string): string {
+function resolveDriveMediaUrl(path: string, format?: "glb"): string {
   if (!path.startsWith("https://drive.google.com/")) return path;
   const share = new URL(path);
   const fileId = /^\/file\/d\/([\w-]+)(?:\/(?:view|preview))?\/?$/.exec(share.pathname)?.[1]
     ?? (share.pathname === "/open" ? share.searchParams.get("id") : null);
-  if (!fileId || !/^[\w-]+$/.test(fileId)) return path;
+  if (!fileId || !/^[\w-]{1,128}$/.test(fileId)) return path;
 
-  const image = new URL(`/api/v1/product-media/drive/${fileId}`, share.origin);
+  const media = new URL(`/api/v1/product-media/drive/${fileId}`, share.origin);
   const resourceKey = share.searchParams.get("resourcekey");
-  if (resourceKey) image.searchParams.set("resourcekey", resourceKey);
-  return image.pathname + image.search;
+  if (resourceKey) media.searchParams.set("resourcekey", resourceKey);
+  if (format) media.searchParams.set("format", format);
+  return media.pathname + media.search;
 }
+
+export const resolveProductImageUrl = (path: string) => resolveDriveMediaUrl(path);
+export const resolveProductModelUrl = (path: string) => resolveDriveMediaUrl(path, "glb");
 
 export const ProductImageSchema = z.union([
   z.string().regex(/^\/api\/v1\/product-media\/[a-f0-9-]{36}\.(?:png|jpg|webp|svg)$/),
@@ -211,9 +215,11 @@ export const ProductMediaSchema = z.discriminatedUnion("type", [
   z.object({...mediaBase, type:z.literal("image"), url:MediaImageUrlSchema}),
   z.object({...mediaBase, type:z.literal("video"), url:VideoUrlSchema, poster:ProductImageSchema.default("")}),
   z.object({...mediaBase, type:z.literal("model"), url:z.string().trim().max(2048).refine(value =>
+    /^\/api\/v1\/product-media\/[a-f0-9-]{36}\.glb$/.test(value) ||
     /^\/assets\/[a-zA-Z0-9/_-]+\.glb$/.test(value) ||
-    (z.url().safeParse(value).success && /^https:\/\//i.test(value) && /\.glb$/i.test(new URL(value).pathname)),
-    "Use a direct HTTPS .glb URL or a bundled /assets/ path")}),
+    (z.url().safeParse(value).success && /^https:\/\//i.test(value) &&
+      (/\.glb$/i.test(new URL(value).pathname) || resolveProductModelUrl(value) !== value)),
+    "Use a public Google Drive file link, direct HTTPS .glb URL, or bundled /assets/ path")}),
   z.object({...mediaBase, type:z.literal("spin"), frames:z.array(MediaImageUrlSchema).min(2).max(120)}),
 ]);
 export type ProductMedia = z.infer<typeof ProductMediaSchema>;
@@ -376,7 +382,7 @@ export type OrderReceipt = {
   paymentMethod: z.infer<typeof PaymentMethodSchema>;
   paymentAmountMinor?: number;
   paymentStatus?: "PENDING_VERIFICATION" | "VERIFIED";
-  status: "RECEIVED";
+  status: "RECEIVED" | "DELIVERED";
   shippingZone: ShippingZone;
   subtotalMinor: number;
   shippingMinor: number;
@@ -385,5 +391,7 @@ export type OrderReceipt = {
   totalMinor: number;
   createdAt: string;
   confirmationEmail?: "accepted" | "failed";
+  deliveredAt?: string | null;
+  reviewInviteSentAt?: string | null;
 };
 export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null };

@@ -9,7 +9,7 @@ import {
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, products, storeCoupons, storeOrders, storeShippingSettings } from "../db/schema.js";
+import { auditLogs, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
 import { confirmationEmailEnabled, sendOrderConfirmation } from "../domain/order-confirmation.js";
 import { parseBody, sendCreated } from "../http.js";
 
@@ -25,7 +25,7 @@ function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
   const { paymentMethod, paymentAmountMinor, paymentVerifiedAt } = order;
   return { id, paymentMethod, paymentAmountMinor,
     ...(paymentAmountMinor > 0 && { paymentStatus: paymentVerifiedAt ? "VERIFIED" : "PENDING_VERIFICATION" }),
-    status: "RECEIVED", shippingZone, subtotalMinor, shippingMinor,
+    status: order.deliveredAt ? "DELIVERED" : "RECEIVED", deliveredAt: order.deliveredAt?.toISOString() ?? null, shippingZone, subtotalMinor, shippingMinor,
     couponCode, discountMinor, totalMinor: subtotalMinor + shippingMinor - discountMinor, createdAt: createdAt.toISOString() };
 }
 
@@ -116,7 +116,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const rows = await db.select().from(storeOrders)
       .where(beforeId ? sql`(${storeOrders.createdAt}, ${storeOrders.id}) < (${before})` : undefined)
       .orderBy(desc(storeOrders.createdAt), desc(storeOrders.id)).limit(51);
-    return { items: rows.slice(0, 50).map(row => ({ ...receipt(row), customer: row.customer,
+    const items = rows.slice(0, 50);
+    const invites = items.length ? await db.select().from(storeReviewInvites).where(inArray(storeReviewInvites.orderId, items.map(row => row.id))) : [];
+    return { items: items.map(row => ({ ...receipt(row), reviewInviteSentAt: invites.find(invite => invite.orderId === row.id)?.sentAt?.toISOString() ?? null, customer: row.customer,
       deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId })), hasMore: rows.length > 50 };
   });
 

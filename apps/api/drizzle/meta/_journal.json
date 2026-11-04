@@ -57,6 +57,13 @@
       "when": 1793777704186,
       "tag": "0007_store_payments",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793800011195,
+      "tag": "0008_uneven_betty_ross",
+      "breakpoints": true
     }
   ]
 }

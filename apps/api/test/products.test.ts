@@ -1,10 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { ProductInputSchema, UpdateProductSchema, productMedia, productGallery, discountPercent, variantPrice, resolveProductImageUrl } from "../../../packages/contracts/src/index.js";
+import { ProductInputSchema, ProductMediaSchema, UpdateProductSchema, productMedia, productGallery, discountPercent, variantPrice, resolveProductImageUrl, resolveProductModelUrl } from "../../../packages/contracts/src/index.js";
 import { addCartVariant, reconcileCartItems, productRoute, spinFrame } from "../../../sites/storefront/catalog.js";
 const variant = { id:"01800000-0000-4000-8000-000000000011", name:"White", colorHex:"#ffffff", priceMinor:129000, salePriceMinor:null, available:true, finish:"Satin", appearance:"light", imageUrl:"" };
 const product = { id:"01800000-0000-4000-8000-000000000001", name:"Example card", slug:"example-card", variants:[variant] };
 const blue = {...variant, id:"01800000-0000-4000-8000-000000000012", name:"Blue", colorHex:"#193c66", priceMinor:200000, salePriceMinor:150000};
 describe("catalog input boundaries", () => {
+  it("accepts a Drive share link for a model and resolves it to the GLB endpoint", () => {
+    const model = { id:variant.id, type:"model", url:"https://drive.google.com/file/d/sample-id/view?resourcekey=0-key" };
+    expect(ProductMediaSchema.parse(model)).toMatchObject(model);
+    expect(resolveProductModelUrl(model.url)).toBe("/api/v1/product-media/drive/sample-id?resourcekey=0-key&format=glb");
+    expect(ProductMediaSchema.safeParse({...model, url:"https://drive.google.com.example.com/file/d/sample-id/view"}).success).toBe(false);
+    expect(resolveProductModelUrl("/assets/cards-final/light.glb")).toBe("/assets/cards-final/light.glb");
+  });
+
   it("resolves public Drive image links while preserving direct and bundled sources", () => {
     expect(resolveProductImageUrl("https://drive.google.com/file/d/sample-id/view?usp=sharing&resourcekey=0-abc"))
       .toBe("/api/v1/product-media/drive/sample-id?resourcekey=0-abc");

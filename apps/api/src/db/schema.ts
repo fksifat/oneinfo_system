@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import {
   bigint,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -14,6 +15,7 @@ import {
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -320,9 +322,39 @@ export const storeOrders = pgTable("store_orders", {
   paymentAmountMinor: bigint("payment_amount_minor", { mode: "number" }).notNull().default(0),
   transactionId: varchar("transaction_id", { length: 20 }),
   paymentVerifiedAt: timestamp("payment_verified_at", { withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   uniqueIndex("store_orders_transaction_unique").on(table.transactionId),
   uniqueIndex("store_orders_request_unique").on(table.requestId),
   index("store_orders_created_idx").on(table.createdAt, table.id),
+]);
+
+export const storeReviewInvites = pgTable("store_review_invites", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  orderId: uuid("order_id").notNull().references(() => storeOrders.id, { onDelete: "restrict" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex("store_review_invites_order_unique").on(table.orderId),
+  uniqueIndex("store_review_invites_token_unique").on(table.tokenHash),
+]);
+
+export const storeReviews = pgTable("store_reviews", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  orderId: uuid("order_id").notNull().references(() => storeOrders.id, { onDelete: "restrict" }),
+  productId: uuid("product_id").notNull().references(() => products.id, { onDelete: "restrict" }),
+  displayName: varchar("display_name", { length: 60 }).notNull(),
+  rating: integer("rating").notNull(),
+  title: varchar("title", { length: 100 }).notNull(),
+  body: varchar("body", { length: 1200 }).notNull(),
+  status: varchar("status", { length: 12 }).$type<"PENDING" | "PUBLISHED" | "REJECTED">().notNull().default("PENDING"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [
+  uniqueIndex("store_reviews_order_product_unique").on(table.orderId, table.productId),
+  index("store_reviews_public_idx").on(table.productId, table.status, table.createdAt),
+  check("store_reviews_rating_check", sql`${table.rating} between 1 and 5`),
+  check("store_reviews_status_check", sql`${table.status} in ('PENDING', 'PUBLISHED', 'REJECTED')`),
 ]);

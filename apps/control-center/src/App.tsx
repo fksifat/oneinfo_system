@@ -1,9 +1,17 @@
 import { Orders } from "./Orders.js";
 import { Products } from "./Products.js";
+import { Reviews } from "./Reviews.js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
+import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 
-type View = "orders" | "products" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
+type View = "orders" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
+const viewIds: View[] = ["overview", "products", "orders", "reviews", "profiles", "cards", "batches", "production", "stations", "audit"];
+
+function viewFromHash(): View {
+  const hash = window.location.hash.slice(1) as View;
+  return viewIds.includes(hash) ? hash : "overview";
+}
 
 interface Overview {
   profiles: number;
@@ -90,6 +98,22 @@ function formatDate(value: string | null) {
   return value ? new Intl.DateTimeFormat("en-BD", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "Never";
 }
 
+function NavIcon({ name }: { name: string }) {
+  const common = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true" {...common}>
+    {name === "overview" ? <><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></> : null}
+    {name === "products" ? <><path d="m12 3.8 8.2 4.3v7.8L12 20.2l-8.2-4.3V8.1L12 3.8Z" /><path d="m3.9 8.2 8.1 4.3 8.1-4.3M12 12.5v7.3" /></> : null}
+    {name === "orders" ? <><path d="M7 3.5h10l3 3v14H4v-17h3Z" /><path d="M8 10h8M8 14h8M8 18h5" /></> : null}
+    {name === "reviews" ? <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 3.5Z" /> : null}
+    {name === "profiles" ? <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c.3-3.4 2.1-5.2 5.5-5.2s5.2 1.8 5.5 5.2M16 5.3a3.2 3.2 0 0 1 0 6.1M17 14.9c2.2.5 3.4 2.2 3.6 5.1" /></> : null}
+    {name === "cards" ? <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.4-1.5 1.4-2.2 3-2.2s2.6.7 3 2.2M14 10h4M14 14h4" /></> : null}
+    {name === "batches" ? <><path d="m12 3.5 8 4.2-8 4.2-8-4.2 8-4.2Z" /><path d="m4 12 8 4.2 8-4.2M4 16.3l8 4.2 8-4.2" /></> : null}
+    {name === "production" ? <><path d="M7 7a7 7 0 0 1 11.8 4.9M17 17a7 7 0 0 1-11.8-4.9" /><path d="M18.8 7v4.9h-4.9M5.2 17v-4.9h4.9" /><path d="M10 10h.01M14 14h.01" /></> : null}
+    {name === "stations" ? <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4M7 8h10" /></> : null}
+    {name === "audit" ? <><path d="M5 4.5h10l4 4V20H5V4.5Z" /><path d="M14.5 4.8v4h4M8 12h8M8 15.5h8M8 19h5" /></> : null}
+  </svg>;
+}
+
 function PublicProfile({ slug }: { slug: string }) {
   const [data, setData] = useState<{ profile: Profile; links: ProfileLink[] } | null>(null);
   const [error, setError] = useState("");
@@ -133,7 +157,8 @@ export function App() {
   if (profileSlug) return <PublicProfile slug={profileSlug} />;
 
   const [token, setToken] = useState(() => localStorage.getItem("oneinfo.admin.token") ?? "");
-  const [view, setView] = useState<View>(() => window.location.hash === "#products" ? "products" : "overview");
+  const [view, setView] = useState<View>(viewFromHash);
+  const [ordersSettingsOpen, setOrdersSettingsOpen] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [cards, setCards] = useState<CardRow[]>([]);
@@ -149,6 +174,18 @@ export function App() {
     const expired = () => { localStorage.removeItem("oneinfo.admin.token"); setToken(""); };
     window.addEventListener("oneinfo-session-expired", expired);
     return () => window.removeEventListener("oneinfo-session-expired", expired);
+  }, []);
+  useEffect(() => { setOrdersSettingsOpen(false); }, [view]);
+
+  useEffect(() => {
+    const syncView = () => {
+      const next = viewFromHash();
+      if (window.location.hash !== `#${next}`) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${next}`);
+      setView(next);
+    };
+    syncView();
+    window.addEventListener("hashchange", syncView);
+    return () => window.removeEventListener("hashchange", syncView);
   }, []);
 
   const bootstrap = async () => {
@@ -226,7 +263,7 @@ export function App() {
   if (!token) return (
     <div className="auth-page">
       <section className="auth-card">
-        <div className="logo"><i></i><span>ONEINFO</span></div>
+        <div className="logo"><img src={oneinfoLogo} alt="Oneinfo" /></div>
         <p className="eyebrow">CONTROL CENTER</p>
         <h1>Run the entire card lifecycle.</h1>
         <p>Manage client profiles, cards, production batches, NFC/QR operations, stations, inventory, and audit history.</p>
@@ -237,31 +274,32 @@ export function App() {
     </div>
   );
 
-  const nav: { id: View; label: string; icon: string }[] = [
-    { id: "overview", label: "Overview", icon: "◫" },
-    { id: "products", label: "Products", icon: "▣" },
-    { id: "orders", label: "Orders", icon: "≡" },
-    { id: "profiles", label: "Client profiles", icon: "◎" },
-    { id: "cards", label: "Cards & inventory", icon: "▱" },
-    { id: "batches", label: "Production batches", icon: "▦" },
-    { id: "production", label: "NFC & QR operations", icon: "⌁" },
-    { id: "stations", label: "Stations", icon: "⌂" },
-    { id: "audit", label: "Audit history", icon: "≡" },
+  const nav: { id: View; label: string }[] = [
+    { id: "overview", label: "Overview" },
+    { id: "products", label: "Products" },
+    { id: "orders", label: "Orders" },
+    { id: "reviews", label: "Reviews" },
+    { id: "profiles", label: "Client profiles" },
+    { id: "cards", label: "Cards & inventory" },
+    { id: "batches", label: "Production batches" },
+    { id: "production", label: "NFC & QR operations" },
+    { id: "stations", label: "Stations" },
+    { id: "audit", label: "Audit history" },
   ];
 
   return (
     <div className="control-shell">
       <aside className="sidebar">
-        <div className="logo light"><i></i><span>ONEINFO</span></div>
+        <div className="logo light"><img src={oneinfoLogo} alt="Oneinfo" /></div>
         <p className="workspace-label">OPERATIONS WORKSPACE</p>
-        <nav>{nav.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><span>{item.icon}</span>{item.label}</button>)}</nav>
+        <nav>{nav.map((item) => <button type="button" key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => { if (window.location.hash !== `#${item.id}`) window.location.hash = item.id; }}><NavIcon name={item.id} />{item.label}</button>)}</nav>
         <div className="sidebar-foot"><span className="health-dot"></span><div><strong>API connected</strong><small>Development environment</small></div></div>
       </aside>
 
       <main className="workspace">
         <header className="workspace-header">
           <div><p className="eyebrow">{view.replaceAll("_", " ")}</p><h1>{nav.find((item) => item.id === view)?.label}</h1></div>
-          <div className="header-tools"><button className="quiet" onClick={() => void refresh()}>Refresh</button><div className="user-chip">FA</div></div>
+          <div className="header-tools">{view === "orders" && <button className="quiet" onClick={() => setOrdersSettingsOpen(true)}>Settings</button>}<button className="quiet" onClick={() => void refresh()}>Refresh</button><div className="user-chip">FA</div></div>
         </header>
 
         {view === "overview" && overview ? <section className="dashboard">
@@ -283,7 +321,8 @@ export function App() {
         </section> : null}
 
         {view === "products" ? <Products token={token} /> : null}
-        {view === "orders" ? <Orders token={token} /> : null}
+        {view === "orders" ? <Orders token={token} settingsOpen={ordersSettingsOpen} onSettingsOpenChange={setOrdersSettingsOpen} /> : null}
+        {view === "reviews" ? <Reviews token={token} /> : null}
 
         {view === "profiles" ? <section>
           <div className="list-toolbar"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => setEditing({ ...blankProfile })}>New client profile</button></div>

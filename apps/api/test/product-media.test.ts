@@ -1,4 +1,5 @@
 import Fastify from "fastify";
+import { readFile } from "node:fs/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { productMediaRoutes } from "../src/routes/product-media.js";
 
@@ -23,6 +24,28 @@ it("serves Drive image bytes and rejects invalid IDs and HTML responses", async 
     expect(String(upstream.mock.calls[0]?.[0])).toBe("https://drive.usercontent.google.com/download?id=sample-id&export=download&resourcekey=0-key");
     expect(upstream.mock.calls[0]?.[1]).toMatchObject({ redirect: "error" });
     expect((await app.inject(path)).statusCode).toBe(404);
+  } finally {
+    await app.close();
+  }
+});
+
+it("serves a Drive GLB as binary and rejects an unrelated download", async () => {
+  const app = Fastify();
+  app.register(productMediaRoutes, { prefix: "/api/v1/product-media" });
+  const model = await readFile(new URL("../../../sites/storefront/public/assets/cards-final/light.glb", import.meta.url));
+  const binary = { headers: { "content-type": "application/octet-stream" } };
+  const upstream = vi.fn()
+    .mockResolvedValueOnce(new Response(new Uint8Array(model), binary))
+    .mockResolvedValueOnce(new Response("Not a GLB", binary));
+  vi.stubGlobal("fetch", upstream);
+
+  try {
+    const path = "/api/v1/product-media/drive/sample-id?format=glb";
+    const response = await app.inject(path);
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toBe("model/gltf-binary");
+    expect(response.rawPayload).toEqual(model);
+    expect((await app.inject(path)).statusCode).toBe(415);
   } finally {
     await app.close();
   }
