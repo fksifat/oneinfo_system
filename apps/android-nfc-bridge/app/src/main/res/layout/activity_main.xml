@@ -1,51 +1,51 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="28dp">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Oneinfo NFC Bridge"
-        android:textColor="#102D42"
-        android:textSize="28sp"
-        android:textStyle="bold" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="USB connection to your local workstation"
-        android:textColor="#607582"
-        android:textSize="15sp" />
-
-    <EditText
-        android:id="@+id/pairingCode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="36dp"
-        android:digits="0123456789"
-        android:hint="6-digit pairing code"
-        android:inputType="number"
-        android:maxLength="6" />
-
-    <Button
-        android:id="@+id/pairButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:text="Pair with workstation" />
-
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:background="#EEF6F7"
-        android:padding="20dp"
-        android:text="Connect USB, enable debugging, turn on NFC, and pair this device."
-        android:textColor="#17384B"
-        android:textSize="17sp" />
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:fitsSystemWindows="true" android:background="#F2F6F7">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+    <TextView style="@style/Eyebrow" android:text="ONEINFO / WORKSPACE" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Your card workshop" android:textColor="#123344" android:textSize="27sp" android:textStyle="bold" android:layout_marginTop="6dp" />
+    <TextView android:id="@+id/connectionStatus" style="@style/BodyText" android:text="Not paired · Connect your workstation" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+        <Button android:id="@+id/tabProduction" style="@style/TabButton" android:text="Production" />
+        <Button android:id="@+id/tabTools" style="@style/TabButton" android:text="NFC tools" />
+        <Button android:id="@+id/tabConnect" style="@style/TabButton" android:text="Connect" />
+    </LinearLayout>
+    <TextView android:id="@+id/status" style="@style/BodyText" android:layout_marginTop="12dp" android:background="@drawable/panel" android:padding="16dp" android:accessibilityLiveRegion="polite" android:text="Pair your workstation to get started." />
+    <Button android:id="@+id/cancelTask" style="@style/SecondaryButton" android:text="Stop waiting for tag" android:visibility="gone" />
+    <LinearLayout android:id="@+id/productionPanel" style="@style/PanelLayout">
+        <TextView style="@style/Eyebrow" android:text="CARD PRODUCTION" />
+        <TextView style="@style/SectionTitle" android:text="From print to finished card" />
+        <TextView style="@style/BodyText" android:text="Find the printed card, load its link, then check both again before approving QC." />
+        <TextView android:id="@+id/verificationUrl" style="@style/ResultText" android:text="No card selected. Scan a printed QR to begin." />
+        <Button android:id="@+id/verifyQr" style="@style/PrimaryButton" android:text="1   Scan printed QR" />
+        <Button android:id="@+id/loadNfc" style="@style/PrimaryButton" android:text="2   Load to NFC" android:enabled="false" />
+        <Button android:id="@+id/verifyQc" style="@style/SecondaryButton" android:text="3   Scan QR for final QC" />
+        <Button android:id="@+id/approveQc" style="@style/PrimaryButton" android:text="4   Approve QC" android:enabled="false" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/toolsPanel" style="@style/PanelLayout" android:visibility="gone">
+        <TextView style="@style/Eyebrow" android:text="GENERAL PURPOSE" />
+        <TextView style="@style/SectionTitle" android:text="Read &amp; write NDEF tags" />
+        <TextView style="@style/BodyText" android:text="Inspect a tag or replace its NDEF content with a link or plain text. Tools do not update production or QC records." />
+        <Button android:id="@+id/readTag" style="@style/PrimaryButton" android:text="Read NFC tag" />
+        <RadioGroup android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:checkedButton="@id/urlType">
+            <RadioButton android:id="@+id/urlType" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Website link" android:buttonTint="#117B78" />
+            <RadioButton android:id="@+id/textType" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Plain text" android:buttonTint="#117B78" />
+        </RadioGroup>
+        <EditText android:id="@+id/tagValue" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="100dp" android:gravity="top" android:inputType="textMultiLine" android:maxLength="2048" android:hint="Link or text to write" android:textSize="15sp" android:padding="12dp" android:background="@drawable/panel" />
+        <Button android:id="@+id/writeTag" style="@style/PrimaryButton" android:text="Write to NFC tag…" />
+        <Button android:id="@+id/eraseTag" style="@style/SecondaryButton" android:text="Erase NFC tag…" android:textColor="#A13B2C" />
+        <TextView android:id="@+id/tagDetails" style="@style/ResultText" android:text="Tag details will appear here after a read or write." android:textIsSelectable="true" />
+        <Button android:id="@+id/copyResult" style="@style/SecondaryButton" android:text="Copy result" />
+        <Button android:id="@+id/shareResult" style="@style/SecondaryButton" android:text="Share result JSON" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/connectPanel" style="@style/PanelLayout" android:visibility="gone">
+        <TextView style="@style/Eyebrow" android:text="YOUR WORKSTATION" />
+        <TextView style="@style/SectionTitle" android:text="Connect once, work together" />
+        <TextView style="@style/BodyText" android:text="Connect through USB or wireless debugging. Enter the code from the PC dashboard. Keep the workstation API and ADB tunnel running." />
+        <EditText android:id="@+id/pairingCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:layout_marginTop="12dp" android:hint="6-digit pairing code" android:digits="0123456789" android:inputType="number" android:maxLength="6" />
+        <Button android:id="@+id/pairButton" style="@style/PrimaryButton" android:text="Pair with workstation" />
+        <TextView android:id="@+id/nfcStatus" style="@style/BodyText" android:text="Checking NFC hardware…" />
+        <Button android:id="@+id/nfcSettings" style="@style/SecondaryButton" android:text="Open NFC settings" />
+    </LinearLayout>
+    <TextView style="@style/BodyText" android:text="ONEINFO · Production &amp; NFC tools" android:gravity="center" android:layout_marginTop="20dp" android:textSize="11sp" />
 </LinearLayout>
+</ScrollView>

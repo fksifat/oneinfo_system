@@ -37,11 +37,36 @@ export const nfcFailureCategories = [
   "RESULT_SUBMISSION_FAILED",
 ] as const;
 export const NfcFailureCategorySchema = z.enum(nfcFailureCategories);
+export const HttpUrlSchema = z.url().max(500).refine((value) => /^https?:\/\//i.test(value), "Only HTTP and HTTPS URLs are allowed");
 
 export const CreateBatchSchema = z.object({
   batchCode: z.string().trim().min(3).max(64).regex(/^[A-Za-z0-9_-]+$/),
   productVariantId: z.string().trim().min(1).max(100),
   quantity: z.number().int().min(1).max(1_000),
+  links: z.array(HttpUrlSchema).min(1).max(1_000).optional(),
+}).superRefine((value, context) => {
+  if (value.links && (value.links.length !== value.quantity || new Set(value.links).size !== value.links.length)) {
+    context.addIssue({ code: "custom", path: ["links"], message: "Provide exactly one unique URL for each card" });
+  }
+});
+
+export const GenerateBatchQrSchema = z.object({ cardId: z.uuid().optional() });
+export const VerificationMethodSchema = z.enum(["QR_CAMERA", "NFC_READ"]);
+export const CreateVerificationSchema = z.object({ cardId: z.uuid(), method: VerificationMethodSchema });
+export const StartQrVerificationSchema = z.object({ scanId: z.uuid(), scannedValue: HttpUrlSchema });
+export const ScanActionSchema = z.object({ scanId: z.uuid() });
+export const NfcUtilitySchema = z.union([
+  z.object({ operation: z.literal("READ") }),
+  z.object({ operation: z.literal("ERASE"), overwriteConfirmed: z.literal(true) }),
+  z.object({ operation: z.literal("WRITE"), recordType: z.literal("URL"), value: HttpUrlSchema, overwriteConfirmed: z.literal(true) }),
+  z.object({ operation: z.literal("WRITE"), recordType: z.literal("TEXT"), value: z.string().min(1).max(2_048).refine((value) => value.trim().length > 0, "Enter text to write"), overwriteConfirmed: z.literal(true) }),
+]);
+export type NfcUtilityInput = z.infer<typeof NfcUtilitySchema>;
+export const VerificationResultSchema = z.object({
+  scannedValue: z.string().max(2_048),
+  uid: z.string().max(128).optional(),
+  errorCode: z.string().max(100).optional(),
+  deviceMetadata: z.record(z.string(), z.unknown()).default({}),
 });
 
 export const RegisterStationSchema = z.object({
@@ -77,6 +102,9 @@ export const NfcAttemptSchema = z
     if (value.result === "SUCCEEDED" && !value.readbackUrlHash) {
       context.addIssue({ code: "custom", path: ["readbackUrlHash"], message: "Required on success" });
     }
+    if (value.result === "SUCCEEDED" && value.expectedUrlHash !== value.readbackUrlHash) {
+      context.addIssue({ code: "custom", path: ["readbackUrlHash"], message: "Read-back must match expected URL hash" });
+    }
     if (value.result === "FAILED" && !value.errorCode) {
       context.addIssue({ code: "custom", path: ["errorCode"], message: "Required on failure" });
     }
@@ -89,11 +117,11 @@ export const QualityCheckSchema = z.object({
   evidenceReference: z.string().trim().max(500).optional(),
 });
 
-const OptionalContactSchema = z.string().trim().max(320).optional().or(z.literal(""));
+const OptionalContactSchema = z.string().trim().max(40);
 
 export const ProfileLinkSchema = z.object({
   label: z.string().trim().min(1).max(40),
-  url: z.url().max(500),
+  url: HttpUrlSchema,
   sortOrder: z.number().int().min(0).max(100).default(0),
   active: z.boolean().default(true),
 });
@@ -106,8 +134,8 @@ export const CreateProfileSchema = z.object({
   bio: z.string().trim().max(600).default(""),
   phone: OptionalContactSchema.default(""),
   email: z.union([z.email(), z.literal("")]).default(""),
-  website: z.union([z.url(), z.literal("")]).default(""),
-  avatarUrl: z.union([z.url(), z.literal("")]).default(""),
+  website: z.union([HttpUrlSchema, z.literal("")]).default(""),
+  avatarUrl: z.union([HttpUrlSchema, z.literal("")]).default(""),
   theme: z.enum(["MIDNIGHT", "IVORY", "MINT"]).default("MIDNIGHT"),
   published: z.boolean().default(false),
   links: z.array(ProfileLinkSchema).max(12).default([]),
@@ -127,20 +155,23 @@ export const PairNfcDeviceSchema = z.object({
 
 export const CreateNfcBridgeSessionSchema = z.object({
   jobId: z.uuid(),
-  expectedUrl: z.url().max(500),
+  expectedUrl: HttpUrlSchema,
 });
 
 export const NfcBridgeResultSchema = z
   .object({
     result: z.enum(["SUCCEEDED", "FAILED"]),
-    expectedUrl: z.url().max(500),
-    readbackUrl: z.url().max(500).optional(),
+    expectedUrl: HttpUrlSchema,
+    readbackUrl: HttpUrlSchema.optional(),
     errorCode: NfcFailureCategorySchema.optional(),
     deviceMetadata: z.record(z.string(), z.unknown()).default({}),
   })
   .superRefine((value, context) => {
     if (value.result === "SUCCEEDED" && !value.readbackUrl) {
       context.addIssue({ code: "custom", path: ["readbackUrl"], message: "Required on success" });
+    }
+    if (value.result === "SUCCEEDED" && value.expectedUrl !== value.readbackUrl) {
+      context.addIssue({ code: "custom", path: ["readbackUrl"], message: "Read-back must match expected URL" });
     }
     if (value.result === "FAILED" && !value.errorCode) {
       context.addIssue({ code: "custom", path: ["errorCode"], message: "Required on failure" });

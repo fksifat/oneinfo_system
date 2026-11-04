@@ -13,3 +13,16 @@ export function canPassQualityControl(qrStatus: string, nfcStatus: string): bool
 export function nextNfcJobStatus(result: "SUCCEEDED" | "FAILED"): "COMPLETED" | "RETRYABLE_FAILURE" {
   return result === "SUCCEEDED" ? "COMPLETED" : "RETRYABLE_FAILURE";
 }
+
+export function verificationSummary(checks: { method: string; matched: boolean; createdAt: Date; deviceMetadata?: Record<string, unknown> }[], writtenAt?: Date) {
+  const latest = checks.filter((check) => !writtenAt || check.createdAt > writtenAt).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const camera = latest.find((check) => check.method === "QR_CAMERA");
+  const nfc = latest.find((check) => check.method === "NFC_READ" && (!camera || check.createdAt >= camera.createdAt) &&
+    (!camera?.deviceMetadata?.scanId || check.deviceMetadata?.scanId === camera.deviceMetadata.scanId));
+  return {
+    camera: camera?.matched ?? false,
+    nfc: nfc?.matched ?? false,
+    cameraResult: camera ? (camera.matched ? "MATCHED" : "MISMATCH") : "PENDING",
+    nfcResult: nfc ? (nfc.matched ? "MATCHED" : "MISMATCH") : "PENDING",
+  };
+}

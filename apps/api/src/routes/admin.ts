@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { count, desc, eq } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import {
@@ -23,8 +23,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       db.select({ value: count() }).from(customerProfiles),
       db.select({ value: count() }).from(cards),
       db.select({ value: count() }).from(cardBatches),
-      db.select({ value: count() }).from(productionStations),
-      db.select({ value: count() }).from(productionJobs).where(eq(productionJobs.status, "QUEUED")),
+      db.select({ value: count() }).from(productionStations).where(eq(productionStations.status, "ACTIVE")),
+      db.select({ value: count() }).from(productionJobs).where(inArray(productionJobs.status, ["QUEUED", "CLAIMED", "RETRYABLE_FAILURE"])),
       db.select({ value: count() }).from(qrArtifacts),
       db.select({ value: count() }).from(nfcEncodingAttempts),
     ]);
@@ -60,27 +60,33 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/stations", async () => {
-    const items = await db.select().from(productionStations).orderBy(desc(productionStations.createdAt)).limit(200);
+    const items = await db.select({ id: productionStations.id, stationCode: productionStations.stationCode, name: productionStations.name,
+      status: productionStations.status, lastSeenAt: productionStations.lastSeenAt, createdAt: productionStations.createdAt })
+      .from(productionStations).orderBy(desc(productionStations.createdAt)).limit(200);
     return { items, count: items.length };
   });
 
   app.post("/stations/:stationId/revoke", async (request) => {
     const operator = await requireOperator(request, ["SUPER_ADMIN"]);
     const { stationId } = request.params as { stationId: string };
-    const [station] = await db
-      .update(productionStations)
-      .set({ status: "REVOKED", updatedAt: new Date() })
-      .where(eq(productionStations.id, stationId))
-      .returning();
-    if (!station) throw Object.assign(new Error("Station not found"), { statusCode: 404 });
-    await db.insert(auditLogs).values({
-      actorId: operator.operatorId,
-      action: "STATION_REVOKED",
-      targetType: "production_station",
-      targetId: stationId,
-      requestId: request.id,
+    const station = await db.transaction(async (tx) => {
+      const [station] = await tx
+        .update(productionStations)
+        .set({ status: "REVOKED", updatedAt: new Date() })
+        .where(eq(productionStations.id, stationId))
+        .returning();
+      if (!station) throw Object.assign(new Error("Station not found"), { statusCode: 404 });
+      await tx.insert(auditLogs).values({
+        actorId: operator.operatorId,
+        action: "STATION_REVOKED",
+        targetType: "production_station",
+        targetId: stationId,
+        requestId: request.id,
+      });
+      return station;
     });
-    return station;
+    const { credentialHash: _credentialHash, ...safeStation } = station;
+    return safeStation;
   });
 
   app.get("/audit-logs", async () => {

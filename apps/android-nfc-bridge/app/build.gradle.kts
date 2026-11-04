@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+dependencies {
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("androidx.core:core:1.13.1")
+}
+
 android {
     namespace = "com.oneinfo.nfcbridge"
     compileSdk = 35

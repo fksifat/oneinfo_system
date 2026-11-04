@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# Legacy storefront source is the static output in this specific folder.
+!sites/oneinfo-storefront/dist/
+!sites/oneinfo-storefront/dist/**
 .env
 .env.local
 coverage/
@@ -13,3 +16,6 @@ local.properties
 .tools/
 
 .product-media/
+.oneinfo/
+__pycache__/
+*.pyc

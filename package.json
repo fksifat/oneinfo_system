@@ -8,20 +8,26 @@
   ],
   "scripts": {
     "build": "npm run build --workspace @oneinfo/contracts && npm run build --workspace @oneinfo/api && npm run build --workspace @oneinfo/production-console && npm run build --workspace @oneinfo/control-center && npm run build:storefront",
-    "dev": "npm run dev --workspace @oneinfo/api",
+    "dev": "npm run dev:api",
     "dev:api": "npm run dev --workspace @oneinfo/api",
     "dev:console": "npm run dev --workspace @oneinfo/production-console",
     "dev:control": "npm run dev --workspace @oneinfo/control-center",
     "dev:storefront": "vite sites/storefront --host 127.0.0.1 --port 5175 --strictPort",
-    "nfc:desktop": "npm run start --workspace @oneinfo/desktop-nfc-bridge -- --mode pcsc",
+    "nfc:desktop": "npm run start --workspace @oneinfo/desktop-nfc-bridge --",
     "android:usb": "bash scripts/connect-android-nfc.sh",
     "db:generate": "npm run db:generate --workspace @oneinfo/api",
     "db:migrate": "npm run db:migrate --workspace @oneinfo/api",
     "db:push": "npm run db:push --workspace @oneinfo/api",
     "smoke": "node scripts/smoke-test.mjs",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present && node --test scripts/storefront.test.mjs scripts/launcher.test.mjs",
     "typecheck": "npm run typecheck --workspace @oneinfo/contracts && npm run typecheck --workspace @oneinfo/api && npm run typecheck --workspace @oneinfo/production-console && npm run typecheck --workspace @oneinfo/control-center",
-    "build:storefront": "vite build sites/storefront"
+    "build:storefront": "vite build sites/storefront",
+    "predev:api": "npm run build --workspace @oneinfo/contracts",
+    "desktop": "node scripts/desktop.mjs",
+    "start:local": "node scripts/start-local.mjs",
+    "setup:desktop": "node scripts/setup-desktop.mjs",
+    "test:launcher": "node --test scripts/launcher.test.mjs",
+    "pretest": "npm run build --workspace @oneinfo/contracts"
   },
   "engines": {
     "node": ">=22.12"
