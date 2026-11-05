@@ -2,6 +2,9 @@
 
 See [REVIEW.md](REVIEW.md) for the latest review, fixes, verification, and remaining implementation limits.
 
+For a separate VPS API and PostgreSQL Docker deployment, see [deploy/VPS.md](deploy/VPS.md).
+The deployed `api.oneinfo.online` server and its maintenance commands are recorded in [deploy/ONEINFO_VPS.md](deploy/ONEINFO_VPS.md).
+
 This repository implements an end-to-end QR/NFC card platform from the technical specification. It includes a PostgreSQL-backed API, a production workstation, an administrative control center, and public client profiles linked to physical cards.
 
 ## Implemented vertical slice

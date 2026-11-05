@@ -5,7 +5,7 @@ import { npmCommand } from "./start-local.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 rmSync(`${root}.cloud-dist`, { recursive: true, force: true });
-const env = { ...process.env, VITE_API_URL: "", VITE_STOREFRONT_URL: process.env.PUBLIC_SITE_URL ?? "https://oneinfo-system.vercel.app", VITE_OPERATOR_LOGIN: "password" };
+const env = { ...process.env, VITE_API_URL: process.env.VITE_API_URL ?? "", VITE_STOREFRONT_URL: process.env.PUBLIC_SITE_URL ?? "https://oneinfo-system.vercel.app", VITE_OPERATOR_LOGIN: "password" };
 for (const args of [
   ["run", "build", "--workspace", "@oneinfo/contracts"],
   ["run", "build:storefront"],

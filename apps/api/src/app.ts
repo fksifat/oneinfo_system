@@ -19,8 +19,13 @@ import { productMediaRoutes } from "./routes/product-media.js";
 import { reviewRoutes } from "./routes/reviews.js";
 
 export function buildApp(https?: ServerOptions) {
-  // Vercel overwrites forwarding headers; standalone stations trust only the socket address.
-  const app = Fastify({ logger: true, requestIdHeader: "x-request-id", trustProxy: Boolean(process.env.VERCEL), ...(https ? { https } : {}) });
+  // The VPS proxy must overwrite forwarding headers; standalone stations trust the socket by default.
+  const app = Fastify({
+    logger: true,
+    requestIdHeader: "x-request-id",
+    trustProxy: process.env.VERCEL ? true : (_address, hop) => hop < config.TRUST_PROXY_HOPS,
+    ...(https ? { https } : {}),
+  });
 
   app.register(cors, {
     origin: config.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
@@ -41,7 +46,9 @@ export function buildApp(https?: ServerOptions) {
   app.register(productMediaRoutes, { prefix: "/api/v1/product-media" });
   app.register(reviewRoutes, { prefix: "/api/v1/reviews" });
   app.register(adminRoutes, { prefix: "/api/v1/admin" });
-  if (!process.env.VERCEL) app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
+  if (!process.env.VERCEL && config.WORKSTATION_NFC_ENABLED) {
+    app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
+  }
 
   app.setErrorHandler((error, request, reply) => {
     const normalized = error as Error & { statusCode?: number; details?: unknown; code?: string; cause?: { code?: string } };

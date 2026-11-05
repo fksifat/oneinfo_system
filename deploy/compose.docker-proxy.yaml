@@ -1,0 +1,4 @@
+services:
+  api:
+    ports:
+      - "${ONEINFO_PROXY_BIND:?Set the existing proxy Docker bridge gateway IP}:3301:3001"

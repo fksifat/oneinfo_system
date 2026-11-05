@@ -1,0 +1,23 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY apps/api/ apps/api/
+COPY packages/contracts/ packages/contracts/
+RUN npm ci --workspace @oneinfo/api --workspace @oneinfo/contracts --include-workspace-root=false
+RUN npm run build --workspace @oneinfo/contracts && npm run build --workspace @oneinfo/api
+
+FROM node:24-bookworm-slim AS runtime
+ENV NODE_ENV=production HOST=0.0.0.0 PORT=3001 PRODUCT_MEDIA_DIR=/app/.product-media WORKSTATION_NFC_ENABLED=0
+WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json apps/api/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+RUN npm ci --omit=dev --workspace @oneinfo/api --workspace @oneinfo/contracts --include-workspace-root=false \
+    && npm cache clean --force \
+    && mkdir /app/.product-media && chown node:node /app/.product-media
+COPY --from=build /app/apps/api/dist/ apps/api/dist/
+COPY --from=build /app/packages/contracts/dist/ packages/contracts/dist/
+WORKDIR /app/apps/api
+USER node
+EXPOSE 3001
+CMD ["node", "dist/server.js"]

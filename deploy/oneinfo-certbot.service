@@ -1,0 +1,11 @@
+[Unit]
+Description=Renew the Oneinfo API HTTPS certificate
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker run --rm -v /opt/arise-sell/backend/certs/oneinfo/letsencrypt:/etc/letsencrypt -v /opt/arise-sell/backend/certs/oneinfo/acme:/var/www/certbot certbot/certbot:v5.9.0 renew --quiet --no-random-sleep-on-renew
+ExecStartPost=/usr/bin/docker exec arisesell-nginx nginx -t
+ExecStartPost=/usr/bin/docker exec arisesell-nginx nginx -s reload
