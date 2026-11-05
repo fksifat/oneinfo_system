@@ -183,7 +183,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     if (delivering) return;
     setDelivering(order.id); setOrderError(""); setOrderMessage("");
     try {
-      const result = await api<{ delivered: boolean; invitation: string }>(`${path}/admin/${order.id}/deliver`, token, { method: "POST" });
+      const result = await api<{ delivered: boolean; invitation: string }>(`/api/v1/reviews/admin/orders/${order.id}/deliver`, token, { method: "POST" });
       setItems(previous => previous.map(item => item.id === order.id ? { ...item, deliveredAt: item.deliveredAt ?? new Date().toISOString(), ...(result.invitation === "sent" ? { reviewInviteSentAt: new Date().toISOString() } : {}) } : item));
       setOrderMessage(result.invitation === "sent" ? "Order marked delivered; review email sent." : result.invitation === "already-sent" ? "Order is delivered; review email was already sent." : "Order marked delivered. Review email could not be sent; use this action to retry.");
     } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not mark order delivered."); }
