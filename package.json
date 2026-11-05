@@ -33,7 +33,7 @@
     "pretest": "npm run build --workspace @oneinfo/contracts"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": "24.x"
   },
   "dependencies": {
     "@google/model-viewer": "4.1.0"

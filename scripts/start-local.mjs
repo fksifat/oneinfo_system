@@ -19,6 +19,10 @@ export function npmCommand(args, platform = process.platform, execPath = process
   return ["npm", args];
 }
 
+export function usesLocalDatabase(url = process.env.DATABASE_URL ?? "postgresql://oneinfo:oneinfo@localhost:55432/oneinfo") {
+  return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
+}
+
 export async function probeService(url, kind) {
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(1500), redirect: "manual" });
@@ -145,8 +149,10 @@ export async function main() {
     };
     if (apiState !== "ready" || consoleState !== "ready") {
       if (!existsSync(join(root, "node_modules/.package-lock.json"))) { console.log("Installing project dependencies (first launch)…"); await npm(["ci", "--include=dev"]); }
-      console.log("Starting local database. Docker must be installed and running…");
-      await command("docker", ["compose", "up", "-d", "--wait", "postgres"], { env, signal: abort.signal });
+      if (usesLocalDatabase()) {
+        console.log("Starting local database. Docker must be installed and running…");
+        await command("docker", ["compose", "up", "-d", "--wait", "postgres"], { env, signal: abort.signal });
+      } else console.log("Using configured cloud PostgreSQL database.");
       if (apiState !== "ready") {
         await npm(["run", "build", "--workspace", "@oneinfo/contracts"]);
         await npm(["run", "build", "--workspace", "@oneinfo/api"]);

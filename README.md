@@ -31,13 +31,13 @@ Product media uploaded in the control center is stored under the repository's `.
 
 ## Run locally
 
-Requirements: Node.js 22.12 or newer and Docker.
+Requirements: Node.js 24.x. Docker is needed for a local PostgreSQL database; a configured cloud database does not need Docker.
 
 ### One-click startup — Linux, Windows and macOS
 
 One-time setup on each computer:
 
-1. Install Node.js 22.12+ (with npm) and Docker with Docker Compose. On Windows/macOS, start Docker Desktop; on Linux, start Docker Engine or Docker Desktop.
+1. Install Node.js 24.x (with npm). For a local database, install Docker with Docker Compose; start Docker Desktop on Windows/macOS, or Docker Engine/Desktop on Linux.
 2. Keep the project in a permanent folder. Do not copy `node_modules` or `.tools` between operating systems; dependencies/platform tools are OS-specific.
 3. In that project folder, run:
 

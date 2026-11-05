@@ -6,9 +6,14 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { probeService, waitForService, npmCommand } from "./start-local.mjs";
+import { probeService, waitForService, npmCommand, usesLocalDatabase } from "./start-local.mjs";
 import { shortcut, desktopQuote, installShortcut } from "./setup-desktop.mjs";
 import { browserCommands } from "./desktop.mjs";
+
+test("cloud workstations do not require Docker while local database hosts retain startup", () => {
+  for (const host of ["localhost", "127.0.0.1", "[::1]"]) assert.equal(usesLocalDatabase(`postgresql://user:password@${host}:55432/oneinfo`), true);
+  assert.equal(usesLocalDatabase("postgresql://user:password@database.neon.tech/oneinfo?sslmode=require"), false);
+});
 
 test("readiness identifies Oneinfo, rejects an unrelated server, and detects stopped children", async () => {
   const server = createServer((request, response) => {
