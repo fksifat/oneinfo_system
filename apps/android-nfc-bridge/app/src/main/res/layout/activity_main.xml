@@ -43,9 +43,14 @@
     <LinearLayout android:id="@+id/connectPanel" style="@style/PanelLayout" android:visibility="gone">
         <TextView style="@style/Eyebrow" android:text="YOUR WORKSTATION" />
         <TextView style="@style/SectionTitle" android:text="Connect once, work together" />
-        <TextView style="@style/BodyText" android:text="Connect through USB or wireless debugging. Enter the code from the PC dashboard. Keep the workstation API and ADB tunnel running." />
+        <TextView style="@style/BodyText" android:text="Connect the phone and PC to the same Wi-Fi or LAN. Scan the QR from the PC's Connection tab once. The app remembers this PC and reconnects automatically." />
+        <Button android:id="@+id/scanPairingQr" style="@style/PrimaryButton" android:text="Scan workstation connection QR" />
+        <TextView android:id="@+id/workstationAddress" style="@style/BodyText" android:text="No LAN workstation selected" android:textIsSelectable="true" />
+        <Button android:id="@+id/usbFallbackToggle" style="@style/SecondaryButton" android:text="USB development connection" />
+        <LinearLayout android:id="@+id/usbFallback" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:visibility="gone">
         <EditText android:id="@+id/pairingCode" android:layout_width="match_parent" android:layout_height="wrap_content" android:minHeight="56dp" android:layout_marginTop="12dp" android:hint="6-digit pairing code" android:digits="0123456789" android:inputType="number" android:maxLength="6" />
         <Button android:id="@+id/pairButton" style="@style/PrimaryButton" android:text="Pair with workstation" />
+        </LinearLayout>
         <TextView android:id="@+id/nfcStatus" style="@style/BodyText" android:text="Checking NFC hardware…" />
         <Button android:id="@+id/nfcSettings" style="@style/SecondaryButton" android:text="Open NFC settings" />
     </LinearLayout>

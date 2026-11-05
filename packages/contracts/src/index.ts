@@ -164,6 +164,8 @@ export const IssueActivationCodeSchema = z.object({ replaceExisting: z.boolean()
 
 export const PairNfcDeviceSchema = z.object({
   pairingCode: z.string().regex(/^\d{6}$/),
+  pairingSecret: z.string().min(32).max(128).optional(),
+  deviceCredential: z.string().regex(/^[A-Za-z0-9_-]{43}$/).optional(),
   deviceName: z.string().trim().min(2).max(120),
   runtimeVersion: z.string().trim().max(80).default(""),
 });

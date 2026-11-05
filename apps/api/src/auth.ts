@@ -97,10 +97,11 @@ export async function requireStation(request: FastifyRequest): Promise<StationId
   return { stationId: station.id, stationCode: station.code };
 }
 
-export async function ensureDevelopmentAdmin(): Promise<OperatorIdentity> {
+export async function ensureDevelopmentAdmin(remoteAddress: string): Promise<OperatorIdentity> {
   if (config.NODE_ENV === "production") {
     throw Object.assign(new Error("Development authentication is disabled"), { statusCode: 404 });
   }
+  if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(remoteAddress)) throw Object.assign(new Error("Development login is available only on the workstation."), { statusCode: 403 });
 
   const [existing] = await db.select().from(operators).where(eq(operators.email, config.DEV_ADMIN_EMAIL)).limit(1);
   if (existing) return { operatorId: existing.id, email: existing.email, role: existing.role };

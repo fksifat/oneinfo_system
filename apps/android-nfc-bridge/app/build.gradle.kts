@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("androidx.core:core:1.13.1")
+    testImplementation("junit:junit:4.13.2")
 }
 
 android {
@@ -15,8 +16,8 @@ android {
         applicationId = "com.oneinfo.nfcbridge"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     compileOptions {

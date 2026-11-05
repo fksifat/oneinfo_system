@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, unlinkSync, statSync } from "node:fs";
 import { dirname, join, resolve, delimiter } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -21,6 +21,11 @@ export function npmCommand(args, platform = process.platform, execPath = process
 
 export function usesLocalDatabase(url = process.env.DATABASE_URL ?? "postgresql://oneinfo:oneinfo@localhost:55432/oneinfo") {
   return ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname);
+}
+
+export function dependenciesNeedInstall(directory = root) {
+  const installed = join(directory, "node_modules/.package-lock.json");
+  return !existsSync(installed) || statSync(join(directory, "package-lock.json")).mtimeMs > statSync(installed).mtimeMs;
 }
 
 export async function probeService(url, kind) {
@@ -94,7 +99,7 @@ export async function main() {
   const apiUrl = `http://127.0.0.1:${apiPort}`;
   const consoleUrl = `http://127.0.0.1:${consolePort}`;
   const noBrowser = process.argv.includes("--no-browser");
-  const noAdb = process.argv.includes("--no-adb");
+  const noAdb = !process.argv.includes("--adb") || process.argv.includes("--no-adb");
   const runtimeDir = join(root, ".oneinfo");
   const logDir = join(runtimeDir, "logs");
   mkdirSync(logDir, { recursive: true });
@@ -148,7 +153,7 @@ export async function main() {
       return child;
     };
     if (apiState !== "ready" || consoleState !== "ready") {
-      if (!existsSync(join(root, "node_modules/.package-lock.json"))) { console.log("Installing project dependencies (first launch)…"); await npm(["ci", "--include=dev"]); }
+      if (dependenciesNeedInstall()) { console.log("Installing updated project dependencies…"); await npm(["ci", "--include=dev"]); }
       if (usesLocalDatabase()) {
         console.log("Starting local database. Docker must be installed and running…");
         await command("docker", ["compose", "up", "-d", "--wait", "postgres"], { env, signal: abort.signal });
@@ -167,6 +172,7 @@ export async function main() {
       }
     }
     console.log(`Oneinfo ready: ${consoleUrl}`);
+    console.log("Phone: open Connection in the console and scan its Wi-Fi pairing QR.");
     if (!noAdb) await connectPhone(apiPort);
     if (!noBrowser) await openConsole(consoleUrl);
     if (children.length) console.log("Keep this window open. Press Ctrl+C to stop services started here. PostgreSQL data is retained.");

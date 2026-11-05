@@ -1,3 +1,9 @@
+import { fileURLToPath } from "node:url";
+import { config } from "../config.js";
+import { openNfcState, type NfcDevice, type BridgeSession, type ReadSession, type VerificationSession } from "../domain/nfc-state.js";
+import { lanPairing } from "../domain/lan-connection.js";
+import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import QRCode from "qrcode";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import {
@@ -21,67 +27,9 @@ import { cards, cardBatches, productionJobs, productionStations, cardVerificatio
 import { claimProductionJob, saveNfcAttempt, saveQualityCheck } from "./jobs.js";
 import { parseBody, sendCreated } from "../http.js";
 
-interface Pairing {
-  code: string;
-  stationId: string;
-  operatorId: string;
-  expiresAt: Date;
-}
-
-interface NfcDevice {
-  id: string;
-  stationId: string;
-  operatorId: string;
-  token: string;
-  name: string;
-  runtimeVersion: string;
-  pairedAt: Date;
-  lastSeenAt: Date;
-}
-
-interface BridgeSession {
-  id: string;
-  jobId: string;
-  cardId: string;
-  stationId: string;
-  expectedUrl: string;
-  state: "PENDING" | "WRITING" | "SUCCEEDED" | "FAILED";
-  deviceId?: string;
-  phoneInitiated?: boolean;
-  result?: NfcBridgeResultInput;
-  createdAt: Date;
-  expiresAt: Date;
-}
-
-interface ReadSession {
-  id: string;
-  stationId: string;
-  state: "PENDING" | "READING" | "COMPLETED" | "FAILED" | "CANCELLED";
-  utility?: NfcUtilityInput;
-  deviceId?: string;
-  result?: NfcReadResultInput;
-  createdAt: Date;
-  expiresAt: Date;
-}
-
-interface VerificationSession {
-  id: string;
-  cardId: string;
-  stationId: string;
-  method: "QR_CAMERA" | "NFC_READ";
-  expectedUrl: string;
-  state: "PENDING" | "SCANNING" | "MATCHED" | "MISMATCH";
-  deviceId?: string;
-  result?: { scannedValue: string; uid?: string | undefined; errorCode?: string | undefined; deviceMetadata: Record<string, unknown> };
-  expiresAt: Date;
-}
-
-const pairings = new Map<string, Pairing>();
-const devices = new Map<string, NfcDevice>();
-const sessions = new Map<string, BridgeSession>();
-const readSessions = new Map<string, ReadSession>();
-const verificationSessions = new Map<string, VerificationSession>();
-const qrScans = new Map<string, { id: string; cardId: string; deviceId: string; expectedUrl: string; expiresAt: Date }>();
+const stateFile = process.env.NFC_STATE_FILE ?? fileURLToPath(new URL("../../../../.oneinfo/nfc-state.bin", import.meta.url));
+const store = openNfcState(config.NODE_ENV === "test" ? null : stateFile);
+const { pairings, devices, sessions, readSessions, verificationSessions, qrScans } = store.state;
 
 function prune() {
   const now = Date.now();
@@ -95,17 +43,17 @@ function prune() {
   for (const [id, scan] of qrScans) if (scan.expiresAt.getTime() < now) qrScans.delete(id);
 }
 
-async function deviceOperator(device: NfcDevice, qc = false) {
+async function deviceOperator(device: Pick<NfcDevice, "operatorId">, qc = false) {
   const [operator] = await db.select().from(operators).where(and(eq(operators.id, device.operatorId), eq(operators.active, true))).limit(1);
   const roles = qc ? ["SUPER_ADMIN", "QUALITY_INSPECTOR"] : ["SUPER_ADMIN", "PRODUCTION_OPERATOR", "QUALITY_INSPECTOR"];
   if (!operator || !roles.includes(operator.role)) throw Object.assign(new Error(qc ? "Quality inspector role is required" : "Production operator role is required"), { statusCode: 403 });
   return { operatorId: operator.id, role: operator.role };
 }
 
-async function requireDevice(request: FastifyRequest): Promise<NfcDevice> {
-  const token = request.headers["x-oneinfo-device-token"];
+async function deviceFromToken(token: unknown): Promise<NfcDevice> {
   if (typeof token !== "string") throw Object.assign(new Error("Missing NFC device token"), { statusCode: 401 });
-  const device = [...devices.values()].find((candidate) => candidate.token === token);
+  const tokenHash = hashCredential(token);
+  const device = [...devices.values()].find((candidate) => candidate.tokenHash === tokenHash);
   if (!device) throw Object.assign(new Error("Invalid NFC device token"), { statusCode: 401 });
   const [station] = await db.select({ id: productionStations.id }).from(productionStations)
     .where(and(eq(productionStations.id, device.stationId), eq(productionStations.status, "ACTIVE"))).limit(1);
@@ -114,8 +62,12 @@ async function requireDevice(request: FastifyRequest): Promise<NfcDevice> {
     throw Object.assign(new Error("NFC station has been revoked"), { statusCode: 401 });
   }
   await deviceOperator(device);
-  device.lastSeenAt = new Date();
+  if (Date.now() - device.lastSeenAt.getTime() >= 5000) device.lastSeenAt = new Date();
   return device;
+}
+
+async function requireDevice(request: FastifyRequest): Promise<NfcDevice> {
+  return deviceFromToken(request.headers["x-oneinfo-device-token"]);
 }
 
 function assertStationIdle(stationId: string) {
@@ -148,6 +100,10 @@ async function createVerification(stationId: string, input: { cardId: string; me
 }
 
 export const localNfcRoutes: FastifyPluginAsync = async (app) => {
+  app.addHook("onRequest", async (request, reply) => {
+    if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip) && request.protocol !== "https") return reply.code(403).send({ message: "Use the secure LAN connection." });
+  });
+  app.addHook("onSend", async (_request, _reply, payload) => { store.save(); return payload; });
   app.get("/device/status", async (request) => {
     const device = await requireDevice(request);
     return { name: device.name, stationId: device.stationId };
@@ -206,33 +162,50 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     let code = "";
     do code = String(randomInt(0, 1_000_000)).padStart(6, "0"); while (pairings.has(code));
     const expiresAt = new Date(Date.now() + 5 * 60_000);
-    pairings.set(code, { code, stationId: station.stationId, operatorId: operator.operatorId, expiresAt });
+    const secret = randomBytes(32).toString("base64url");
+    pairings.set(code, { code, secretHash: hashCredential(secret), stationId: station.stationId, operatorId: operator.operatorId, expiresAt });
+    const lan = lanPairing(code, secret);
     return sendCreated(reply, {
       pairingCode: code,
       expiresAt,
       localApiUrl: "http://127.0.0.1:3001",
       readerCommand: `npm run nfc:desktop -- --pairing ${code}`,
+      lan,
+      lanQr: lan?.urls.length ? await QRCode.toDataURL(JSON.stringify(lan), { width: 320, margin: 2, errorCorrectionLevel: "M" }) : null,
     });
   });
 
   app.post("/devices/pair", async (request, reply) => {
     prune();
+    if (!await allowAuthAttempt(`nfc-pair:${request.ip}`, 10, 5 * 60_000)) return reply.code(429).send({ message: "Too many pairing attempts. Wait five minutes." });
     const input = parseBody(PairNfcDeviceSchema, request.body);
+    if (input.deviceCredential && [...devices.values()].some(device => device.tokenHash === hashCredential(input.deviceCredential!))) {
+      const device = await deviceFromToken(input.deviceCredential);
+      return sendCreated(reply, { deviceId: device.id, deviceToken: input.deviceCredential, stationId: device.stationId });
+    }
     const pairing = pairings.get(input.pairingCode);
     if (!pairing) throw Object.assign(new Error("Pairing code is invalid or expired"), { statusCode: 404 });
+    const loopback = ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip);
+    if ((!loopback || input.pairingSecret) && (!input.pairingSecret || hashCredential(input.pairingSecret) !== pairing.secretHash)) return reply.code(403).send({ message: "Scan the workstation's LAN pairing QR." });
+    await deviceOperator(pairing);
+    const [activeStation] = await db.select({ id: productionStations.id }).from(productionStations)
+      .where(and(eq(productionStations.id, pairing.stationId), eq(productionStations.status, "ACTIVE"))).limit(1);
+    if (!activeStation) throw Object.assign(new Error("NFC station has been revoked"), { statusCode: 401 });
+    if (pairings.get(input.pairingCode) !== pairing || pairing.expiresAt.getTime() <= Date.now()) throw Object.assign(new Error("Pairing code is invalid or expired"), { statusCode: 404 });
     pairings.delete(input.pairingCode);
+    const token = input.deviceCredential ?? randomBytes(32).toString("base64url");
     const device: NfcDevice = {
       id: randomUUID(),
       stationId: pairing.stationId,
       operatorId: pairing.operatorId,
-      token: randomBytes(32).toString("base64url"),
+      tokenHash: hashCredential(token),
       name: input.deviceName,
       runtimeVersion: input.runtimeVersion,
       pairedAt: new Date(),
       lastSeenAt: new Date(),
     };
     devices.set(device.id, device);
-    return sendCreated(reply, { deviceId: device.id, deviceToken: device.token, stationId: device.stationId });
+    return sendCreated(reply, { deviceId: device.id, deviceToken: token, stationId: device.stationId });
   });
 
   app.get("/devices", async (request) => {
@@ -241,8 +214,17 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     return {
       items: [...devices.values()]
         .filter((device) => device.stationId === station.stationId)
-        .map(({ token: _token, ...device }) => ({ ...device, online: Date.now() - device.lastSeenAt.getTime() < 15_000 })),
+        .map(({ tokenHash: _tokenHash, ...device }) => ({ ...device, online: Date.now() - device.lastSeenAt.getTime() < 15_000 })),
     };
+  });
+
+  app.post("/devices/:deviceId/revoke", async (request) => {
+    await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR", "QUALITY_INSPECTOR"]);
+    const station = await requireStation(request);
+    const { deviceId } = request.params as { deviceId: string };
+    if (devices.get(deviceId)?.stationId !== station.stationId) throw Object.assign(new Error("Phone not found"), { statusCode: 404 });
+    devices.delete(deviceId);
+    return { revoked: true };
   });
 
   app.post("/verification-sessions", async (request, reply) => {

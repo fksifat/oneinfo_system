@@ -13,6 +13,7 @@ const ConfigSchema = z
   DATABASE_URL: z.string().url().default("postgresql://oneinfo:oneinfo@localhost:55432/oneinfo"),
   PORT: z.coerce.number().int().min(1).max(65_535).default(3001),
   HOST: z.string().default("127.0.0.1"),
+  NFC_LAN_PORT: z.coerce.number().int().min(1).max(65_535).default(3443),
   JWT_SECRET: z.string().min(32).default(developmentSecret),
   PUBLIC_CARD_BASE_URL: z.string().url().refine(value => {
     const url = new URL(value);

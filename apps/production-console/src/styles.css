@@ -43,6 +43,16 @@ code { padding: 2px 5px; border-radius: 4px; background: #edf3f5; color: #22485d
 .pairing-code { min-width: 150px; padding: 10px 16px; border: 1px solid #bcdde4; border-radius: 10px; background: #f0fafb; text-align: center; }
 .pairing-code small, .pairing-code span { display: block; color: #627681; font-size: 0.68rem; }
 .pairing-code strong { display: block; color: #126f85; font-size: 1.65rem; letter-spacing: .12em; }
+.lan-connection-panel { grid-template-columns:minmax(0,1fr) auto; align-items:start; }
+.lan-connection-panel .nfc-bridge-actions { margin-block:18px; }
+.lan-pairing { display:grid; gap:10px; justify-items:center; text-align:center; max-width:300px; }
+.lan-pairing img { width:100%; max-width:280px; height:auto; border-radius:10px; }
+.lan-pairing small { color:#627681; }
+.lan-connection-panel .lan-address { margin-top:8px; overflow-wrap:anywhere; }
+.lan-connection-panel .lan-help { margin-top:18px; font-size:.85rem; }
+.connection-details details { margin-top:22px; }
+.connection-details summary { cursor:pointer; font-weight:700; }
+.device-row { gap:12px; flex-wrap:wrap; }
 .nfc-bridge-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .nfc-inspector { margin-top: 18px; padding: 22px; }
 .inspector-head { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid #e3eaed; }

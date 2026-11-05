@@ -1,7 +1,16 @@
-import { randomUUID } from "node:crypto";
+import { randomUUID, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
+import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { once } from "node:events";
+import { request as httpsRequest } from "node:https";
+import { configureLanConnection, lanAddresses, loadLanIdentity } from "../src/domain/lan-connection.js";
+
+const networkFetch = globalThis.fetch;
 
 // This suite only mutates the disposable database created by test:printed-stock.
 describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print stock and orders", () => {
@@ -173,6 +182,94 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       return response;
     };
   }
+
+  it("requires secure LAN pairing secrets, persists ownership checks and permits phone revocation", async () => {
+    const pairing = await request("/api/v1/local-nfc/pairings", {});
+    const blocked = await app.inject({ method: "POST", url: "/api/v1/dev/token", remoteAddress: "192.168.1.50", headers: { "x-forwarded-for": "127.0.0.1" } });
+    expect(blocked.statusCode).toBe(403);
+    const insecure = await app.inject({ method: "POST", url: "/api/v1/local-nfc/devices/pair", remoteAddress: "192.168.1.50", payload: { pairingCode: pairing.pairingCode, deviceName: "LAN phone" } });
+    expect(insecure.statusCode).toBe(403);
+    const badSecret = await app.inject({ method: "POST", url: "/api/v1/local-nfc/devices/pair", payload: { pairingCode: pairing.pairingCode, pairingSecret: "wrong".repeat(10), deviceName: "LAN phone" } });
+    expect(badSecret.statusCode).toBe(403);
+    const paired = await request("/api/v1/local-nfc/devices/pair", { pairingCode: pairing.pairingCode, deviceName: "LAN phone" });
+    const deviceHeaders = { "x-oneinfo-device-token": paired.deviceToken };
+    expect((await app.inject({ url: "/api/v1/local-nfc/device/status", headers: deviceHeaders })).statusCode).toBe(200);
+    const list = await request("/api/v1/local-nfc/devices");
+    expect(JSON.stringify(list)).not.toContain(paired.deviceToken);
+    expect(JSON.stringify(list)).not.toContain("tokenHash");
+    await request(`/api/v1/local-nfc/devices/${paired.deviceId}/revoke`, {});
+    expect((await app.inject({ url: "/api/v1/local-nfc/device/status", headers: deviceHeaders })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/v1/local-nfc/devices/pair", payload: { pairingCode: pairing.pairingCode, deviceName: "Reuse" } })).statusCode).toBe(404);
+  });
+
+  it("recovers a lost pairing acknowledgement without creating another device or reviving revoked access", async () => {
+    const pairing = await request("/api/v1/local-nfc/pairings", {});
+    const payload = { pairingCode: pairing.pairingCode, deviceName: "Retry-safe phone", deviceCredential: randomBytes(32).toString("base64url") };
+    const first = await request("/api/v1/local-nfc/devices/pair", payload);
+    const retry = await request("/api/v1/local-nfc/devices/pair", payload);
+    expect(retry).toEqual(first);
+    expect(first.deviceToken).toBe(payload.deviceCredential);
+    await request(`/api/v1/local-nfc/devices/${first.deviceId}/revoke`, {});
+    expect((await app.inject({ method: "POST", url: "/api/v1/local-nfc/devices/pair", payload })).statusCode).toBe(404);
+  });
+
+  it.runIf(lanAddresses().length > 0)("pairs over a real encrypted LAN socket only with the scanned one-time secret", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "oneinfo-lan-api-"));
+    const identity = await loadLanIdentity(join(directory, "identity.json"));
+    const lan = (await import("../src/app.js")).buildApp(identity);
+    try {
+      await lan.listen({ port: 0, host: "0.0.0.0" });
+      const port = (lan.server.address() as { port: number }).port;
+      const { fingerprint } = configureLanConnection(identity.cert, port);
+      const pairing = await request("/api/v1/local-nfc/pairings", {});
+      expect(pairing.lanQr).toMatch(/^data:image\/png;base64,/);
+      const send = (path: string, payload: object) => new Promise<{ status: number; body: any }>((resolve, reject) => {
+        const req = httpsRequest({ host: lanAddresses()[0]!, port, path, method: "POST", agent: false, ca: identity.cert,
+          checkServerIdentity: (_host, cert) => cert.fingerprint256.replaceAll(":", "").toLowerCase() === fingerprint ? undefined : new Error("Certificate mismatch"),
+          headers: { "content-type": "application/json", "x-forwarded-for": "127.0.0.1" } }, res => {
+          let body = ""; res.on("data", chunk => { body += chunk; }); res.on("end", () => resolve({ status: res.statusCode!, body: JSON.parse(body) }));
+        }); req.on("error", reject); req.end(JSON.stringify(payload));
+      });
+      expect((await send("/api/v1/dev/token", {})).status).toBe(403);
+      const payload = { pairingCode: pairing.pairingCode, deviceName: "Secure LAN test phone" };
+      expect((await send("/api/v1/local-nfc/devices/pair", payload)).status).toBe(403);
+      const paired = await send("/api/v1/local-nfc/devices/pair", { ...payload, pairingSecret: pairing.lan.pairingSecret });
+      expect(paired.status).toBe(201); expect(paired.body.deviceToken).toBeTruthy();
+      expect((await send("/api/v1/local-nfc/devices/pair", { ...payload, pairingSecret: pairing.lan.pairingSecret })).status).toBe(404);
+    } finally { await lan.close(); rmSync(directory, { recursive: true, force: true }); }
+  }, 15000);
+
+  it("keeps phone pairing and an in-progress operation after the local API process restarts", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "oneinfo-api-restart-"));
+    let child: ChildProcess | undefined;
+    const start = async () => {
+      child = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `import {buildApp} from './src/app.ts';const app=buildApp();await app.listen({port:0,host:'127.0.0.1'});process.send({port:app.server.address().port});`], {
+        cwd: process.cwd(), env: { ...process.env, NODE_ENV: "development", NFC_STATE_FILE: join(directory, "nfc-state.bin") }, stdio: ["ignore", "ignore", "ignore", "ipc"],
+      });
+      const timer = setTimeout(() => child?.kill(), 12_000);
+      try { const [message] = await Promise.race([once(child, "message"), once(child, "exit").then(() => { throw new Error("Test API stopped before startup"); })]); return `http://127.0.0.1:${message.port}`; }
+      finally { clearTimeout(timer); }
+    };
+    const stop = async () => { if (child && child.exitCode === null && child.signalCode === null) { const ended = once(child, "exit"); child.kill(); await ended; } };
+    try {
+      let base = await start();
+      const pairingResponse = await networkFetch(base + "/api/v1/local-nfc/pairings", { method: "POST", headers });
+      expect(pairingResponse.status).toBe(201); const pairing = await pairingResponse.json();
+      const response = await networkFetch(base + "/api/v1/local-nfc/devices/pair", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pairingCode: pairing.pairingCode, deviceName: "Restart test phone" }) });
+      expect(response.status).toBe(201); const paired = await response.json();
+      const deviceHeaders = { "x-oneinfo-device-token": paired.deviceToken, "content-type": "application/json" };
+      const operationResponse = await networkFetch(base + "/api/v1/local-nfc/device/utility-sessions", { method: "POST", headers: deviceHeaders, body: JSON.stringify({ operation: "READ" }) });
+      expect(operationResponse.status).toBe(201); const operation = await operationResponse.json();
+      await stop(); base = await start();
+      expect((await networkFetch(base + "/api/v1/local-nfc/device/status", { headers: deviceHeaders })).status).toBe(200);
+      const restored = await networkFetch(base + `/api/v1/local-nfc/device/read-tasks/${operation.id}`, { headers: deviceHeaders });
+      expect(restored.status).toBe(200); expect((await restored.json()).state).toBe("READING");
+      const cancelled = await networkFetch(base + `/api/v1/local-nfc/device/read-tasks/${operation.id}/cancel`, { method: "POST", headers: deviceHeaders, body: "{}" });
+      expect(cancelled.status).toBe(200);
+      await stop(); base = await start();
+      expect((await (await networkFetch(base + `/api/v1/local-nfc/device/read-tasks/${operation.id}`, { headers: deviceHeaders })).json()).state).toBe("CANCELLED");
+    } finally { await stop(); rmSync(directory, { recursive: true, force: true }); }
+  }, 40_000);
 
   it("runs a reserved order card through the complete phone workflow", async () => {
     await confirm((await batch(1)).id);

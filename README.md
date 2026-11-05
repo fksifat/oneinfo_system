@@ -25,7 +25,7 @@ This repository implements an end-to-end QR/NFC card platform from the technical
 
 ## Deployment boundary
 
-The NFC/QR management system is local-only. PostgreSQL, the API, admin control center, production console, and NFC bridge run from VS Code on the workstation. Real card encoding uses an NFC-capable Android phone over USB or a PC/SC-compatible USB NFC reader. Only the customer-facing selling website and published profile/card URLs need public hosting.
+The Production Console and NFC bridge run on the workstation. The Android companion connects directly over encrypted Wi-Fi/LAN, or a PC/SC USB reader can perform encoding. The workstation shares PostgreSQL records with the hosted Admin, storefront and customer profiles; PostgreSQL can be local Docker or the configured cloud database.
 
 Product media uploaded in the control center is stored under the repository's `.product-media` directory by default and served by the API with immutable browser caching. Before publishing uploaded media, deploy the media endpoint on a customer-reachable host and set `PRODUCT_MEDIA_DIR` to persistent storage; the local workstation API binds to `127.0.0.1` and is not publicly reachable. Keep the production workstation private.
 
@@ -53,11 +53,11 @@ This creates a **Start Oneinfo** launcher on your Desktop. Double-click it to st
 | Windows | `Start Oneinfo.cmd` |
 | macOS | `Start Oneinfo.command` |
 
-The launcher installs project dependencies on the first run, starts the existing PostgreSQL Docker volume, applies migrations, builds/starts the API and production console, waits for readiness, then opens the console. Chrome/Edge app windows are used when detected, with a default-browser fallback. An already-running Oneinfo API/console is reused without a restart. Repeated clicks do not start duplicate services.
+The launcher installs dependencies on first run or after a dependency lockfile update, applies migrations, builds/starts the API, secure LAN listener and production console, waits for readiness, then opens the console. Docker is started only for a local database. Chrome/Edge app windows are used when detected, with a default-browser fallback. An already-running Oneinfo API/console is reused without a restart. Repeated clicks do not start duplicate services.
 
 Keep the launcher terminal open. **Ctrl+C** stops only the API/console processes it started; existing services and the PostgreSQL container/data are retained. Closing the browser does not stop the workstation. Startup messages stay in the terminal; service logs are in `.oneinfo/logs/`. Docker must already be running; the launcher does not install Node/Docker or change system privileges.
 
-The launcher also attempts to restore the ADB tunnel for an authorized phone. Install Android Platform Tools for the current OS, or set `ADB_PATH`; use `ANDROID_SERIAL` to choose between different phones. Duplicate USB/wireless aliases of the same phone are recognized. Android debugging authorization and companion-app pairing still happen on the phone. API restarts require app pairing again.
+The default phone connection uses the console's Wi-Fi pairing QR. ADB is an optional development fallback: use `npm run android:usb`, or launch with `npm run start:local -- --adb`. Install Android Platform Tools for that fallback, or set `ADB_PATH`; use `ANDROID_SERIAL` to select a phone. Saved pairing survives an API restart.
 
 Without a Desktop shortcut, you can use the supplied project launcher (`Start Oneinfo.cmd` on Windows, `Start Oneinfo.command` on macOS, or `Start Oneinfo.sh` in a Linux terminal), the VS Code **Oneinfo: One-click production console** task, or:
 
@@ -128,16 +128,28 @@ sudo systemctl enable --now pcscd
 python3 -m pip install pyscard
 ```
 
-The API binds to `127.0.0.1` by default. Do not change `HOST` to a LAN/public interface for the production workstation. Active NFC pairings are intentionally memory-only and must be re-established after an API restart.
+Keep `HOST=127.0.0.1` for the desktop HTTP API. A second HTTPS listener on port `3443` serves the phone over LAN; `NFC_LAN_PORT` can change that port. Development login rejects non-loopback clients, and LAN pairing requires the secret in the scanned connection QR.
 
-### Android phone over USB
+### Android phone over Wi-Fi/LAN
+
+1. Install the updated Oneinfo NFC companion APK on the phone and enable NFC.
+2. Connect the phone and production PC to the same Wi-Fi/LAN. Start Oneinfo on the PC.
+3. In PC **Connection**, select **Create connection QR**.
+4. In phone **Connect**, select **Scan workstation connection QR**, then scan the PC's QR. Its five-minute expiry applies only to new pairing; already paired phones remain paired.
+5. Keep the app open while scanning cards. The phone remembers the workstation, retries temporary connection failures and uses network service discovery to find the same PC after address changes. If discovery is blocked, scan a fresh QR to update its address.
+
+The QR carries the PC's HTTPS certificate fingerprint and a one-use pairing secret. The phone verifies that certificate before sending credentials; no system-wide certificate trust change is required. Guest Wi-Fi with client isolation cannot connect phone to PC. Allow the configured HTTPS port (default TCP 3443) through the PC's private-network firewall; UDP 5353 supports automatic discovery.
+
+Pairings, hashed device credentials and recent operation state are saved privately in `.oneinfo/nfc-state.bin`; the workstation certificate/key is in `.oneinfo/lan-identity.json`. Back up and retain both files when updating or restoring this PC. The phone saves pending results and retries delivery without automatically repeating a physical write. Expired operations still expire, and **Remove phone** revokes access. Losing the workstation state/identity requires fresh pairing. The shared Neon database still needs internet; offline production sync is not implemented.
+
+### USB / wireless ADB development fallback
 
 1. On the phone, enable Developer options, USB debugging, and NFC.
 2. ADB is installed locally in `.tools/android/platform-tools`; no system-wide installation is required.
 3. Connect the phone with a data-capable USB cable and accept the USB debugging authorization dialog.
 4. Open `apps/android-nfc-bridge` in Android Studio and run the `app` configuration on the connected phone.
 5. From VS Code, run **Oneinfo: Connect Android NFC**, or run `npm run android:usb`.
-6. Open the production console, select **Pair NFC device**, and enter the displayed six-digit code in the Android app.
+6. In PC **Connection**, create a connection QR and expand **USB development fallback**. In phone **Connect**, expand **USB development connection** and enter the six-digit development code.
 7. Follow the phone production steps below: scan the printed QR, load NFC, then perform final QC.
 
 The USB command creates `adb reverse tcp:3001 tcp:3001`; the phone communicates only with the API on this workstation. Wi-Fi and public deployment are not required.
@@ -164,7 +176,7 @@ Use `http://127.0.0.1:5173` for the full local workflow:
 
 Run `npm run start:local` or use **Start Oneinfo** for full local startup. `npm run desktop` only opens an already-running console, preferring a Chrome/Edge app window and falling back to the OS browser. `ONEINFO_DESKTOP_URL` selects the URL for that open-only command; `VITE_API_URL` selects the API for manual build/dev startup. The full local launcher builds against its local API. This version has no separate offline sync queue; connecting to a future cloud deployment requires the real API address and authentication integration.
 
-The phone needs the latest companion APK after an app update. PostgreSQL backups now include QR image data and saved scan evidence. Device pairing and in-flight operation sessions remain in memory and must be recreated after an API restart.
+The phone needs the latest companion APK after an app update. PostgreSQL backups include QR images and saved scan evidence; back up the workstation's `.oneinfo/nfc-state.bin` and `.oneinfo/lan-identity.json` separately to retain phone pairing and local operation state.
 
 ## Verification
 
@@ -174,9 +186,9 @@ Both apps have **Production**, **NFC tools**, and **Connection / Connect** secti
 
 In **NFC tools**, either device can start a general tag inspection or write one HTTP(S) website link / plain-text record (up to 2,048 characters, subject to tag capacity). Writing requires explicit replacement confirmation and replaces all existing NDEF records on the tag tapped. The phone checks writable state and capacity before writing and reads back the saved value. Newly formatted tags need a second tap to confirm readback. Neither read nor write utility results change production jobs or QC records; changing a production tag's physical content does not automatically update its production history.
 
-Tag results include UID, technologies, NDEF type, writable state, capacity, message size, parsed records, and raw payloads. Results can be copied and exported as JSON on PC, or copied/shared on the phone. The PC shows up to 20 station operations from the last hour while the API is running, including operations started on the phone. Activity and device pairings are in memory and reset on API restart; general tool operations are not durable production records.
+Tag results include UID, technologies, NDEF type, writable state, capacity, message size, parsed records, and raw payloads. Results can be copied and exported as JSON on PC, or copied/shared on the phone. The PC shows up to 20 recent station operations, including operations started on the phone. Local activity and pairing survive API restarts; general tools do not change production inventory or QC records.
 
-**Stop waiting** cancels a pending tag operation. It does not undo content already written. The phone stops an idle utility task when it sees the cancellation. General operations require the paired phone and the ADB tunnel; standalone/offline tool mode and PC/SC utility writing are not included.
+**Stop waiting** cancels a pending tag operation. It does not undo content already written. The phone stops an idle utility task when it sees the cancellation. General operations require a paired phone connected through LAN or the development tunnel; standalone/offline tool mode and PC/SC utility writing are not included.
 
 **Erase NFC tag** is available in both NFC tools views. Confirm erasure, then tap only the intended tag. The phone writes an empty NDEF record and verifies it by readback; the API rejects an erase result containing nonempty records or no NDEF readback. Read-only/locked tags cannot be erased. This removes NDEF links/text, leaves the UID unchanged and the tag reusable, and is not a secure wipe of all chip memory. Production records are unchanged. Newly formatted tags require a second tap for readback, just like utility writes.
 
@@ -203,7 +215,7 @@ Configure a hosted PostgreSQL `DATABASE_URL`, a random `JWT_SECRET`, the permane
 
 Run database migrations explicitly before deploying a schema change; builds do not migrate the production database. Migration `0010_unified_production_customer` reconciles both the upstream review-only database and the previously upgraded local QR/customer database, without resetting records. `npm run test:printed-stock` verifies fresh migration, reconciliation and repeat safety in a disposable database. Set `TEST_DATABASE_URL` to local PostgreSQL to keep these tests local when the workstation uses the cloud database.
 
-The NFC companion, USB/ADB tunnel and Production Console stay local. Run the local API against the same cloud `DATABASE_URL`, `JWT_SECRET` and `PUBLIC_CARD_BASE_URL`; it provides the phone pairing/tasks while sharing card/order records with the hosted API. Keep `HOST=127.0.0.1` for the local development login. Set `VITE_ADMIN_URL` to the hosted `/admin` URL when building the local console. Local NFC session routes are not registered in Vercel functions. The desktop needs internet access for the shared database; offline operation is not implemented. Existing QR/NFC links are never rewritten by deployment.
+The NFC companion and Production Console stay local. Run the local API against the same cloud `DATABASE_URL`, `JWT_SECRET` and `PUBLIC_CARD_BASE_URL`; it provides the phone pairing/tasks while sharing card/order records with the hosted API. Keep `HOST=127.0.0.1` for the local development login. Set `VITE_ADMIN_URL` to the hosted `/admin` URL when building the local console. Local NFC session routes are not registered in Vercel functions. The desktop needs internet access for the shared database; offline operation is not implemented. Existing QR/NFC links are never rewritten by deployment.
 
 In hosted Admin → **NFC & QR operations**, select **Open production console on this PC**. Keep Oneinfo running on that PC. The console opens in its own tab to reuse the browser's registered station and phone connection. A hosted page does not embed the local console: cross-site frames may have separate browser storage or be blocked from the local network. Local Admin pages using the same hostname and protocol can still embed it. If a station code is already registered, use the original browser's standalone console or choose a new code for a new workstation; the existing station is not overwritten.
 
@@ -213,7 +225,7 @@ The initial hosted catalog copies product configuration only. Local client profi
 
 ```text
 apps/api                    Fastify API and Drizzle schema
-apps/android-nfc-bridge     Native Android USB/NFC companion
+apps/android-nfc-bridge     Native Android LAN/NFC companion
 apps/control-center         Admin dashboard, profile editor, and public profiles
 apps/desktop-nfc-bridge     PC/SC USB reader bridge
 apps/production-console     React and Vite production UI

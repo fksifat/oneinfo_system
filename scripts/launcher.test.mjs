@@ -2,13 +2,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
-import { probeService, waitForService, npmCommand, usesLocalDatabase } from "./start-local.mjs";
+import { probeService, waitForService, npmCommand, usesLocalDatabase, dependenciesNeedInstall } from "./start-local.mjs";
 import { shortcut, desktopQuote, installShortcut } from "./setup-desktop.mjs";
 import { browserCommands } from "./desktop.mjs";
+
+test("a pulled dependency lockfile triggers installation only until packages are refreshed", () => {
+  const directory = mkdtempSync(join(tmpdir(), "oneinfo-dependencies-"));
+  try {
+    writeFileSync(join(directory, "package-lock.json"), "{}");
+    assert.equal(dependenciesNeedInstall(directory), true);
+    mkdirSync(join(directory, "node_modules")); writeFileSync(join(directory, "node_modules/.package-lock.json"), "{}");
+    utimesSync(join(directory, "package-lock.json"), 1000, 1000); utimesSync(join(directory, "node_modules/.package-lock.json"), 2000, 2000);
+    assert.equal(dependenciesNeedInstall(directory), false);
+    utimesSync(join(directory, "package-lock.json"), 3000, 3000); assert.equal(dependenciesNeedInstall(directory), true);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test("cloud workstations do not require Docker while local database hosts retain startup", () => {
   for (const host of ["localhost", "127.0.0.1", "[::1]"]) assert.equal(usesLocalDatabase(`postgresql://user:password@${host}:55432/oneinfo`), true);

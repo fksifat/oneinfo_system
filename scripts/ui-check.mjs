@@ -34,6 +34,9 @@ try {
   const schema = await import(pathToFileURL(join(root,'apps/api/dist/db/schema.js')).href);
   const { eq } = require('drizzle-orm');
   app = (await import(pathToFileURL(join(root,'apps/api/dist/app.js')).href)).buildApp();
+  const lanModule=await import(pathToFileURL(join(root,'apps/api/dist/domain/lan-connection.js')).href);
+  const lanIdentity=await lanModule.loadLanIdentity(join(chromeProfile,'test-lan-identity.json'));
+  lanModule.configureLanConnection(lanIdentity.cert,3443);
   app.log.level = 'silent';
   const api = async (path, payload, headers = {}) => {
     const response = await app.inject({ method: payload ? 'POST' : 'GET', url: path, headers, ...(payload && { payload }) });
@@ -70,7 +73,7 @@ try {
   socket = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let seq = 0, requestedWidth = 390; const waiting = new Map(); const browserErrors = [];
-  let failProfileSave=false,failOverview=false;
+  let failProfileSave=false,failOverview=false,expirePairingSoon=false;
   function command(method, params = {}) {
     if(method==='Emulation.setDeviceMetricsOverride')requestedWidth=params.width;
     return new Promise((resolve, reject) => { const id = ++seq; waiting.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params })); });
@@ -86,6 +89,7 @@ try {
         const failed=(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
         const result = failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
           ...(paused.request.postData && { payload: paused.request.postData }) });
+        if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
           responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: Buffer.from(result.body).toString('base64') });
       } catch (error) { browserErrors.push(error.message); await command('Fetch.failRequest', { requestId: paused.requestId, errorReason: 'Failed' }); }
@@ -149,6 +153,13 @@ try {
         await evaluate(`window.__printCalled=false;window.print=()=>{window.__printCalled=true}`);await click('Print selected QR');await until(`window.__printCalled`);assert.equal(await evaluate(`document.querySelectorAll('.print-label').length`),1);await click('Print full batch');await until(`document.querySelectorAll('.print-label').length===3`);
         await command('Emulation.setEmulatedMedia',{media:'print'});assert.equal(await evaluate(`getComputedStyle(document.querySelector('.production-print')).display`),'block');await screenshot('audit-print-qr');await command('Emulation.setEmulatedMedia',{media:''});
         await evaluate(`document.querySelector('.print-confirmation input').click()`);await click('Confirm printed batch');await until(`document.querySelector('.print-confirmation h2')?.textContent==='Printed stock confirmed'`);console.log('Bulk QR create/generate/single/full print/confirmation PASS');
+      }
+      if(label==='Connection'){
+        expirePairingSoon=width===1440;
+        await click('Create connection QR');await until(`!!document.querySelector('.lan-pairing img')`);await inspect('production-lan-qr-'+width);
+        assert.equal(await evaluate(`document.querySelector('.lan-pairing img').getAttribute('src').startsWith('data:image/png;base64,')`),true);
+        assert.equal(await evaluate(`document.querySelector('.connection-details details').open`),false);
+        if(width===1440){await until(`document.querySelector('.lan-pairing').textContent.includes('QR expired')&&!document.querySelector('.lan-pairing img')`);await click('New connection QR');await until(`!!document.querySelector('.lan-pairing img')`);console.log('Connection QR expiry and refresh PASS');}
       }
       if(label==='NFC tools'&&width===1440){
         const complete=async(operation,value)=>{const task=await api('/api/v1/local-nfc/device/read-tasks/next',undefined,deviceHeaders);assert.equal(task.utility.operation,operation);const records=operation==='ERASE'?[{tnf:0,type:'',payloadHex:''}]:[{tnf:1,type:'U',payloadHex:'00',uri:value}];await api(`/api/v1/local-nfc/device/read-tasks/${task.sessionId}/result`,{uid:'AABBCCDD',techList:['Ndef'],ndefFormatted:true,writable:true,maxSize:888,messageSize:42,records},deviceHeaders);await until(`!!document.querySelector('.tag-facts')&&document.querySelector('.tag-facts').textContent.includes('AABBCCDD')`);};

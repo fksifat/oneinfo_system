@@ -30,6 +30,7 @@ interface QueueItem {
 }
 
 const emptyCredentials: Credentials = { accessToken: "", stationKey: "" };
+interface PhonePairing { pairingCode: string; expiresAt: string; lanQr?: string | null; lan?: { urls: string[]; fingerprint: string } | null }
 
 function getStoredCredentials(): Credentials {
   try {
@@ -46,13 +47,18 @@ export function App() {
   const [message, setMessage] = useState("Ready");
   const [busy, setBusy] = useState(false);
   const [setupError, setSetupError] = useState("");
-  const [pairing, setPairing] = useState<{ pairingCode: string; expiresAt: string } | null>(null);
+  const [pairing, setPairing] = useState<PhonePairing | null>(null);
   const [activeTab, setActiveTab] = useState(() => ["tools", "connection"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "production");
   const [devices, setDevices] = useState<{ id: string; name: string; online: boolean; lastSeenAt: string }[]>([]);
   const [connectionError, setConnectionError] = useState("");
 
   const configured = Boolean(credentials.accessToken && credentials.stationKey);
   const pairingExpired = pairing ? Date.parse(pairing.expiresAt) <= Date.now() : false;
+  useEffect(() => {
+    if (!pairing) return;
+    const timer = window.setTimeout(() => setPairing(value => value ? { ...value } : value), Math.max(0, Date.parse(pairing.expiresAt) - Date.now()) + 50);
+    return () => window.clearTimeout(timer);
+  }, [pairing?.expiresAt]);
   useEffect(() => {
     const changed = () => { const tab = window.location.hash.slice(1); setActiveTab(["tools", "connection"].includes(tab) ? tab : "production"); window.scrollTo(0, 0); };
     window.addEventListener("hashchange", changed);
@@ -125,17 +131,25 @@ export function App() {
   const createDesktopPairing = async () => {
     setBusy(true);
     try {
-      const result = await stationApi<{ pairingCode: string; expiresAt: string }>(
+      const result = await stationApi<PhonePairing>(
         "/api/v1/local-nfc/pairings",
         { method: "POST" },
       );
       setPairing(result);
-      setMessage("NFC pairing code created. Enter it in the Android companion or desktop USB-reader bridge.");
+      setMessage(result.lanQr ? "Scan the connection QR in the phone app. Use the same Wi-Fi/LAN as this PC." : "Secure LAN connection is not ready. Restart Oneinfo and check this PC's network connection.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not create NFC pairing code");
     } finally {
       setBusy(false);
     }
+  };
+
+  const revokeDevice = async (device: { id: string; name: string }) => {
+    if (!window.confirm(`Remove ${device.name}? This phone will need to scan a new connection QR to pair again.`)) return;
+    setBusy(true);
+    try { await stationApi(`/api/v1/local-nfc/devices/${device.id}/revoke`, { method: "POST" }); setDevices(items => items.filter(item => item.id !== device.id)); setMessage("Phone access removed."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Could not remove phone."); }
+    finally { setBusy(false); }
   };
 
   useEffect(() => {
@@ -194,13 +208,19 @@ export function App() {
             <ProductionDesk visible={activeTab === "production"} credentials={credentials} busy={busy} onBusy={setBusy} onMessage={setMessage} onChanged={refreshJobs} />
 
             <div hidden={activeTab !== "tools"}><NfcTools credentials={credentials} connected={devices.some(device => device.online)} onMessage={setMessage} /></div>
-            <section hidden={activeTab !== "connection"} className="panel desktop-nfc-panel">
-              <div><p className="section-label">LOCAL NFC DEVICE</p><h2>Your connected workstation</h2><p>Pair your Android companion over USB or wireless ADB. Keep the API and port 3001 tunnel running.</p></div>
-              {pairing ? <div className="pairing-code" role="status"><small>PAIRING CODE</small><strong>{pairingExpired ? "Expired" : pairing.pairingCode}</strong><span>{pairingExpired ? "Create a new pairing code to connect" : `Expires ${new Date(pairing.expiresAt).toLocaleTimeString()}`}</span></div> : null}
-              <div className="nfc-bridge-actions"><button className="secondary" disabled={busy} onClick={() => void createDesktopPairing()}>{pairing ? "New pairing code" : "Pair NFC device"}</button></div>
+            <section hidden={activeTab !== "connection"} className="panel desktop-nfc-panel lan-connection-panel">
+              <div><p className="section-label">SECURE WI-FI / LAN</p><h2>Connect your phone to this PC</h2><p>Keep the phone and PC on the same network. In the phone app, open Connect → Scan workstation connection QR. Pair once; your phone stays paired after Oneinfo restarts.</p>
+                <div className="nfc-bridge-actions"><button className="secondary" disabled={busy} onClick={() => void createDesktopPairing()}>{pairing ? "New connection QR" : "Create connection QR"}</button></div>
+                {pairing?.lan?.urls.map(url => <p className="lan-address" key={url}><code>{url}</code></p>)}
+                {pairing && !pairing.lanQr ? <p role="alert">No LAN address is available. Start Oneinfo, connect this PC to Wi-Fi/Ethernet, then create a new QR.</p> : null}
+                <p className="lan-help">If connection fails, check that the network allows phone-to-PC traffic and the PC firewall allows the HTTPS port shown above. Keep Oneinfo running on this PC.</p>
+              </div>
+              {pairing ? <div className="lan-pairing" role="status">{!pairingExpired && pairing.lanQr ? <img src={pairing.lanQr} alt="Scan this QR with the Oneinfo phone app to pair securely" width="280" height="280" /> : null}<strong>{pairingExpired ? "QR expired · create a new one" : "Scan in the Oneinfo app"}</strong><small>{pairingExpired ? "Already paired phones remain connected." : `New pairing available until ${new Date(pairing.expiresAt).toLocaleTimeString()}`}</small></div> : null}
             </section>
 
-            <section hidden={activeTab !== "connection"} className="panel connection-details"><h2>Devices &amp; connection help</h2>{connectionError ? <p role="alert">{connectionError}</p> : null}{devices.length ? devices.map((device) => <div className="device-row" key={device.id}><span><strong>{device.name}</strong><small>Last seen {new Date(device.lastSeenAt).toLocaleTimeString()}</small></span><span className={device.online ? "pill success" : "pill"}>{device.online ? "ONLINE" : "OFFLINE"}</span></div>) : <p>No paired phones yet. Create a pairing code and enter it in the phone's Connect tab.</p>}<ol><li>Enable NFC and USB or wireless debugging on the phone.</li><li>Connect ADB, then forward phone port 3001 with <code>adb reverse tcp:3001 tcp:3001</code>. Select a device with <code>-s</code> if ADB lists more than one.</li><li>Enter this dashboard's pairing code in the companion app.</li></ol><p>API restarts require a new app pairing. Session activity is kept for one hour while the API runs.</p></section>
+            <section hidden={activeTab !== "connection"} className="panel connection-details"><h2>Paired phones</h2>{connectionError ? <p role="alert">{connectionError}</p> : null}{devices.length ? devices.map((device) => <div className="device-row" key={device.id}><span><strong>{device.name}</strong><small>Last seen {new Date(device.lastSeenAt).toLocaleTimeString()}</small></span><span className={device.online ? "pill success" : "pill"}>{device.online ? "ONLINE" : "OFFLINE"}</span><button className="secondary" disabled={busy} onClick={() => void revokeDevice(device)}>Remove phone</button></div>) : <p>No paired phones yet. Create a connection QR above and scan it in the phone's Connect tab.</p>}<p>Paired devices and pending operations are saved on this PC. Keep the workstation's Oneinfo data folder when updating the app. If discovery is blocked after the PC's network address changes, scan a fresh connection QR to update the address.</p>
+              <details><summary>USB development fallback</summary><p>Use USB debugging and <code>adb reverse tcp:3001 tcp:3001</code>, then open USB development connection in the phone app.</p>{pairing ? <div className="pairing-code"><small>DEVELOPMENT PAIRING CODE</small><strong>{pairingExpired ? "Expired" : pairing.pairingCode}</strong></div> : <p>Create a connection QR above to also generate a development code.</p>}</details>
+            </section>
 
             <section hidden={activeTab !== "production"} className="queue-grid">
               {(Object.entries(groupedJobs) as [JobType, QueueItem[]][]).map(([type, items]) => (

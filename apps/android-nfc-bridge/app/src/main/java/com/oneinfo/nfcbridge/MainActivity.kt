@@ -36,9 +36,18 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
+import android.net.nsd.NsdManager
+import android.net.nsd.NsdServiceInfo
+import java.net.Inet4Address
+import android.net.ConnectivityManager
+import android.net.Network
+import android.util.Base64
+import java.security.SecureRandom
 
 class MainActivity : Activity(), NfcAdapter.ReaderCallback {
-    private val apiUrl = "http://127.0.0.1:3001/api/v1/local-nfc"
+    @Volatile private var workstationUrl = "http://127.0.0.1:3001"
+    @Volatile private var workstationFingerprint: String? = null
+    @Volatile private var connectionGeneration = 0
     private val executor = Executors.newScheduledThreadPool(2)
     private val main = Handler(Looper.getMainLooper())
     private lateinit var status: TextView
@@ -47,6 +56,19 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     private var deviceToken: String? = null
     @Volatile private var activeTask: Task? = null
     @Volatile private var pendingResult: Pair<String, JSONObject>? = null
+        set(value) {
+            field = value
+            if (::status.isInitialized) {
+                val stored = value?.let { JSONObject().put("path", it.first).put("body", it.second).toString() }
+                getPreferences(MODE_PRIVATE).edit().putString("pendingResult", stored).commit()
+            }
+        }
+    private var pairingScan = false
+    private var discovery: NsdManager.DiscoveryListener? = null
+    private val resolvingWorkstation = AtomicBoolean(false)
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) { main.post { restartDiscovery() } }
+    }
     private val processingTag = AtomicBoolean(false)
     private val nfcAdapter by lazy { NfcAdapter.getDefaultAdapter(this) }
     @Volatile private var startingVerification = false
@@ -67,6 +89,21 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         status = findViewById(R.id.status)
         pairingCode = findViewById(R.id.pairingCode)
         deviceToken = getPreferences(MODE_PRIVATE).getString("deviceToken", null)
+        workstationUrl = getPreferences(MODE_PRIVATE).getString("workstationUrl", workstationUrl)!!
+        workstationFingerprint = getPreferences(MODE_PRIVATE).getString("workstationFingerprint", null)
+        getPreferences(MODE_PRIVATE).getString("pendingResult", null)?.let {
+            try { val saved = JSONObject(it); pendingResult = Pair(saved.getString("path"), saved.getJSONObject("body")) }
+            catch (_: Exception) { setStatus("A saved result could not be restored. Read the tag before repeating a write.") }
+        }
+        findViewById<TextView>(R.id.workstationAddress).text = if (workstationFingerprint == null) "LAN not selected · USB development fallback" else workstationUrl
+        findViewById<Button>(R.id.scanPairingQr).setOnClickListener {
+            if (activeTask != null || pendingResult != null || startingVerification || cameraScanning) return@setOnClickListener
+            pairingScan = true; cameraScanning = true
+            IntentIntegrator(this).setDesiredBarcodeFormats(IntentIntegrator.QR_CODE).setPrompt("Scan the PC Connection QR").setOrientationLocked(false).setBeepEnabled(false).initiateScan()
+        }
+        findViewById<Button>(R.id.usbFallbackToggle).setOnClickListener {
+            val fallback = findViewById<View>(R.id.usbFallback); fallback.visibility = if (fallback.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
         findViewById<Button>(R.id.pairButton).setOnClickListener { pair() }
         pairingCode.imeOptions = EditorInfo.IME_ACTION_DONE
         pairingCode.setOnEditorActionListener { _, actionId, _ -> if (actionId == EditorInfo.IME_ACTION_DONE) { pair(); true } else false }
@@ -100,8 +137,14 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         findViewById<Button>(R.id.nfcSettings).setOnClickListener { startActivity(Intent(Settings.ACTION_NFC_SETTINGS)) }
         showPanel(if (deviceToken == null) R.id.connectPanel else R.id.productionPanel)
         updateActions()
+        startDiscovery()
+        (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).registerDefaultNetworkCallback(networkCallback)
         if (nfcAdapter == null) setStatus("This device does not provide NFC hardware.")
-        else if (deviceToken != null) {
+        else if (pendingResult != null && deviceToken != null) {
+            setStatus("Sending the saved NFC result to the workstation…"); startPolling()
+        } else if (getPreferences(MODE_PRIVATE).getString("pendingLanQr", null) != null) {
+            connectFromQr(getPreferences(MODE_PRIVATE).getString("pendingLanQr", null)!!)
+        } else if (deviceToken != null) {
             setStatus("Paired. Scan a printed QR to detect its batch and card.")
             startPolling()
         }
@@ -119,6 +162,8 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     }
 
     override fun onDestroy() {
+        try { (getSystemService(CONNECTIVITY_SERVICE) as ConnectivityManager).unregisterNetworkCallback(networkCallback) } catch (_: Exception) {}
+        discovery?.let { try { (getSystemService(NSD_SERVICE) as NsdManager).stopServiceDiscovery(it) } catch (_: Exception) {} }
         poller?.cancel(false)
         executor.shutdownNow()
         super.onDestroy()
@@ -129,6 +174,8 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         val code = pairingCode.text.toString()
         if (code.length != 6) return setStatus("Enter the six-digit code displayed on the workstation.")
         startingVerification = true
+        connectionGeneration++
+        poller?.cancel(false)
         setStatus("Pairing with local workstation…")
         executor.execute {
             try {
@@ -136,26 +183,142 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                     .put("pairingCode", code)
                     .put("deviceName", "${Build.MANUFACTURER} ${Build.MODEL}")
                     .put("runtimeVersion", "Android ${Build.VERSION.RELEASE}")
-                val response = request("POST", "/devices/pair", body)
+                val response = requestAt("http://127.0.0.1:3001", null, "POST", "/devices/pair", body, null)
+                workstationUrl = "http://127.0.0.1:3001"; workstationFingerprint = null
                 deviceToken = response.getString("deviceToken")
-                getPreferences(MODE_PRIVATE).edit().putString("deviceToken", deviceToken).apply()
+                saveConnection()
+                getPreferences(MODE_PRIVATE).edit().remove("pendingLanQr").remove("pendingLanCredential").commit()
                 setStatus("Paired. Scan a printed QR to detect its batch and card.")
                 main.post { pairingCode.setText(""); showPanel(R.id.productionPanel) }
-                startPolling()
             } catch (error: Exception) {
                 setStatus("Pairing failed: ${error.message}")
             } finally {
                 startingVerification = false
+                if (deviceToken != null) startPolling()
                 main.post { updateActions() }
             }
         }
     }
 
+    private fun saveConnection() {
+        getPreferences(MODE_PRIVATE).edit().putString("deviceToken", deviceToken).putString("workstationUrl", workstationUrl)
+            .putString("workstationFingerprint", workstationFingerprint).commit()
+        main.post { findViewById<TextView>(R.id.workstationAddress).text = if (workstationFingerprint == null) "USB development connection" else workstationUrl }
+    }
+
+    private fun probeWorkstation(base: String, fingerprint: String) {
+        val connection = LanConnection.open(base + "/health", fingerprint)
+        try {
+            require(connection.responseCode == 200 && JSONObject(connection.inputStream.bufferedReader().use { it.readText() }).optString("service") == "oneinfo-production-api") { "Oneinfo workstation is not available at this address." }
+        } finally { connection.disconnect() }
+    }
+
+    private fun connectFromQr(value: String) {
+        if (startingVerification || activeTask != null || pendingResult != null) return setStatus("Finish the current operation before changing connection.")
+        startingVerification = true; connectionGeneration++; poller?.cancel(false)
+        setStatus("Connecting securely to the workstation over Wi-Fi…")
+        executor.execute {
+            try {
+                require(value.length < 8192) { "Connection QR is too large." }
+                val qr = JSONObject(value)
+                require(qr.optString("type") == "oneinfo-lan-pairing" && qr.optInt("version") == 1) { "Scan the QR in the PC's Connection tab." }
+                val fingerprint = qr.getString("fingerprint").lowercase()
+                require(fingerprint.matches(Regex("[a-f0-9]{64}"))) { "Invalid workstation identity." }
+                val code = qr.getString("pairingCode"); val secret = qr.getString("pairingSecret")
+                require(code.matches(Regex("[0-9]{6}")) && secret.length in 32..128) { "Invalid connection QR." }
+                val urls = qr.getJSONArray("urls"); require(urls.length() in 1..8) { "The PC is not connected to a local network." }
+                var selected: String? = null
+                for (index in 0 until urls.length()) {
+                    val candidate = LanConnection.validateUrl(urls.getString(index))
+                    try { probeWorkstation(candidate, fingerprint); selected = candidate; break } catch (_: Exception) {}
+                }
+                val base = selected ?: throw Exception("Cannot reach this PC. Use the same Wi-Fi/LAN and allow Oneinfo through the PC firewall.")
+                var token = if (fingerprint == workstationFingerprint) deviceToken else null
+                if (token != null) {
+                    try { requestAt(base, fingerprint, "GET", "/device/status", token = token) }
+                    catch (error: ApiException) { if (error.statusCode == 401) token = null else throw error }
+                }
+                if (token == null) {
+                    val preferences = getPreferences(MODE_PRIVATE)
+                    val credential = if (preferences.getString("pendingLanQr", null) == value) preferences.getString("pendingLanCredential", null) else null
+                    val proposed = credential ?: Base64.encodeToString(ByteArray(32).also { SecureRandom().nextBytes(it) }, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
+                    preferences.edit().putString("pendingLanQr", value).putString("pendingLanCredential", proposed).commit()
+                    val body = JSONObject().put("pairingCode", code).put("pairingSecret", secret)
+                        .put("deviceCredential", proposed).put("deviceName", "${Build.MANUFACTURER} ${Build.MODEL}").put("runtimeVersion", "Android ${Build.VERSION.RELEASE}")
+                    token = requestAt(base, fingerprint, "POST", "/devices/pair", body).getString("deviceToken")
+                    require(token == proposed) { "Workstation did not confirm this phone's pairing credential." }
+                }
+                workstationUrl = base; workstationFingerprint = fingerprint; deviceToken = token
+                saveConnection()
+                getPreferences(MODE_PRIVATE).edit().remove("pendingLanQr").remove("pendingLanCredential").commit()
+                setStatus("Wi-Fi connected. This PC is remembered; scan a printed card QR to begin.")
+                main.post { showPanel(R.id.productionPanel); startDiscovery() }
+            } catch (error: Exception) {
+                setStatus("Connection failed: ${error.message}")
+                if (error !is ApiException || error.statusCode >= 500) main.postDelayed({
+                    if (!isDestroyed && !startingVerification && getPreferences(MODE_PRIVATE).getString("pendingLanQr", null) == value) connectFromQr(value)
+                }, 5000)
+                else if (error.statusCode in listOf(400, 401, 403, 404)) getPreferences(MODE_PRIVATE).edit().remove("pendingLanQr").remove("pendingLanCredential").commit()
+            }
+            finally { startingVerification = false; if (deviceToken != null) startPolling(); main.post { updateActions() } }
+        }
+    }
+
+    private fun restartDiscovery() {
+        discovery?.let { try { (getSystemService(NSD_SERVICE) as NsdManager).stopServiceDiscovery(it) } catch (_: Exception) {} }
+        discovery = null
+        main.postDelayed({ if (!isDestroyed && !isFinishing) startDiscovery() }, 700)
+    }
+
+    private fun startDiscovery() {
+        if (workstationFingerprint == null || discovery != null || isDestroyed) return
+        val manager = getSystemService(NSD_SERVICE) as NsdManager
+        val listener = object : NsdManager.DiscoveryListener {
+            override fun onDiscoveryStarted(type: String) {}
+            override fun onDiscoveryStopped(type: String) {}
+            override fun onStartDiscoveryFailed(type: String, code: Int) {
+                if (discovery === this) discovery = null
+                main.postDelayed({ if (!isDestroyed) startDiscovery() }, 5000)
+            }
+            override fun onStopDiscoveryFailed(type: String, code: Int) {}
+            override fun onServiceLost(info: NsdServiceInfo) {}
+            override fun onServiceFound(info: NsdServiceInfo) {
+                if (!info.serviceName.startsWith("Oneinfo-", ignoreCase = true) || !resolvingWorkstation.compareAndSet(false, true)) return
+                try { manager.resolveService(info, object : NsdManager.ResolveListener {
+                    override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) { resolvingWorkstation.set(false) }
+                    override fun onServiceResolved(service: NsdServiceInfo) {
+                        val fingerprint = service.attributes["fingerprint"]?.toString(Charsets.UTF_8)
+                        val addresses = if (Build.VERSION.SDK_INT >= 34) service.hostAddresses else listOfNotNull(service.host)
+                        if (fingerprint == null || fingerprint != workstationFingerprint || isDestroyed) { resolvingWorkstation.set(false); return }
+                        executor.execute {
+                            try {
+                                for (address in addresses.filterIsInstance<Inet4Address>()) {
+                                    try {
+                                        val base = LanConnection.validateUrl("https://${address.hostAddress}:${service.port}")
+                                        probeWorkstation(base, fingerprint)
+                                        if (base != workstationUrl) { workstationUrl = base; saveConnection(); setStatus("Workstation found on Wi-Fi. Connection address updated automatically.") }
+                                        break
+                                    } catch (_: Exception) {}
+                                }
+                            } catch (_: Exception) {} finally { resolvingWorkstation.set(false) }
+                        }
+                    }
+                }) } catch (_: Exception) { resolvingWorkstation.set(false) }
+            }
+        }
+        discovery = listener
+        try { manager.discoverServices("_oneinfo-nfc._tcp.", NsdManager.PROTOCOL_DNS_SD, listener) }
+        catch (_: Exception) { discovery = null }
+    }
+
     private fun startPolling() {
         poller?.cancel(false)
+        val generation = connectionGeneration
         poller = executor.scheduleWithFixedDelay({
+            if (generation != connectionGeneration) return@scheduleWithFixedDelay
             try {
                 request("GET", "/device/status")
+                if (generation != connectionGeneration) return@scheduleWithFixedDelay
                 pendingResult?.let { (path, body) ->
                     val response = request("POST", path, body)
                     pendingResult = null
@@ -193,6 +356,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                 }
                 if (activeTask != null || startingVerification || cameraScanning) return@scheduleWithFixedDelay
                 val verification = request("GET", "/device/verification-tasks/next")
+                if (generation != connectionGeneration) return@scheduleWithFixedDelay
                 if (!verification.isNull("sessionId")) {
                     val mode = if (verification.getString("method") == "QR_CAMERA") TaskMode.VERIFY_CAMERA else TaskMode.VERIFY_NFC
                     val task = Task(verification.getString("sessionId"), mode, Instant.parse(verification.getString("expiresAt")), verification.getString("expectedUrl"))
@@ -207,16 +371,19 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                     return@scheduleWithFixedDelay
                 }
                 val response = request("GET", "/device/tasks/next")
+                if (generation != connectionGeneration) return@scheduleWithFixedDelay
                 if (!response.isNull("sessionId")) {
                     activeTask = Task(response.getString("sessionId"), TaskMode.WRITE, Instant.parse(response.getString("expiresAt")), response.getString("expectedUrl"))
                     setStatus("Ready to write. Hold the NFC card against the phone.")
                     return@scheduleWithFixedDelay
                 }
                 val readResponse = request("GET", "/device/read-tasks/next")
+                if (generation != connectionGeneration) return@scheduleWithFixedDelay
                 if (!readResponse.isNull("sessionId")) {
                     acceptUtility(readResponse)
                 }
             } catch (error: Exception) {
+                if (generation != connectionGeneration) return@scheduleWithFixedDelay
                 if (error is ApiException && error.statusCode in listOf(400, 401, 403, 404, 409)) {
                     pendingResult = null
                     activeTask = null
@@ -228,9 +395,9 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                         poller?.cancel(false)
                     }
                 }
-                setStatus(if (error is ApiException && error.statusCode == 401) "Pairing expired. Open Connection on the PC, generate a new code, and enter it here."
+                setStatus(if (error is ApiException && error.statusCode == 401) "Device access was removed. Scan a new Connection QR from the PC to pair again."
                     else if (error is ApiException) "Operation could not complete: ${error.message}" else "Workstation connection unavailable: ${error.message}")
-                main.post { findViewById<TextView>(R.id.connectionStatus).text = if (deviceToken == null) "Not paired · Open Connect" else if (error is ApiException) "Paired · Workstation connected" else "Workstation unavailable · Check ADB tunnel" }
+                main.post { findViewById<TextView>(R.id.connectionStatus).text = if (deviceToken == null) "Not paired · Open Connect" else if (error is ApiException) "Paired · Workstation connected" else if (workstationFingerprint != null) "Reconnecting · Keep phone and PC on the same network" else "Workstation unavailable · Check USB development tunnel" }
                 if (deviceToken == null) main.post { showPanel(R.id.connectPanel) }
             }
         }, 0, 1200, TimeUnit.MILLISECONDS)
@@ -378,7 +545,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     private fun submit(task: Task, succeeded: Boolean, readback: String?, errorCode: String?) {
             try {
                 val metadata = JSONObject()
-                    .put("adapter", "android-usb")
+                    .put("adapter", if (workstationFingerprint == null) "android-usb" else "android-lan")
                     .put("manufacturer", Build.MANUFACTURER)
                     .put("model", Build.MODEL)
                     .put("androidVersion", Build.VERSION.RELEASE)
@@ -502,6 +669,11 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         val scan = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
         if (scan != null) {
             cameraScanning = false
+            if (pairingScan) {
+                pairingScan = false
+                if (scan.contents == null) setStatus("Workstation connection scan cancelled.") else connectFromQr(scan.contents)
+                return
+            }
             val task = activeTask
             if (task?.mode == TaskMode.VERIFY_CAMERA) {
                 if (task.sessionId.isEmpty()) {
@@ -558,7 +730,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     private fun verificationResult(task: Task, value: String, uid: String?, error: String?) {
         val body = JSONObject().put("scannedValue", value)
-            .put("deviceMetadata", JSONObject().put("adapter", "android-usb").put("model", Build.MODEL))
+            .put("deviceMetadata", JSONObject().put("adapter", if (workstationFingerprint == null) "android-usb" else "android-lan").put("model", Build.MODEL))
         if (uid != null) body.put("uid", uid)
         if (error != null) body.put("errorCode", error)
         pendingResult = Pair("/device/verification-tasks/${task.sessionId}/result", body)
@@ -566,17 +738,21 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     }
 
     private fun request(method: String, path: String, body: JSONObject? = null): JSONObject {
-        val connection = URL(apiUrl + path).openConnection() as HttpURLConnection
+        return requestAt(workstationUrl, workstationFingerprint, method, path, body, deviceToken)
+    }
+
+    private fun requestAt(base: String, fingerprint: String?, method: String, path: String, body: JSONObject? = null, token: String? = null): JSONObject {
+        val connection = LanConnection.open(base + "/api/v1/local-nfc" + path, fingerprint)
         connection.requestMethod = method
         connection.connectTimeout = 3000
         connection.readTimeout = 5000
         connection.setRequestProperty("Content-Type", "application/json")
-        deviceToken?.let { connection.setRequestProperty("x-oneinfo-device-token", it) }
-        if (body != null) {
-            connection.doOutput = true
-            connection.outputStream.use { it.write(body.toString().toByteArray()) }
-        }
+        token?.let { connection.setRequestProperty("x-oneinfo-device-token", it) }
         try {
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use { it.write(body.toString().toByteArray()) }
+            }
             val code = connection.responseCode
             val stream = if (code in 200..299) connection.inputStream else connection.errorStream
             val text = stream?.bufferedReader()?.use { it.readText() } ?: "{}"
@@ -602,6 +778,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         findViewById<Button>(R.id.writeTag).isEnabled = idle
         findViewById<Button>(R.id.eraseTag).isEnabled = idle
         findViewById<Button>(R.id.pairButton).isEnabled = activeTask == null && pendingResult == null && !startingVerification
+        findViewById<Button>(R.id.scanPairingQr).isEnabled = activeTask == null && pendingResult == null && !startingVerification && !cameraScanning
         findViewById<Button>(R.id.cancelTask).visibility = if (activeTask?.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE)) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.cancelTask).isEnabled = !processingTag.get() && pendingResult == null && !startingVerification
         findViewById<Button>(R.id.copyResult).isEnabled = lastTagResult != null

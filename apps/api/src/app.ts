@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify from "fastify";
+import type { ServerOptions } from "node:https";
 import { config } from "./config.js";
 import { batchRoutes } from "./routes/batches.js";
 import { cardRoutes } from "./routes/cards.js";
@@ -17,9 +18,9 @@ import { productRoutes } from "./routes/products.js";
 import { productMediaRoutes } from "./routes/product-media.js";
 import { reviewRoutes } from "./routes/reviews.js";
 
-export function buildApp() {
+export function buildApp(https?: ServerOptions) {
   // Vercel overwrites forwarding headers; standalone stations trust only the socket address.
-  const app = Fastify({ logger: true, requestIdHeader: "x-request-id", trustProxy: Boolean(process.env.VERCEL) });
+  const app = Fastify({ logger: true, requestIdHeader: "x-request-id", trustProxy: Boolean(process.env.VERCEL), ...(https ? { https } : {}) });
 
   app.register(cors, {
     origin: config.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
