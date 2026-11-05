@@ -122,6 +122,7 @@ try {
       const found=await evaluate(`(()=>{const b=[...document.querySelectorAll('.sidebar nav button')].find(b=>b.textContent.trim().endsWith(${JSON.stringify(label)}));if(!b)return false;b.click();return true})()`);
       if(!found){console.log('MISSING NAV',label);continue;}
       await delay(350);await inspect('admin-'+label.replace(/[^a-z]/gi,'-')+'-'+width);
+      if(label==='NFC & QR operations')assert.equal(await evaluate(`!!document.querySelector('.production-frame')`),true);
       if(label==='Client profiles'){
         await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);await inspect('admin-profile-editor-'+width);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.activeElement)`),true);
         if(width===1440){await fill('Public slug','ui-created-profile');await fill('Display name','UI Created Profile');failProfileSave=true;await click('Save profile');await until(`!!document.querySelector('.profile-save-error')`);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.querySelector('[role=alert]'))`),true);failProfileSave=false;await click('Save profile');await until(`!document.querySelector('.editor-panel[open]')`);await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);}
@@ -174,7 +175,9 @@ try {
   for(const width of [1440,320]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     await command('Page.navigate',{url:'http://127.0.0.1:5174/?ui-auth=1'});await until(`!!document.querySelector('.auth-card')`);await inspect('admin-auth-'+width);await click('Enter development workspace');await until(`!!document.querySelector('.sidebar')`);
-    await command('Page.navigate',{url:'http://127.0.0.1:5173/?ui-auth=1'});await until(`!!document.querySelector('.setup-panel')`);await inspect('production-setup-'+width);await fill('Station code','UI-REGISTER-'+width);await click('Register workstation');await until(`!!document.querySelector('.workspace-nav')`);
+    await command('Page.navigate',{url:'http://127.0.0.1:5173/?ui-auth=1'});await until(`!!document.querySelector('.setup-panel')`);await inspect('production-setup-'+width);
+    await fill('Station code','BROWSER-QA');await click('Register workstation');await until(`document.querySelector('.setup-error')?.textContent.includes('already registered')`);await inspect('production-duplicate-station-'+width);
+    await fill('Station code','UI-REGISTER-'+width);await click('Register workstation');await until(`!!document.querySelector('.workspace-nav')`);assert.equal(await evaluate(`!!document.querySelector('.setup-error')`),false);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   const url = `http://127.0.0.1:5174/c/${card.publicSlug}`;

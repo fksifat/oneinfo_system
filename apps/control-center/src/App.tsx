@@ -144,6 +144,9 @@ export function App() {
   const profileSlug = new URLSearchParams(window.location.search).get("profile");
   if (profileSlug) return <PublicProfile slug={profileSlug} />;
 
+  const productionLocation = new URL(PRODUCTION_URL, window.location.href);
+  const embedProduction = productionLocation.hostname === window.location.hostname && productionLocation.protocol === window.location.protocol;
+
   const [token, setToken] = useState(() => localStorage.getItem("oneinfo.admin.token") ?? "");
   const [view, setView] = useState<View>(currentView);
   const [ordersSettingsOpen, setOrdersSettingsOpen] = useState(false);
@@ -359,10 +362,15 @@ export function App() {
         {view === "stations" ? <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">ACCESS CONTROL</p><h2>Production stations</h2></div></div><div className="data-table"><div className="data-row data-header"><span>Station</span><span>Status</span><span>Last seen</span><span>Action</span></div>{stations.map((station) => <div className="data-row station-row" key={station.id}><span><strong>{station.stationCode}</strong><small>{station.name}</small></span><span><b className={`status-text ${station.status.toLowerCase()}`}>{station.status}</b></span><span>{formatDate(station.lastSeenAt)}</span><span>{station.status === "ACTIVE" ? <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button> : "—"}</span></div>)}</div></section> : null}
         {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
         {view === "production" ? <section className="production-hub">
-          <article className="panel connected-production-head"><div><p className="eyebrow">CONNECTED PRODUCTION WORKSPACE</p><h2>QR, NFC and final QC</h2><p>The console below uses the same database and API as this admin panel. Batches, cards, inventory and QC updates sync automatically within five seconds.</p></div><a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open full console ↗</a></article>
+          <article className="panel connected-production-head"><div><p className="eyebrow">CONNECTED PRODUCTION WORKSPACE</p><h2>QR, NFC and final QC</h2><p>Your production workstation shares card, order and QC records with this Admin through the cloud database. This dashboard refreshes every five seconds.</p></div>{embedProduction ? <a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open full console ↗</a> : null}</article>
           {overview ? <div className="metric-grid"><Metric label="Production batches" value={overview.batches} detail="Shared with the console" /><Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} QC approved and saleable`} /><Metric label="Pending jobs" value={overview.pendingJobs} detail="QR, NFC and QC" /><Metric label="Active stations" value={overview.stations} detail="Managed by this admin panel" /></div> : null}
-          <iframe className="production-frame" src={PRODUCTION_URL} title="Connected Oneinfo production console" />
-          <p className="hardware-note">Use the console's registered station and pair your phone there. Operator credentials stay in the console; no access tokens are sent in links.</p>
+          {embedProduction ? <><iframe className="production-frame" src={PRODUCTION_URL} title="Connected Oneinfo production console" /><p className="hardware-note">Use the console's registered station and pair your phone there. Operator credentials stay in the console; no access tokens are sent in links.</p></> : <article className="panel workstation-launch">
+            <p className="eyebrow">PRODUCTION PC</p><h2>Open your workstation console</h2>
+            <p>Generate and print QR batches, read or write NFC tags, and complete phone QC in the console on your production PC.</p>
+            <ol><li>Start Oneinfo on the PC where it is installed.</li><li>Open the console below in its own tab to use this browser's saved station.</li><li>Use its Connection tab to pair your phone and continue production.</li></ol>
+            <a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open production console on this PC ↗</a>
+            <p className="workstation-help">If the tab cannot connect, start Oneinfo on this PC and try again. Production updates will appear here automatically.</p>
+          </article>}
         </section> : null}
       </main>
 

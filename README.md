@@ -205,6 +205,8 @@ Run database migrations explicitly before deploying a schema change; builds do n
 
 The NFC companion, USB/ADB tunnel and Production Console stay local. Run the local API against the same cloud `DATABASE_URL`, `JWT_SECRET` and `PUBLIC_CARD_BASE_URL`; it provides the phone pairing/tasks while sharing card/order records with the hosted API. Keep `HOST=127.0.0.1` for the local development login. Set `VITE_ADMIN_URL` to the hosted `/admin` URL when building the local console. Local NFC session routes are not registered in Vercel functions. The desktop needs internet access for the shared database; offline operation is not implemented. Existing QR/NFC links are never rewritten by deployment.
 
+In hosted Admin → **NFC & QR operations**, select **Open production console on this PC**. Keep Oneinfo running on that PC. The console opens in its own tab to reuse the browser's registered station and phone connection. A hosted page does not embed the local console: cross-site frames may have separate browser storage or be blocked from the local network. Local Admin pages using the same hostname and protocol can still embed it. If a station code is already registered, use the original browser's standalone console or choose a new code for a new workstation; the existing station is not overwritten.
+
 The initial hosted catalog copies product configuration only. Local client profiles, test cards, orders and NFC history remain in the workstation database; they are not automatically published or migrated. Email confirmations/review invitations require a configured Resend key and verified sender. Email verification and password recovery remain future work.
 
 ## Repository layout

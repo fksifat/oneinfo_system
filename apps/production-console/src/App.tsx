@@ -45,6 +45,7 @@ export function App() {
   const [jobs, setJobs] = useState<QueueItem[]>([]);
   const [message, setMessage] = useState("Ready");
   const [busy, setBusy] = useState(false);
+  const [setupError, setSetupError] = useState("");
   const [pairing, setPairing] = useState<{ pairingCode: string; expiresAt: string } | null>(null);
   const [activeTab, setActiveTab] = useState(() => ["tools", "connection"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "production");
   const [devices, setDevices] = useState<{ id: string; name: string; online: boolean; lastSeenAt: string }[]>([]);
@@ -80,6 +81,7 @@ export function App() {
 
   const bootstrap = async () => {
     setBusy(true);
+    setSetupError("");
     try {
       const token = await api<{ accessToken: string }>("/api/v1/dev/token", { method: "POST" });
       const station = await api<{ stationCredential: string }>(
@@ -93,7 +95,11 @@ export function App() {
       saveCredentials({ accessToken: token.accessToken, stationKey: station.stationCredential });
       setMessage(`Station ${stationCode} registered. The credential is stored only in this browser.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Setup failed");
+      const text = (error as { status?: number }).status === 409
+        ? "This station code is already registered. Open the console in the browser where you registered it, or choose a new code for a new workstation."
+        : error instanceof Error ? error.message : "Setup failed";
+      setSetupError(text);
+      setMessage(text);
     } finally {
       setBusy(false);
     }
@@ -175,12 +181,13 @@ export function App() {
           <section className="panel setup-panel">
             <p className="section-label">First-run setup</p>
             <h2>Register this workstation</h2>
-            <p>The development flow creates an administrator token and a revocable station credential.</p>
+            <p>Choose an unused station code for this production PC. The station credential is saved in this browser.</p>
             <form onSubmit={event => { event.preventDefault(); void bootstrap(); }}><label>
               Station code
               <input required minLength={3} maxLength={64} pattern="[A-Za-z0-9_-]+" title="Use letters, numbers, dashes or underscores" value={stationCode} onChange={(event) => setStationCode(event.target.value)} />
             </label>
             <button disabled={busy} type="submit">{busy ? "Registering…" : "Register workstation"}</button></form>
+            {setupError && <p className="tool-error setup-error" role="alert">{setupError}</p>}
           </section>
         ) : (
           <>
