@@ -184,7 +184,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     setDelivering(order.id); setOrderError(""); setOrderMessage("");
     try {
       const result = await api<{ delivered: boolean; invitation: string }>(`/api/v1/reviews/admin/orders/${order.id}/deliver`, token, { method: "POST" });
-      setItems(previous => previous.map(item => item.id === order.id ? { ...item, deliveredAt: item.deliveredAt ?? new Date().toISOString(), ...(result.invitation === "sent" ? { reviewInviteSentAt: new Date().toISOString() } : {}) } : item));
+      setItems(previous => previous.map(item => item.id === order.id ? { ...item, status: "DELIVERED", deliveredAt: item.deliveredAt ?? new Date().toISOString(), ...(result.invitation === "sent" ? { reviewInviteSentAt: new Date().toISOString() } : {}) } : item));
       setOrderMessage(result.invitation === "sent" ? "Order marked delivered; review email sent." : result.invitation === "already-sent" ? "Order is delivered; review email was already sent." : "Order marked delivered. Review email could not be sent; use this action to retry.");
     } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not mark order delivered."); }
     finally { setDelivering(undefined); }
@@ -199,7 +199,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       {items.map(order => <details className="store-order" key={order.id}>
         <summary>
           <span className="store-order-customer"><strong>{order.customer.name}</strong><small>{order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}</small><small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
-          <span className="store-order-total"><strong>{bdt(order.totalMinor)}</strong><small>{order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}{order.paymentStatus === "PENDING_VERIFICATION" && <em className="store-order-status is-pending">Payment pending</em>}{order.paymentStatus === "VERIFIED" && <em className="store-order-status is-paid">Payment verified</em>}</small></span>
+          <span className="store-order-total">
+            <strong>{bdt(order.totalMinor)}</strong>
+            <small>
+              {order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}
+              {order.paymentStatus === "PENDING_VERIFICATION" && <em className="store-order-status is-pending">Payment pending</em>}
+              {order.paymentStatus === "VERIFIED" && <em className="store-order-status is-paid">Payment verified</em>}
+            </small>
+            {order.status === "DELIVERED" && <small><em className="store-order-status is-delivered">Delivered</em></small>}
+          </span>
         </summary>
         <div className="store-order-content">
           <dl>

@@ -394,7 +394,7 @@ input:focus, textarea:focus, select:focus { border-color: #27849a; box-shadow: 0
 .store-order-total small { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
 .store-order-status { display: inline-flex; align-items: center; padding: 4px 7px; border-radius: 100px; font-size: .62rem; font-style: normal; font-weight: 750; white-space: nowrap; }
 .store-order-status.is-pending { background: #fff4df; color: #875711; }
-.store-order-status.is-paid { background: #e8f5ec; color: #26734a; }
+.store-order-status.is-paid, .store-order-status.is-delivered { background: #e8f5ec; color: #26734a; }
 .store-order-content { padding: 0 22px 20px; }
 .store-order dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); column-gap: 22px; margin: 0 0 14px; }
 .store-order dl > div { min-width: 0; padding: 9px 0; border-bottom: 1px solid #edf0f0; }
