@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { probeService, waitForService, npmCommand } from "./start-local.mjs";
 import { shortcut, desktopQuote, installShortcut } from "./setup-desktop.mjs";
 import { browserCommands } from "./desktop.mjs";
@@ -83,4 +83,31 @@ test("browser launchers provide Windows, macOS and Linux default-browser fallbac
   assert.deepEqual(browserCommands(url, "win32", {}).at(-1), ["explorer.exe", [url]]);
   assert.deepEqual(browserCommands(url, "darwin").at(-1), ["open", [url]]);
   assert.deepEqual(browserCommands(url, "linux").at(-1), ["xdg-open", [url]]);
+});
+
+test("Android USB helper recognizes duplicate transports and requires selection for different phones", { skip: process.platform === "win32" }, () => {
+  const directory = mkdtempSync(join(tmpdir(), "oneinfo-adb-test-"));
+  const adb = join(directory, "adb");
+  const log = join(directory, "commands");
+  writeFileSync(adb, `#!/bin/sh
+if [ "$1" = devices ]; then
+  printf 'List of devices attached\\nUSB-SERIAL\\tdevice\\nWIRELESS-ALIAS\\tdevice\\n'
+elif [ "$3" = shell ]; then
+  if [ "$2" = WIRELESS-ALIAS ] && [ "$DIFFERENT_PHONE" = 1 ]; then echo SECOND-PHONE; else echo SAME-PHONE; fi
+elif [ "$3" = reverse ]; then
+  echo "$*" >> "$TEST_ADB_LOG"
+else exit 1
+fi
+`, { mode: 0o755 });
+  const run = env => spawnSync("bash", [new URL("./connect-android-nfc.sh", import.meta.url).pathname], {
+    env: { ...process.env, ANDROID_SERIAL: "", ADB_PATH: adb, TEST_ADB_LOG: log, ...env }, encoding: "utf8",
+  });
+  try {
+    assert.equal(run({}).status, 0);
+    assert.match(readFileSync(log, "utf8"), /-s USB-SERIAL reverse tcp:3001 tcp:3001/);
+    assert.match(readFileSync(log, "utf8"), /-s USB-SERIAL reverse tcp:5174 tcp:5174/);
+    assert.equal(run({ DIFFERENT_PHONE: "1" }).status, 1);
+    assert.equal(run({ DIFFERENT_PHONE: "1", ANDROID_SERIAL: "WIRELESS-ALIAS" }).status, 0);
+    assert.equal(run({ ANDROID_SERIAL: "NOT-CONNECTED" }).status, 1);
+  } finally { rmSync(directory, { recursive: true }); }
 });

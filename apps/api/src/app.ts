@@ -9,6 +9,8 @@ import { stationRoutes } from "./routes/stations.js";
 import { profileRoutes } from "./routes/profiles.js";
 import { adminRoutes } from "./routes/admin.js";
 import { localNfcRoutes } from "./routes/local-nfc.js";
+import { customerRoutes } from "./routes/customers.js";
+import { operatorAuthRoutes } from "./routes/operator-auth.js";
 
 import { orderRoutes } from "./routes/orders.js";
 import { productRoutes } from "./routes/products.js";
@@ -25,17 +27,19 @@ export function buildApp() {
   });
   app.get("/health", async () => ({ status: "ok", service: "oneinfo-production-api" }));
   app.register(devRoutes, { prefix: "/api/v1/dev" });
+  app.register(operatorAuthRoutes, { prefix: "/api/v1/auth" });
   app.register(stationRoutes, { prefix: "/api/v1/production/stations" });
   app.register(batchRoutes, { prefix: "/api/v1/production/batches" });
   app.register(jobRoutes, { prefix: "/api/v1/production/jobs" });
   app.register(cardRoutes, { prefix: "/api/v1/production/cards" });
   app.register(profileRoutes, { prefix: "/api/v1/profiles" });
+  app.register(customerRoutes, { prefix: "/api/v1/customer" });
   app.register(orderRoutes, { prefix: "/api/v1/orders" });
   app.register(productRoutes, { prefix: "/api/v1/products" });
   app.register(productMediaRoutes, { prefix: "/api/v1/product-media" });
   app.register(reviewRoutes, { prefix: "/api/v1/reviews" });
   app.register(adminRoutes, { prefix: "/api/v1/admin" });
-  app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
+  if (!process.env.VERCEL) app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
 
   app.setErrorHandler((error, request, reply) => {
     const normalized = error as Error & { statusCode?: number; details?: unknown; code?: string; cause?: { code?: string } };

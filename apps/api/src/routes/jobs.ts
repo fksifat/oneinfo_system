@@ -183,12 +183,15 @@ export async function saveQualityCheck(jobId: string, input: QualityCheckInput, 
         })
         .returning();
       const passed = input.result === "PASSED";
+      const [currentCard] = await tx.select().from(cards).where(eq(cards.id, card.id)).for("update");
+      const assigned = Boolean(currentCard?.profileId);
+      const reserved = currentCard?.inventoryStatus === "RESERVED" || currentCard?.inventoryStatus === "DISPATCHED";
       await tx
         .update(cards)
         .set({
           qcStatus: passed ? "PASSED" : "FAILED",
-          lifecycleStatus: passed ? "QC_PASSED" : "QUARANTINED",
-          inventoryStatus: passed ? "SALEABLE" : "NOT_READY",
+          lifecycleStatus: passed ? assigned ? "ACTIVATED" : "QC_PASSED" : "QUARANTINED",
+          inventoryStatus: passed ? reserved ? currentCard!.inventoryStatus : assigned ? "RESERVED" : "SALEABLE" : "NOT_READY",
           updatedAt: new Date(),
         })
         .where(eq(cards.id, card.id));
@@ -196,7 +199,7 @@ export async function saveQualityCheck(jobId: string, input: QualityCheckInput, 
         cardId: card.id,
         eventType: passed ? "QC_PASSED" : "QC_FAILED",
         previousState: card.lifecycleStatus,
-        newState: passed ? "QC_PASSED" : "QUARANTINED",
+        newState: passed ? assigned ? "ACTIVATED" : "QC_PASSED" : "QUARANTINED",
         actorId: operator.operatorId,
         stationId: station.stationId,
         metadata: { reason: input.reason ?? null, evidenceReference: input.evidenceReference ?? null },

@@ -1,14 +1,15 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
-import { CreateBatchSchema, GenerateBatchQrSchema } from "@oneinfo/contracts";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { ConfirmBatchPrintSchema, CreateBatchSchema, GenerateBatchQrSchema } from "@oneinfo/contracts";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import QRCode from "qrcode";
 import { config } from "../config.js";
 import { requireOperator, requireStation } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardBatches, cardEvents, cards, productionJobs, qrArtifacts, cardVerifications, nfcEncodingAttempts } from "../db/schema.js";
-import { verificationSummary } from "../domain/workflow.js";
+import { productionBatchSummary, verificationSummary } from "../domain/workflow.js";
 import { parseBody, sendCreated } from "../http.js";
+import { allocatePendingOrders, lockPrintedStock } from "../domain/printed-stock.js";
 
 function makePublicSlug(): string {
   return randomBytes(9).toString("base64url");
@@ -81,7 +82,9 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async (request) => {
     await requireOperator(request);
     const items = await db.select().from(cardBatches).orderBy(desc(cardBatches.createdAt)).limit(200);
-    return { items };
+    const batchCards = items.length ? await db.select({ batchId: cards.batchId, qrStatus: cards.qrStatus, nfcStatus: cards.nfcStatus, qcStatus: cards.qcStatus })
+      .from(cards).where(inArray(cards.batchId, items.map((batch) => batch.id))) : [];
+    return { items: items.map((batch) => ({ ...batch, ...productionBatchSummary(batchCards.filter((card) => card.batchId === batch.id)) })) };
   });
 
   app.post("/:batchId/generate-qr", async (request) => {
@@ -121,6 +124,31 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
     return { generated, total: batchCards.length };
   });
 
+  app.post("/:batchId/confirm-print", async (request) => {
+    const operator = await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR"]);
+    const station = await requireStation(request);
+    parseBody(ConfirmBatchPrintSchema, request.body);
+    const { batchId } = request.params as { batchId: string };
+    return db.transaction(async (tx) => {
+      await lockPrintedStock(tx);
+      const [batch] = await tx.select().from(cardBatches).where(eq(cardBatches.id, batchId)).for("update");
+      if (!batch) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
+      if (!batch.printConfirmedAt) {
+        const batchCards = await tx.select().from(cards).where(eq(cards.batchId, batchId));
+        const images = await tx.select({ cardId: qrArtifacts.cardId }).from(qrArtifacts).innerJoin(cards, eq(cards.id, qrArtifacts.cardId))
+          .where(and(eq(cards.batchId, batchId), isNotNull(qrArtifacts.imageData)));
+        if (batchCards.length !== batch.plannedQuantity || batchCards.some((card) => card.qrStatus !== "GENERATED" || !images.some((image) => image.cardId === card.id))) {
+          throw Object.assign(new Error("Generate every QR image before confirming the printed batch"), { statusCode: 409 });
+        }
+        await tx.update(cardBatches).set({ printConfirmedAt: new Date(), printConfirmedBy: operator.operatorId }).where(eq(cardBatches.id, batchId));
+        await tx.insert(auditLogs).values({ actorId: operator.operatorId, stationId: station.stationId, action: "BATCH_PRINT_CONFIRMED",
+          targetType: "card_batch", targetId: batchId, requestId: request.id, metadata: { quantity: batchCards.length } });
+      }
+      const assigned = await allocatePendingOrders(tx);
+      return { confirmed: true, assigned, replayed: Boolean(batch.printConfirmedAt) };
+    });
+  });
+
   app.get("/:batchId", async (request) => {
     await requireOperator(request);
     const { batchId } = request.params as { batchId: string };
@@ -134,7 +162,7 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
       .innerJoin(cards, eq(cards.id, cardVerifications.cardId)).where(eq(cards.batchId, batchId)).orderBy(desc(cardVerifications.createdAt));
     const writtenAt = await latestWrites(batchId);
     const prints = await checkedPrints(batchId);
-    return { ...batch, cards: batchCards.map((card) => ({ ...card,
+    return { ...batch, ...productionBatchSummary(batchCards), cards: batchCards.map((card) => ({ ...card,
       printChecked: prints.has(card.id),
       imageData: artifacts.find((artifact) => artifact.cardId === card.id && artifact.imageData)?.imageData ?? null,
       verification: verificationSummary(checks.filter((row) => row.verification.cardId === card.id).map((row) => row.verification), writtenAt(card.id)),
@@ -145,13 +173,15 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
   app.get("/:batchId/verification-status", async (request) => {
     await requireOperator(request);
     const { batchId } = request.params as { batchId: string };
+    const [batch] = await db.select({ id: cardBatches.id, printConfirmedAt: cardBatches.printConfirmedAt }).from(cardBatches).where(eq(cardBatches.id, batchId)).limit(1);
+    if (!batch) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
     const batchCards = await db.select({ id: cards.id, qrStatus: cards.qrStatus, nfcStatus: cards.nfcStatus, qcStatus: cards.qcStatus })
       .from(cards).where(eq(cards.batchId, batchId));
     const checks = await db.select({ verification: cardVerifications }).from(cardVerifications)
       .innerJoin(cards, eq(cards.id, cardVerifications.cardId)).where(eq(cards.batchId, batchId));
     const writtenAt = await latestWrites(batchId);
     const prints = await checkedPrints(batchId);
-    return { items: batchCards.map((card) => ({ ...card,
+    return { printConfirmedAt: batch.printConfirmedAt, items: batchCards.map((card) => ({ ...card,
       printChecked: prints.has(card.id),
       verification: verificationSummary(checks.filter((row) => row.verification.cardId === card.id).map((row) => row.verification), writtenAt(card.id)),
     })) };

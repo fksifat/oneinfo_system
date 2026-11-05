@@ -22,6 +22,11 @@ import android.os.Looper
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.ScrollView
+import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.EditorInfo
+import android.content.res.ColorStateList
+import android.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -63,6 +68,8 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         pairingCode = findViewById(R.id.pairingCode)
         deviceToken = getPreferences(MODE_PRIVATE).getString("deviceToken", null)
         findViewById<Button>(R.id.pairButton).setOnClickListener { pair() }
+        pairingCode.imeOptions = EditorInfo.IME_ACTION_DONE
+        pairingCode.setOnEditorActionListener { _, actionId, _ -> if (actionId == EditorInfo.IME_ACTION_DONE) { pair(); true } else false }
         findViewById<Button>(R.id.verifyQr).setOnClickListener { startQrVerification(false) }
         findViewById<Button>(R.id.verifyQc).setOnClickListener { startQrVerification(true) }
         findViewById<Button>(R.id.loadNfc).setOnClickListener { loadToNfc() }
@@ -118,8 +125,10 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     }
 
     private fun pair() {
+        if (startingVerification) return
         val code = pairingCode.text.toString()
         if (code.length != 6) return setStatus("Enter the six-digit code displayed on the workstation.")
+        startingVerification = true
         setStatus("Pairing with local workstation…")
         executor.execute {
             try {
@@ -131,10 +140,13 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                 deviceToken = response.getString("deviceToken")
                 getPreferences(MODE_PRIVATE).edit().putString("deviceToken", deviceToken).apply()
                 setStatus("Paired. Scan a printed QR to detect its batch and card.")
-                main.post { showPanel(R.id.productionPanel) }
+                main.post { pairingCode.setText(""); showPanel(R.id.productionPanel) }
                 startPolling()
             } catch (error: Exception) {
                 setStatus("Pairing failed: ${error.message}")
+            } finally {
+                startingVerification = false
+                main.post { updateActions() }
             }
         }
     }
@@ -158,6 +170,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                         path.contains("/read-tasks/") && state == "COMPLETED" && body.optJSONObject("deviceMetadata")?.optString("operation") == "ERASE" -> "Tag erased and verified empty. PC dashboard updated."
                         path.contains("/read-tasks/") && state == "COMPLETED" -> "NFC tool completed. Tag details are available here and on the PC."
                         path.contains("/read-tasks/") && state == "FAILED" -> "NFC tool failed. Check tag details and try again."
+                        response.optString("qcStatus") == "PASSED" && response.optString("inventoryStatus") == "RESERVED" -> "QC APPROVED. Card remains reserved for its order. PC dashboard updated."
                         response.optString("qcStatus") == "PASSED" -> "QC APPROVED. Card released to saleable inventory. PC dashboard updated."
                         state == "MATCHED" -> "QR and NFC match. Tap Approve QC to finish. PC dashboard updated."
                         state == "MISMATCH" -> "QC blocked: QR and NFC do not match. PC dashboard updated."
@@ -215,17 +228,25 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                         poller?.cancel(false)
                     }
                 }
-                setStatus("Workstation connection unavailable: ${error.message}")
-                main.post { findViewById<TextView>(R.id.connectionStatus).text = if (deviceToken == null) "Not paired · Open Connect" else "Workstation unavailable · Check ADB tunnel" }
+                setStatus(if (error is ApiException && error.statusCode == 401) "Pairing expired. Open Connection on the PC, generate a new code, and enter it here."
+                    else if (error is ApiException) "Operation could not complete: ${error.message}" else "Workstation connection unavailable: ${error.message}")
+                main.post { findViewById<TextView>(R.id.connectionStatus).text = if (deviceToken == null) "Not paired · Open Connect" else if (error is ApiException) "Paired · Workstation connected" else "Workstation unavailable · Check ADB tunnel" }
+                if (deviceToken == null) main.post { showPanel(R.id.connectPanel) }
             }
         }, 0, 1200, TimeUnit.MILLISECONDS)
     }
 
     private fun showPanel(panelId: Int) {
+        currentFocus?.let { focus -> (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(focus.windowToken, 0); focus.clearFocus() }
         listOf(R.id.productionPanel, R.id.toolsPanel, R.id.connectPanel).forEach { findViewById<View>(it).visibility = if (it == panelId) View.VISIBLE else View.GONE }
         listOf(R.id.tabProduction to R.id.productionPanel, R.id.tabTools to R.id.toolsPanel, R.id.tabConnect to R.id.connectPanel).forEach { (buttonId, target) ->
-            findViewById<Button>(buttonId).alpha = if (target == panelId) 1f else 0.6f
+            findViewById<Button>(buttonId).apply {
+                isSelected = target == panelId
+                backgroundTintList = ColorStateList.valueOf(if (isSelected) Color.rgb(17,123,120) else Color.rgb(229,239,240))
+                setTextColor(if (isSelected) Color.WHITE else Color.rgb(18,51,68))
+            }
         }
+        findViewById<ScrollView>(R.id.contentScroll).post { findViewById<ScrollView>(R.id.contentScroll).scrollTo(0, 0) }
     }
 
     private fun startUtility(operation: String) {

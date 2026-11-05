@@ -125,11 +125,9 @@
                   <div class="order-payment-options" role="radiogroup" aria-labelledby="order-payment-title">
                     <label class="order-payment-option">
                       <input type="radio" name="paymentMethod" value="BKASH" />
-                      <strong>ArisePay</strong>
+                      <strong>ArisePay · bKash</strong>
                       <span class="order-payment-brands">
                         <img src="/assets/payment/bkash.png" alt="bKash" width="24" height="24" />
-                        <img src="/assets/payment/nagad.png" alt="Nagad" width="24" height="24" />
-                        <img src="/assets/payment/rocket.png" alt="Rocket" width="24" height="24" />
                       </span>
                     </label>
                     <label class="order-payment-option">
@@ -175,7 +173,7 @@
           <a class="back-to-products" href="#order-draft">← Back to checkout</a>
           <header class="order-heading">
             <h1 id="arisepay-title" tabindex="-1">ArisePay</h1>
-            <p>Pay for your Oneinfo order.</p>
+            <p>Pay with bKash and submit your transaction ID for verification.</p>
           </header>
           <form id="arisepay-form" class="order-details" hidden novalidate>
             <div class="order-subtotal"><span class="arisepay-amount-label">Amount to pay</span><strong class="arisepay-amount"></strong></div>
@@ -397,14 +395,15 @@
         <button class="icon-button modal-close" type="button" aria-label="Close">×</button>
         <p class="kicker"><span></span> TEAM ENQUIRY</p>
         <h2 id="team-title">Build a consistent team set.</h2>
+        <p>Team enquiries are saved as drafts on this device.</p>
         <form id="team-form">
           <label>Company or team<input name="company" required /></label>
           <label>Contact name<input name="name" required /></label>
           <label>Work email<input name="email" type="email" required /></label>
           <label>Estimated quantity<input name="quantity" type="number" min="2" value="10" required /></label>
-          <button class="button button-primary" type="submit">Save team request</button>
+          <button class="button button-primary" type="submit">Save enquiry draft</button>
         </form>
-        <div class="order-success" hidden><span>✓</span><h3>Team request saved</h3><p>This is a local draft. Connect Oneinfo’s sales inbox or CRM before launch.</p><button class="button modal-close-button" type="button">Done</button></div>
+        <div class="order-success" hidden><span>✓</span><h3>Enquiry draft saved</h3><p>Your team enquiry is saved on this device.</p><button class="button modal-close-button" type="button">Done</button></div>
       </div>
     </div>
 

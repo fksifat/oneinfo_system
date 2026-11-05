@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
+import { put } from "@vercel/blob";
 
 const directory = resolve(process.env.PRODUCT_MEDIA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.product-media"));
 const formats = {
@@ -103,6 +104,12 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     if (!isValid) return reply.code(415).send({ message: "The file content does not match its format" });
 
     const filename = `${randomUUID()}.${extension}`;
+    if (process.env.VERCEL) {
+      if (!process.env.BLOB_READ_WRITE_TOKEN) return reply.code(503).send({ message: "Cloud media storage is not configured." });
+      if (body.length > 4 * 1024 * 1024) return reply.code(413).send({ message: "Cloud uploads support files up to 4 MB. Use a hosted URL for larger files." });
+      const blob = await put(`product-media/${filename}`, body, { access: "public", contentType: formats[extension as keyof typeof formats].mime, addRandomSuffix: false });
+      return reply.code(201).send({ url: blob.url });
+    }
     await mkdir(directory, { recursive: true });
     await writeFile(resolve(directory, filename), body, { flag: "wx" });
     return reply.code(201).send({ url: `/api/v1/product-media/${filename}` });

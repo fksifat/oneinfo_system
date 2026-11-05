@@ -14,6 +14,15 @@ export function nextNfcJobStatus(result: "SUCCEEDED" | "FAILED"): "COMPLETED" | 
   return result === "SUCCEEDED" ? "COMPLETED" : "RETRYABLE_FAILURE";
 }
 
+export function productionBatchSummary(cards: { qrStatus: string; nfcStatus: string; qcStatus: string }[]) {
+  const total = cards.length;
+  const qrGenerated = cards.filter((card) => card.qrStatus === "GENERATED").length;
+  const nfcWritten = cards.filter((card) => card.nfcStatus === "WRITTEN").length;
+  const qcPassed = cards.filter((card) => card.qcStatus === "PASSED").length;
+  const status = total > 0 && qcPassed === total ? "COMPLETED" : cards.some((card) => card.qrStatus !== "PENDING" || card.nfcStatus !== "PENDING" || card.qcStatus !== "PENDING") ? "IN_PRODUCTION" : "READY";
+  return { total, qrGenerated, nfcWritten, qcPassed, status };
+}
+
 export function verificationSummary(checks: { method: string; matched: boolean; createdAt: Date; deviceMetadata?: Record<string, unknown> }[], writtenAt?: Date) {
   const latest = checks.filter((check) => !writtenAt || check.createdAt > writtenAt).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   const camera = latest.find((check) => check.method === "QR_CAMERA");

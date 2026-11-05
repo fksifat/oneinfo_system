@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "build:cloud": "node scripts/build-cloud.mjs",
     "build": "npm run build --workspace @oneinfo/contracts && npm run build --workspace @oneinfo/api && npm run build --workspace @oneinfo/production-console && npm run build --workspace @oneinfo/control-center && npm run build:storefront",
     "dev": "npm run dev:api",
     "dev:api": "npm run dev --workspace @oneinfo/api",
@@ -27,6 +28,8 @@
     "start:local": "node scripts/start-local.mjs",
     "setup:desktop": "node scripts/setup-desktop.mjs",
     "test:launcher": "node --test scripts/launcher.test.mjs",
+    "test:printed-stock": "npm run build --workspace @oneinfo/contracts && node scripts/test-printed-stock.mjs",
+    "test:ui": "npm run build && node scripts/ui-check.mjs",
     "pretest": "npm run build --workspace @oneinfo/contracts"
   },
   "engines": {

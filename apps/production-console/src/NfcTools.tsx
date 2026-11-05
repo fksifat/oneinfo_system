@@ -9,7 +9,7 @@ interface Session {
   result?: NfcReadResult;
 }
 
-export function NfcTools({ credentials, onMessage }: { credentials: Credentials; onMessage: (message: string) => void }) {
+export function NfcTools({ credentials, connected, onMessage }: { credentials: Credentials; connected: boolean; onMessage: (message: string) => void }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [recordType, setRecordType] = useState("URL");
   const [value, setValue] = useState("");
@@ -17,6 +17,7 @@ export function NfcTools({ credentials, onMessage }: { credentials: Credentials;
   const [eraseConfirmed, setEraseConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [syncError, setSyncError] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [showDetails, setShowDetails] = useState(true);
   const pending = sessions.find((session) => ["PENDING", "READING"].includes(session.state));
@@ -25,7 +26,7 @@ export function NfcTools({ credentials, onMessage }: { credentials: Credentials;
   const refresh = useCallback(async () => {
     const result = await api<{ items: Session[] }>("/api/v1/local-nfc/utility-sessions", {}, credentials);
     setSessions(result.items);
-    setError("");
+    setSyncError("");
   }, [credentials]);
 
   useEffect(() => {
@@ -36,8 +37,8 @@ export function NfcTools({ credentials, onMessage }: { credentials: Credentials;
       loading = true;
       try {
         const result = await api<{ items: Session[] }>("/api/v1/local-nfc/utility-sessions", {}, credentials);
-        if (!disposed) { setSessions(result.items); setError(""); }
-      } catch (error) { if (!disposed) setError(error instanceof Error ? error.message : "Could not update NFC activity"); }
+        if (!disposed) { setSessions(result.items); setSyncError(""); }
+      } catch (error) { if (!disposed) setSyncError(error instanceof Error ? error.message : "Could not update NFC activity"); }
       finally { loading = false; }
     };
     void sync();
@@ -46,6 +47,10 @@ export function NfcTools({ credentials, onMessage }: { credentials: Credentials;
   }, [credentials]);
 
   const start = async (operation: "READ" | "WRITE" | "ERASE") => {
+    if (!connected) { setError("Connect your NFC device in the Connection tab first."); return; }
+    setError("");
+    if (operation === "WRITE" && !confirmed) { setError("Confirm that you want to replace the target tag's existing content."); return; }
+    if (operation === "ERASE" && !eraseConfirmed) { setError("Confirm that you want to erase the target tag's NDEF content."); return; }
     const parsed = NfcUtilitySchema.safeParse(operation === "ERASE" ? { operation, overwriteConfirmed: eraseConfirmed } : operation === "WRITE" ? { operation, recordType, value, overwriteConfirmed: confirmed } : { operation });
     if (!parsed.success) { setError(parsed.error.issues[0]?.message ?? "Check NFC content and replacement confirmation"); return; }
     setBusy(true);
@@ -77,7 +82,8 @@ export function NfcTools({ credentials, onMessage }: { credentials: Credentials;
 
   return <section className="nfc-tools">
     <div className="tools-heading"><div><p className="section-label">NFC TOOLBOX</p><h2>A small workspace for every tag.</h2><p>Read and inspect tags, or write a website link or plain text using your paired phone.</p></div><span className="pill">GENERAL PURPOSE</span></div>
-    {error ? <p className="tool-error" role="alert">{error}</p> : null}
+    {error || syncError ? <p className="tool-error" role="alert">{error || syncError}</p> : null}
+    {!connected && <p className="tool-error">No NFC device is online. Open <a href="#connection">Connection</a> to pair your phone or USB-reader bridge.</p>}
     {pending ? <div className="waiting-banner" role="status"><div><strong>{pending.utility?.operation === "ERASE" ? "Ready to erase · tap ONLY the tag to empty" : pending.utility?.operation === "WRITE" ? "Ready to write · tap the target tag" : "Ready to read · tap a tag"}</strong><small>Keep the Oneinfo companion open. Deadline {new Date(pending.expiresAt).toLocaleTimeString()}.</small></div><button className="secondary" disabled={busy} onClick={() => void cancel()}>Stop waiting</button></div> : null}
     <div className="tool-columns">
       <section className="panel tool-editor"><p className="section-label">01 / INSPECT</p><h2>What's on this tag?</h2><p>Read the UID, NDEF records, capacity, technologies and writable status.</p><button disabled={busy || Boolean(pending)} onClick={() => void start("READ")}>Read NFC tag</button><hr /><p className="section-label">02 / WRITE</p><h2>Put something useful on it.</h2>

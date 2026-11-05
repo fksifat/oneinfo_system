@@ -355,11 +355,13 @@ input:focus, textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rg
   :root { --section: 82px; }
   .announcement { justify-content: space-between; }
   .announcement span { max-width: 190px; }
-  .site-header { grid-template-columns: 1fr auto; min-height: 68px; }
-  .navbar-logo { width: 144px; }
+  .site-header { grid-template-columns: minmax(0, 1fr) auto; min-height: 68px; gap: 12px; }
+  .site-header .brand { min-width: 0; width: auto; }
+  .navbar-logo { width: 144px; max-width: 100%; }
   .desktop-nav { display: none; }
   .menu-trigger { display: block; }
   h1 { font-size: clamp(3.9rem, 18vw, 6rem); }
+  .hero h1 { font-size: clamp(2.5rem, 13vw, 6rem); }
   h2 { font-size: clamp(2.9rem, 13vw, 4.7rem); }
   .hero { min-height: auto; grid-template-columns: 1fr; padding-top: 70px; }
   .hero-actions { align-items: flex-start; flex-direction: column; }

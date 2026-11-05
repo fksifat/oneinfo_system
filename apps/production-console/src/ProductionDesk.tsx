@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type Credentials } from "./api.js";
 
 interface Job { id: string; type: string; status: string }
@@ -6,12 +6,14 @@ interface ProductionCard {
   id: string; publicSlug: string; canonicalUrl: string; qrStatus: string; nfcStatus: string; qcStatus: string;
   imageData: string | null; printChecked: boolean; verification: { camera: boolean; nfc: boolean; cameraResult?: string; nfcResult?: string }; jobs: Job[];
 }
-interface Batch { id: string; batchCode: string; plannedQuantity: number; cards: ProductionCard[] }
+interface Batch { id: string; batchCode: string; plannedQuantity: number; printConfirmedAt: string | null; cards: ProductionCard[] }
 interface Props { visible: boolean; credentials: Credentials; busy: boolean; onBusy: (value: boolean) => void; onMessage: (value: string) => void; onChanged: () => Promise<void> }
 
 export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, onChanged }: Props) {
   const [batches, setBatches] = useState<Batch[]>([]);
-  const [batchId, setBatchId] = useState(() => localStorage.getItem("oneinfo.production.batch") ?? "");
+  const [batchId, setBatchId] = useState(() => new URLSearchParams(window.location.search).get("batch") ?? localStorage.getItem("oneinfo.production.batch") ?? "");
+  const currentBatchId = useRef(batchId);
+  currentBatchId.current = batchId;
   const [batch, setBatch] = useState<Batch | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [batchCode, setBatchCode] = useState(`BATCH-${new Date().toLocaleDateString("en-CA").replaceAll("-", "")}-${Date.now().toString(36).slice(-4)}`);
@@ -27,6 +29,14 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   const [lastSynced, setLastSynced] = useState("");
   const [search, setSearch] = useState("");
   const [cardFilter, setCardFilter] = useState("all");
+  const [printingComplete, setPrintingComplete] = useState(false);
+  useEffect(() => setPrintingComplete(false), [batchId]);
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (batchId) { url.searchParams.set("batch", batchId); localStorage.setItem("oneinfo.production.batch", batchId); }
+    else { url.searchParams.delete("batch"); localStorage.removeItem("oneinfo.production.batch"); }
+    window.history.replaceState(null, "", url);
+  }, [batchId]);
   const visibleCards = batch?.cards.filter((card) => `${card.publicSlug} ${card.canonicalUrl}`.toLowerCase().includes(search.toLowerCase()) &&
     (cardFilter === "all" || (cardFilter === "pending" && card.nfcStatus !== "WRITTEN") || (cardFilter === "qc" && card.nfcStatus === "WRITTEN" && card.qcStatus !== "PASSED") || (cardFilter === "passed" && card.qcStatus === "PASSED"))) ?? [];
   const selected = visibleCards.find((card) => card.id === selectedId) ?? visibleCards[0];
@@ -35,13 +45,39 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   const layoutValid = labelWidth >= 25 && labelHeight >= 30 && Number.isInteger(columns) && columns >= 1 && columns <= 6 && gap >= 0 && margin >= 0 &&
     columns * labelWidth + (columns - 1) * gap + 2 * margin <= 210 && labelHeight + margin * 2 <= 297;
 
+  const clearMissingBatch = useCallback(() => {
+    setBatch(null); setBatchId(""); setSelectedId(""); setPrintCards([]);
+  }, []);
+
   const refresh = useCallback(async () => {
     const list = await api<{ items: Batch[] }>("/api/v1/production/batches", {}, credentials);
     setBatches(list.items);
-    if (batchId) setBatch(await api<Batch>(`/api/v1/production/batches/${batchId}`, {}, credentials));
-  }, [batchId, credentials]);
+    if (batchId) {
+      try { const loaded = await api<Batch>(`/api/v1/production/batches/${batchId}`, {}, credentials); if (currentBatchId.current === batchId) setBatch(loaded); }
+      catch (error) {
+        if ((error as { status?: number }).status !== 404) throw error;
+        if (currentBatchId.current === batchId) clearMissingBatch();
+      }
+    }
+  }, [batchId, credentials, clearMissingBatch]);
 
   useEffect(() => { void refresh().catch((error: Error) => onMessage(error.message)); }, [refresh]);
+
+  useEffect(() => {
+    let disposed = false;
+    let pending = false;
+    const sync = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const result = await api<{ items: Batch[] }>("/api/v1/production/batches", {}, credentials);
+        if (!disposed) setBatches(result.items);
+      } catch (error) { if (!disposed) setSyncError(error instanceof Error ? error.message : "Could not refresh batches"); }
+      finally { pending = false; }
+    };
+    const interval = window.setInterval(() => void sync(), 5000);
+    return () => { disposed = true; window.clearInterval(interval); };
+  }, [credentials]);
 
   useEffect(() => {
     if (!batchId) return;
@@ -51,19 +87,24 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
       if (pending) return;
       pending = true;
       try {
-        const result = await api<{ items: Pick<ProductionCard, "id" | "qrStatus" | "nfcStatus" | "qcStatus" | "printChecked" | "verification">[] }>(
+        const result = await api<{ printConfirmedAt: string | null; items: Pick<ProductionCard, "id" | "qrStatus" | "nfcStatus" | "qcStatus" | "printChecked" | "verification">[] }>(
           `/api/v1/production/batches/${batchId}/verification-status`, {}, credentials);
         if (disposed) return;
-        setBatch((current) => current?.id === batchId ? { ...current, cards: current.cards.map((card) => ({ ...card, ...result.items.find((item) => item.id === card.id) })) } : current);
+        setBatch((current) => current?.id === batchId ? { ...current, printConfirmedAt: result.printConfirmedAt, cards: current.cards.map((card) => ({ ...card, ...result.items.find((item) => item.id === card.id) })) } : current);
         setSyncError("");
         setLastSynced(new Date().toLocaleTimeString());
-      } catch (error) { if (!disposed) setSyncError(error instanceof Error ? error.message : "Dashboard update failed"); }
+      } catch (error) {
+        if (disposed) return;
+        if ((error as { status?: number }).status === 404) {
+          clearMissingBatch();
+        } else setSyncError(error instanceof Error ? error.message : "Dashboard update failed");
+      }
       finally { pending = false; }
     };
     void sync();
     const interval = window.setInterval(() => void sync(), 2000);
     return () => { disposed = true; window.clearInterval(interval); };
-  }, [batchId, credentials]);
+  }, [batchId, credentials, clearMissingBatch]);
 
   const run = async (action: () => Promise<string>) => {
     onBusy(true);
@@ -84,8 +125,8 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
     const created = await api<Batch>("/api/v1/production/batches", { method: "POST", body: JSON.stringify({
       batchCode, productVariantId: "ONEINFO-NFC-CARD", quantity: urls.length || quantity, ...(urls.length ? { links: urls } : {}),
     }) }, credentials);
-    localStorage.setItem("oneinfo.production.batch", created.id);
     setBatchId(created.id);
+    setBatch(null);
     setSelectedId("");
     return `Created ${created.batchCode}. Generate its QR images next.`;
   });
@@ -110,6 +151,14 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
     window.print();
   };
 
+  const confirmPrint = () => run(async () => {
+    if (!batch || !printingComplete) throw new Error("Confirm that every card in this batch has been printed first.");
+    const result = await api<{ assigned: number }>(`/api/v1/production/batches/${batch.id}/confirm-print`, {
+      method: "POST", body: JSON.stringify({ confirmed: true }),
+    }, credentials);
+    return `Printed stock confirmed and visible in Admin. ${result.assigned} QR codes assigned to waiting orders. NFC encoding and QC are still required.`;
+  });
+
   return <>
     <section hidden={!visible} className="panel production-desk">
       <div className="desk-heading"><div><p className="section-label">PRODUCTION WORKSPACE</p><h2>Generate → print → load NFC → final QC</h2></div><span className="desk-badge">PRODUCTION DESK</span></div>
@@ -120,9 +169,9 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         <button disabled={busy}>Create batch</button>
         <details><summary>Use your own links</summary><label>One unique HTTP(S) URL per card<textarea rows={4} value={links} onChange={(event) => setLinks(event.target.value)} placeholder="https://your-domain.com/card-1&#10;https://your-domain.com/card-2" /></label><small>Leave empty to generate unique card URLs from the configured card domain. Pasted links determine the quantity.</small></details>
       </form>
-      <div className="batch-toolbar"><label>Production batch<select value={batchId} disabled={busy} onChange={(event) => { setBatchId(event.target.value); setBatch(null); setSelectedId(""); localStorage.setItem("oneinfo.production.batch", event.target.value); }}><option value="">Choose a batch</option>{batches.map((item) => <option key={item.id} value={item.id}>{item.batchCode} · {item.plannedQuantity} cards</option>)}</select></label><button disabled={busy || !batch} onClick={() => void generate()}>Generate all QR codes</button><button className="secondary" disabled={busy} onClick={() => void refresh().catch((error: Error) => onMessage(error.message))}>Refresh batch</button></div>
+      <div className="batch-toolbar"><label>Production batch<select value={batchId} disabled={busy} onChange={(event) => { if (event.target.value === batchId) return; setBatchId(event.target.value); setBatch(null); setSelectedId(""); localStorage.setItem("oneinfo.production.batch", event.target.value); }}><option value="">Choose a batch</option>{batches.map((item) => <option key={item.id} value={item.id}>{item.batchCode} · {item.plannedQuantity} cards</option>)}</select></label><button disabled={busy || !batch} onClick={() => void generate()}>Generate all QR codes</button><button className="secondary" disabled={busy} onClick={() => void refresh().catch((error: Error) => onMessage(error.message))}>Refresh batch</button></div>
       {batch ? <>
-        {batch.cards.some((card) => card.canonicalUrl.includes(".example/")) ? <p className="domain-warning">This batch uses the placeholder cards.oneinfo.example domain. Its scan values can be verified, but the links will not open a live profile. Use your real links or configure the card domain for actual production.</p> : null}
+        {batch.cards.some((card) => { const host = new URL(card.canonicalUrl).hostname; return host.endsWith(".example") || ["localhost", "127.0.0.1", "[::1]"].includes(host); }) ? <p className="domain-warning">This batch uses local or placeholder links. Local activation pages need the Admin/customer app running on port 5174. Configure your hosted card domain before printing cards for client delivery; saved QR/NFC links do not change afterward.</p> : null}
         <div className="batch-metrics">{[["Cards", batch.cards.length], ["Print checked", batch.cards.filter((card) => card.printChecked).length], ["NFC written", batch.cards.filter((card) => card.nfcStatus === "WRITTEN").length], ["QC approved", batch.cards.filter((card) => card.qcStatus === "PASSED").length]].map(([label, count]) => <div key={label}><span>{label}</span><strong>{count}<small> / {batch.cards.length}</small></strong></div>)}</div>
         <div className="card-search"><label>Find a card<input type="search" value={search} placeholder="Card ID or link…" onChange={(event) => setSearch(event.target.value)} /></label><label>Stage<select value={cardFilter} onChange={(event) => setCardFilter(event.target.value)}><option value="all">All cards</option><option value="pending">Awaiting NFC</option><option value="qc">Awaiting final QC</option><option value="passed">QC approved</option></select></label><small>{visibleCards.length} cards shown</small></div>
         <div className="production-layout"><div className="production-card-list" role="group" aria-label="Batch cards">{!visibleCards.length ? <p className="empty">No cards match this search.</p> : null}{visibleCards.map((card) => <button aria-pressed={selected?.id === card.id} className={selected?.id === card.id ? "selected" : ""} key={card.id} disabled={busy} onClick={() => setSelectedId(card.id)}><strong>{String(batch.cards.indexOf(card) + 1).padStart(3, "0")} · {card.publicSlug}</strong><small>QR {card.imageData ? "ready" : "pending"} · NFC {card.nfcStatus === "WRITTEN" ? "written" : "pending"} · QC {card.qcStatus.toLowerCase()}</small><span>{card.verification.camera ? "Camera ✓" : "Camera —"} · {card.verification.nfc ? "NFC ✓" : "NFC —"}</span></button>)}</div>
@@ -135,6 +184,14 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         <div className="print-settings"><div><p className="section-label">PRINT PRODUCTION</p><h2>A4 label sheet</h2></div><label>Width (mm)<input type="number" min="25" max="180" value={labelWidth} onChange={(event) => setLabelWidth(Number(event.target.value))} /></label><label>Height (mm)<input type="number" min="30" max="277" value={labelHeight} onChange={(event) => setLabelHeight(Number(event.target.value))} /></label><label>Columns<input type="number" min="1" max="6" value={columns} onChange={(event) => setColumns(Number(event.target.value))} /></label><label>Gap (mm)<input type="number" min="0" max="20" value={gap} onChange={(event) => setGap(Number(event.target.value))} /></label><label>Margin (mm)<input type="number" min="0" max="30" value={margin} onChange={(event) => setMargin(Number(event.target.value))} /></label><button className="secondary" disabled={busy || !selected?.imageData || !layoutValid} onClick={() => selected && void print([selected])}>Print selected QR</button><button disabled={busy || !layoutValid || batch.cards.some((card) => !card.imageData)} onClick={() => void print(batch.cards)}>Print full batch</button><p>{layoutValid ? `${columns} columns · ${rowsPerPage} rows · ${perPage} labels per A4 page. Use actual size / 100% scale; test one sheet first.` : "The selected dimensions do not fit an A4 sheet."}</p></div>
       </> : <p className="empty">Create a batch or choose an existing one to start production.</p>}
     </section>
+    {visible && batch && <section className="panel print-confirmation"><p className="section-label">PRINT CONFIRMATION · ADMIN STOCK</p>
+      <h2>{batch.printConfirmedAt ? "Printed stock confirmed" : "Confirm after printing the entire batch"}</h2>
+      <p>Confirmed QR codes appear in Admin and are assigned to waiting orders automatically. NFC encoding and final QC remain separate steps.</p>
+      {batch.printConfirmedAt ? <p role="status">Confirmed {new Date(batch.printConfirmedAt).toLocaleString()}</p> : <>
+        <label><input type="checkbox" checked={printingComplete} onChange={event => setPrintingComplete(event.target.checked)} /> Every card in {batch.batchCode} has been printed.</label>
+        <button disabled={busy || !printingComplete || batch.cards.some(card => !card.imageData)} onClick={() => void confirmPrint()}>Confirm printed batch</button>
+      </>}
+    </section>}
     <div className="production-print" aria-hidden="true"><style>{`@media print { @page { size: A4 portrait; margin: ${margin}mm; } .print-sheet { display:grid; grid-template-columns:repeat(${columns},${labelWidth}mm); grid-auto-rows:${labelHeight}mm; gap:${gap}mm; } .print-label { width:${labelWidth}mm; height:${labelHeight}mm; } .print-label img { width:${Math.min(labelHeight - 12, labelWidth - 6)}mm; height:${Math.min(labelHeight - 12, labelWidth - 6)}mm; } }`}</style>{Array.from({ length: Math.ceil(printCards.length / perPage) }, (_, page) => <div className="print-sheet" key={page}>{printCards.slice(page * perPage, (page + 1) * perPage).map((card) => <div className="print-label" key={card.id}><img src={card.imageData!} alt="" /><strong>{card.publicSlug}</strong><small>{card.canonicalUrl}</small></div>)}</div>)}</div>
   </>;
 }

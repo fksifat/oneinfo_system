@@ -1,9 +1,34 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { contactVcard } from "../../control-center/src/contact.js";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 
 describe("browser client regressions", () => {
+  it("ends an expired cloud admin session without requesting development credentials", async () => {
+    vi.stubEnv("VITE_OPERATOR_LOGIN", "password");
+    vi.stubGlobal("localStorage", { getItem: () => "expired" });
+    const dispatchEvent = vi.fn(); vi.stubGlobal("window", { dispatchEvent });
+    const fetcher = vi.fn(async () => Response.json({ message: "Invalid or expired operator token" }, { status: 401 }));
+    vi.stubGlobal("fetch", fetcher);
+    const { api } = await import("../../control-center/src/api.js");
+    await expect(api("/api/v1/admin/overview", "expired")).rejects.toThrow("Invalid or expired operator token");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(dispatchEvent.mock.calls[0]?.[0].type).toBe("oneinfo-session-expired");
+  });
+  it("notifies the console when admin has revoked its station without exposing the station secret", async () => {
+    vi.stubGlobal("localStorage", { getItem: () => null });
+    const dispatchEvent = vi.fn(); vi.stubGlobal("window", { dispatchEvent });
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ message: "Invalid or revoked station credential" }, { status: 401 })));
+    const { api } = await import("../../production-console/src/api.js");
+    await expect(api("/api/v1/production/jobs", {}, { stationKey: "station-id.secret", accessToken: "valid" })).rejects.toMatchObject({ status: 401 });
+    expect(dispatchEvent.mock.calls[0]?.[0].type).toBe("oneinfo-station-revoked");
+    expect(dispatchEvent.mock.calls[0]?.[0].detail).toBe("station-id");
+  });
+  it("exposes missing-batch status so the console can clear a deleted selection", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ message: "Batch not found" }, { status: 404 })));
+    const { api } = await import("../../production-console/src/api.js");
+    await expect(api("/api/v1/production/batches/missing")).rejects.toMatchObject({ status: 404, message: "Batch not found" });
+  });
   it("renews expired station tokens once and reuses the stored token on future NFC requests", async () => {
     const values = new Map<string, string>();
     vi.stubGlobal("localStorage", { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => values.set(key, value) });

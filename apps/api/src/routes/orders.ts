@@ -9,7 +9,9 @@ import {
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
+import { auditLogs, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
+import { allocatePendingOrders, allocationSummary } from "../domain/printed-stock.js";
+
 import { confirmationEmailEnabled, sendOrderConfirmation } from "../domain/order-confirmation.js";
 import { parseBody, sendCreated } from "../http.js";
 
@@ -116,10 +118,18 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const rows = await db.select().from(storeOrders)
       .where(beforeId ? sql`(${storeOrders.createdAt}, ${storeOrders.id}) < (${before})` : undefined)
       .orderBy(desc(storeOrders.createdAt), desc(storeOrders.id)).limit(51);
-    const items = rows.slice(0, 50);
-    const invites = items.length ? await db.select().from(storeReviewInvites).where(inArray(storeReviewInvites.orderId, items.map(row => row.id))) : [];
-    return { items: items.map(row => ({ ...receipt(row), reviewInviteSentAt: invites.find(invite => invite.orderId === row.id)?.sentAt?.toISOString() ?? null, customer: row.customer,
-      deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId })), hasMore: rows.length > 50 };
+    const page = rows.slice(0, 50);
+    const allocations = page.length ? await db.select({ orderId: orderCardAllocations.orderId, id: cards.id, publicSlug: cards.publicSlug,
+      canonicalUrl: cards.canonicalUrl, qcStatus: cards.qcStatus }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
+      .where(inArray(orderCardAllocations.orderId, page.map(row => row.id))) : [];
+    const invites = page.length ? await db.select().from(storeReviewInvites).where(inArray(storeReviewInvites.orderId, page.map(row => row.id))) : [];
+    return { items: page.map(row => {
+      const assignedCards = allocations.filter(item => item.orderId === row.id).map(({ orderId: _, ...card }) => card);
+      return { ...receipt(row), reviewInviteSentAt: invites.find(invite => invite.orderId === row.id)?.sentAt?.toISOString() ?? null, customer: row.customer, profileId: row.profileId, assignedCards,
+        qrAllocation: allocationSummary(row.items.reduce((sum, item) => sum + item.quantity, 0), assignedCards.length),
+        deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId };
+    }), hasMore: rows.length > 50 };
+
   });
 
   app.post("/", { bodyLimit: 32 * 1024 }, async (request, reply) => {
@@ -171,6 +181,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         paymentMethod, paymentAmountMinor, transactionId,
       }).onConflictDoNothing({ target: storeOrders.transactionId }).returning();
       if (!order) conflict("This bKash transaction ID is already linked to an order.");
+      await allocatePendingOrders(tx);
       return { order, created: true };
     }).catch(error => {
       if (error instanceof Error && "statusCode" in error) throw error;
@@ -179,6 +190,8 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       throw new Error("Could not save order");
     });
     const result = receipt(order);
+    const allocations = await db.select({ id: orderCardAllocations.id }).from(orderCardAllocations).where(eq(orderCardAllocations.orderId, order.id));
+    result.qrAllocation = allocationSummary(order.items.reduce((sum, item) => sum + item.quantity, 0), allocations.length);
     const emailStatus = order.paymentVerifiedAt ? undefined : await sendOrderConfirmation({
       ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items,
     });

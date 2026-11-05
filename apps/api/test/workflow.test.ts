@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { canClaimJob, canPassQualityControl, nextNfcJobStatus, verificationSummary } from "../src/domain/workflow.js";
+import { canClaimJob, canPassQualityControl, nextNfcJobStatus, verificationSummary, productionBatchSummary } from "../src/domain/workflow.js";
 
 describe("production workflow invariants", () => {
+  it("reports the same batch progress for admin and production without completing failed QC", () => {
+    const pending = { qrStatus: "PENDING", nfcStatus: "PENDING", qcStatus: "PENDING" };
+    expect(productionBatchSummary([]).status).toBe("READY");
+    expect(productionBatchSummary([pending]).status).toBe("READY");
+    expect(productionBatchSummary([{ ...pending, qrStatus: "GENERATED" }, pending])).toEqual({ total: 2, qrGenerated: 1, nfcWritten: 0, qcPassed: 0, status: "IN_PRODUCTION" });
+    expect(productionBatchSummary([{ qrStatus: "GENERATED", nfcStatus: "WRITTEN", qcStatus: "FAILED" }]).status).toBe("IN_PRODUCTION");
+    expect(productionBatchSummary([{ qrStatus: "GENERATED", nfcStatus: "WRITTEN", qcStatus: "PASSED" }]).status).toBe("COMPLETED");
+  });
   it("requires the latest camera and NFC scans to match, including after a failed rescan", () => {
     const checks = [
       { method: "QR_CAMERA", matched: true, createdAt: new Date(1) },

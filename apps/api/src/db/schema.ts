@@ -123,6 +123,15 @@ export const profileLinks = pgTable(
   (table) => [index("profile_links_profile_sort_idx").on(table.profileId, table.sortOrder)],
 );
 
+export const customerAccounts = pgTable("customer_accounts", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  email: varchar("email", { length: 254 }).notNull(),
+  passwordHash: text("password_hash").notNull(),
+  profileId: uuid("profile_id").notNull().references(() => customerProfiles.id, { onDelete: "restrict" }),
+  active: boolean("active").notNull().default(true),
+  ...timestamps,
+}, table => [uniqueIndex("customer_accounts_email_unique").on(table.email), uniqueIndex("customer_accounts_profile_unique").on(table.profileId)]);
+
 export const cardBatches = pgTable(
   "card_batches",
   {
@@ -132,6 +141,8 @@ export const cardBatches = pgTable(
     plannedQuantity: integer("planned_quantity").notNull(),
     status: batchStatus("status").notNull().default("READY"),
     createdBy: uuid("created_by").notNull(),
+    printConfirmedAt: timestamp("print_confirmed_at", { withTimezone: true }),
+    printConfirmedBy: uuid("print_confirmed_by").references(() => operators.id, { onDelete: "restrict" }),
     ...timestamps,
   },
   (table) => [uniqueIndex("card_batches_code_unique").on(table.batchCode)],
@@ -143,6 +154,8 @@ export const cards = pgTable(
     id: uuid("id").primaryKey().$defaultFn(randomUUID),
     batchId: uuid("batch_id").notNull().references(() => cardBatches.id, { onDelete: "restrict" }),
     profileId: uuid("profile_id").references(() => customerProfiles.id, { onDelete: "set null" }),
+    customerAccountId: uuid("customer_account_id").references(() => customerAccounts.id, { onDelete: "restrict" }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
     publicSlug: varchar("public_slug", { length: 64 }).notNull(),
     canonicalUrl: text("canonical_url").notNull(),
     lifecycleStatus: lifecycleStatus("lifecycle_status").notNull().default("CREATED"),
@@ -159,6 +172,15 @@ export const cards = pgTable(
     index("cards_profile_idx").on(table.profileId),
   ],
 );
+
+export const cardActivationSecrets = pgTable("card_activation_secrets", {
+  cardId: uuid("card_id").primaryKey().references(() => cards.id, { onDelete: "restrict" }),
+  codeHash: varchar("code_hash", { length: 64 }),
+  version: uuid("version").notNull().$defaultFn(randomUUID),
+  issuedBy: uuid("issued_by").notNull().references(() => operators.id, { onDelete: "restrict" }),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+  redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+});
 
 export const productionJobs = pgTable(
   "production_jobs",
@@ -322,6 +344,7 @@ export const storeCoupons = pgTable("store_coupons", {
 
 export const storeOrders = pgTable("store_orders", {
   id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  profileId: uuid("profile_id").references(() => customerProfiles.id, { onDelete: "set null" }),
   requestId: uuid("request_id").notNull(),
   requestHash: varchar("request_hash", { length: 64 }).notNull(),
   customer: jsonb("customer").$type<PlaceOrderInput["customer"]>().notNull(),
@@ -372,3 +395,12 @@ export const storeReviews = pgTable("store_reviews", {
   check("store_reviews_rating_check", sql`${table.rating} between 1 and 5`),
   check("store_reviews_status_check", sql`${table.status} in ('PENDING', 'PUBLISHED', 'REJECTED')`),
 ]);
+export const orderCardAllocations = pgTable("order_card_allocations", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  orderId: uuid("order_id").notNull().references(() => storeOrders.id, { onDelete: "restrict" }),
+  cardId: uuid("card_id").notNull().references(() => cards.id, { onDelete: "restrict" }),
+  lineIndex: integer("line_index").notNull(),
+  unitIndex: integer("unit_index").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [uniqueIndex("order_card_allocations_card_unique").on(table.cardId),
+  uniqueIndex("order_card_allocations_unit_unique").on(table.orderId, table.lineIndex, table.unitIndex)]);

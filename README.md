@@ -150,6 +150,8 @@ With the Android bridge paired, select **Read NFC tag** in the production consol
 
 ## QR and NFC production workspace
 
+The production console and Admin Control Center use the same API/database. In Admin, **NFC & QR operations** embeds the actual console; **Production batches** shows live QR/NFC/QC progress and opens a specific batch in its workspace. Admin data refreshes every five seconds and when the window gains focus. The console refreshes batch lists automatically, clears deleted batch selections, and returns to registration when Admin removes/revokes its station. Use the canonical URLs `http://127.0.0.1:5173` and `http://127.0.0.1:5174` so browser station credentials stay on the same origin. `VITE_PRODUCTION_URL` (Admin build) and `VITE_ADMIN_URL` (console build) can override these links; both applications' `VITE_API_URL` must point to the same API. Tokens are not passed through links or iframes.
+
 Use `http://127.0.0.1:5173` for the full local workflow:
 
 1. **Create a batch** of 1–1,000 cards, or expand **Use your own links** and paste one unique HTTP(S) URL per line. Pasted links determine the quantity. Generated links use `PUBLIC_CARD_BASE_URL`; configure a real card domain before producing customer cards. Existing card links remain unchanged when the setting changes.
@@ -187,6 +189,24 @@ npm run smoke
 
 The smoke test requires the API and PostgreSQL to be running. It creates a QA station and one-card batch, completes QR and NFC work, passes QC, publishes a QA profile, assigns and activates the card, and verifies public resolution and audit history. It also checks rejected hash mismatches, duplicate results, reassignment, bridge finalization, and device revocation. These are API regression checks; no physical tag is written. The QA records are retained and the test station is revoked afterward.
 
+## Browser UI regression checks
+
+Run `npm run test:ui` with the API (3001), Production Console (5173), Admin (5174), and storefront (5175) running. It builds the apps and uses a separate headless Chrome profile; set `CHROME_PATH` if Chrome is not in its usual location. PostgreSQL credentials must allow creating and dropping a disposable database.
+
+The checks cover responsive pages at 320, 390, 768 and 1440 pixels, navigation, editors, error recovery, batch/print confirmation, NFC tool controls, checkout and customer activation/profile updates. Browser API requests use an isolated fixture database; email and NFC results are mocked. The fixture database is dropped afterward. Screenshots are saved under `.oneinfo/qa/`. These checks do not print physical cards, transfer payment or write/erase a real NFC tag.
+
+## Vercel hosting
+
+The root Vercel project builds the storefront at `/`, Admin at `/admin`, and customer activation/profiles at `/c/<card-id>`. `/api/v1/*` is served by the Fastify Node function in `api/index.ts`. `npm run build:cloud` builds both web apps with same-origin API requests and password-based Admin sign-in. `.vercelignore` excludes local environment files, credentials, backups, phone/tool binaries and development artifacts from uploads.
+
+Configure a hosted PostgreSQL `DATABASE_URL`, a random `JWT_SECRET`, the permanent HTTPS `PUBLIC_CARD_BASE_URL` ending in `/c`, `CORS_ORIGIN`, `ADMIN_EMAIL`, and `ADMIN_PASSWORD_HASH` (the existing salted scrypt format). The cloud `/api/v1/dev/token` endpoint remains disabled. Admin sessions last 30 minutes; sign in again when expired. Operator and customer authentication attempt limits use PostgreSQL with transaction locks so limits survive serverless instance changes. Configure `BLOB_READ_WRITE_TOKEN` for durable product media. Cloud uploads support up to 4 MB; larger models/videos can use hosted URLs or the existing Drive option. Local disk uploads remain available on the workstation.
+
+Run database migrations explicitly before deploying a schema change; builds do not migrate the production database. Migration `0010_unified_production_customer` reconciles both the upstream review-only database and the previously upgraded local QR/customer database, without resetting records. `npm run test:printed-stock` verifies fresh migration, reconciliation and repeat safety in a disposable database. Set `TEST_DATABASE_URL` to local PostgreSQL to keep these tests local when the workstation uses the cloud database.
+
+The NFC companion, USB/ADB tunnel and Production Console stay local. Run the local API against the same cloud `DATABASE_URL`, `JWT_SECRET` and `PUBLIC_CARD_BASE_URL`; it provides the phone pairing/tasks while sharing card/order records with the hosted API. Keep `HOST=127.0.0.1` for the local development login. Set `VITE_ADMIN_URL` to the hosted `/admin` URL when building the local console. Local NFC session routes are not registered in Vercel functions. The desktop needs internet access for the shared database; offline operation is not implemented. Existing QR/NFC links are never rewritten by deployment.
+
+The initial hosted catalog copies product configuration only. Local client profiles, test cards, orders and NFC history remain in the workstation database; they are not automatically published or migrated. Email confirmations/review invitations require a configured Resend key and verified sender. Email verification and password recovery remain future work.
+
 ## Repository layout
 
 ```text
@@ -200,7 +220,23 @@ scripts/smoke-test.mjs      End-to-end API verification
 compose.yaml                Local PostgreSQL service
 ```
 
+## Client activation, signup and public card profiles
+
+1. Generate a normal Oneinfo QR batch, print/confirm it, write the same link to NFC, and finish phone QC.
+2. In Admin → **Cards & inventory**, use **Generate secret code** on a QC-passed card. Copy the code or select **Print private slip** and give that slip to the client with their card. Code generation requires an administrator or inventory manager. The plaintext code is shown once and is never stored; if it is lost, **Replace secret code** invalidates the previous code and unfinished signup grants.
+3. On first QR/NFC scan, `/c/<card-id>` asks for the secret code. Validating it opens the signup page for 15 minutes. The client creates an email/password account, enters their public details and links, and selects **Create account & save profile**. Existing account holders can sign in and claim the card using their saved/updated profile.
+4. Account creation, profile publication, card ownership and secret consumption are saved in one transaction. Abandoning signup does not consume the code; submitting it successfully makes it unusable for another claim. Order reservation and QC do not activate or publish a client identity.
+5. Later QR/NFC scans show the owner's public profile. **Manage this card** lets its owner sign in and update their profile. Account email/password are private; only explicitly entered public contact details are displayed. Customer and operator authentication use separate token audiences.
+
+For local testing, generated URLs default to `http://127.0.0.1:5174/c`; run `npm run dev:control` along with the local API/console. The launcher's ADB connection and `npm run android:usb` forward ports 3001 and 5174 for a connected test phone. These loopback URLs work only on the workstation or a phone with the tunnel; before printing real client cards, set `PUBLIC_CARD_BASE_URL` to your hosted HTTPS customer site ending in `/c`, set its `VITE_API_URL`/API CORS origins, and serve SPA fallbacks for `/c/*`. Existing printed links remain unchanged; keep their domain/routing alive. This change does not deploy the customer site or alter existing saved QR links.
+
+Activation codes are 80-bit random values stored only as card-bound SHA-256 hashes; account passwords use salted scrypt. Public activation/signup/login endpoints have per-process attempt limits. Customer login sessions last eight hours; activation grants last 15 minutes and code rotation invalidates them. Email verification and password recovery are not included yet. Use a shared rate limiter and verified email/recovery flows before a multi-instance public launch. External/custom QR links keep their own destination and are not allocated automatically as claimable customer cards.
+
 ## Production work still required
+
+Printed QR stock and orders: in Production Console, generate and print a full batch, then tick the printing-complete checkbox and select **Confirm printed batch**. Only confirmed batches appear in Admin stock. Each ordered unit receives one unique managed Oneinfo QR, reserved automatically from the shared QR pool. An order with insufficient stock stays **Awaiting QR** (or partially assigned); confirming another batch fills pending quantities in order of receipt. Admin Orders shows assigned links and refreshes every five seconds. Allocation reserves a physical card without creating a client profile or publishing order contact data. Client ownership is established by secret-code signup, as described above. Assignment does not bypass NFC encoding or final phone QC. Production batches currently track generic QR stock, so allocation does not match catalog finishes/materials.
+
+Run `npm run test:printed-stock` for database-backed workflow checks. It creates, migrates and drops a disposable test database using the configured PostgreSQL server, with outbound confirmation emails mocked. The configured database is not populated or cleared by these tests.
 
 This is a working foundation, not a production launch. The next milestones are:
 

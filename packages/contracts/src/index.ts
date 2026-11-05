@@ -51,6 +51,7 @@ export const CreateBatchSchema = z.object({
 });
 
 export const GenerateBatchQrSchema = z.object({ cardId: z.uuid().optional() });
+export const ConfirmBatchPrintSchema = z.object({ confirmed: z.literal(true) });
 export const VerificationMethodSchema = z.enum(["QR_CAMERA", "NFC_READ"]);
 export const CreateVerificationSchema = z.object({ cardId: z.uuid(), method: VerificationMethodSchema });
 export const StartQrVerificationSchema = z.object({ scanId: z.uuid(), scannedValue: HttpUrlSchema });
@@ -146,6 +147,20 @@ export const UpdateProfileSchema = CreateProfileSchema.omit({ publicSlug: true }
 export const AssignCardSchema = z.object({
   cardId: z.uuid(),
 });
+
+export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true });
+export const CustomerPasswordSchema = z.string().min(12).max(128);
+export const CustomerEmailSchema = z.string().trim().toLowerCase().email().max(254);
+export const ActivateCardSchema = z.object({
+  secretCode: z.string().max(64).transform(value => value.replace(/[\s-]/g, "").toUpperCase())
+    .pipe(z.string().regex(/^[A-F0-9]{20}$/, "Enter the secret code supplied with your card")),
+});
+export const CustomerSignupSchema = z.object({
+  claimToken: z.string().max(2048), email: CustomerEmailSchema, password: CustomerPasswordSchema, profile: CustomerProfileSchema,
+});
+export const CustomerLoginSchema = z.object({ email: CustomerEmailSchema, password: z.string().min(1).max(128) });
+export const ClaimCardSchema = z.object({ claimToken: z.string().max(2048), profile: CustomerProfileSchema });
+export const IssueActivationCodeSchema = z.object({ replaceExisting: z.boolean().default(false) });
 
 export const PairNfcDeviceSchema = z.object({
   pairingCode: z.string().regex(/^\d{6}$/),
@@ -424,5 +439,8 @@ export type OrderReceipt = {
   confirmationEmail?: "accepted" | "failed";
   deliveredAt?: string | null;
   reviewInviteSentAt?: string | null;
+  qrAllocation?: { required: number; assigned: number; pending: number; status: "AWAITING_QR" | "PARTIAL" | "ASSIGNED" };
+
 };
-export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null };
+export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null;
+  profileId?: string | null; assignedCards?: { id: string; publicSlug: string; canonicalUrl: string; qcStatus: string }[] };

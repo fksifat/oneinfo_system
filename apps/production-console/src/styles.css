@@ -21,6 +21,8 @@ h1 { margin-bottom: 0; font-size: clamp(1.7rem, 3vw, 2.5rem); letter-spacing: -0
 h2 { margin-bottom: 10px; font-size: 1.15rem; }
 .eyebrow, .section-label { margin-bottom: 8px; color: #2a8099; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.14em; }
 header .eyebrow { color: #78c8da; }
+.header-links { display:flex; gap:16px; align-items:center; flex-wrap:wrap; }
+.header-links a { color:#a9dedf; font-size:.8rem; }
 .status { padding: 8px 12px; border: 1px solid #617687; border-radius: 999px; font-size: 0.78rem; white-space: nowrap; }
 .status.online { border-color: #71ccb8; color: #a9efdf; }
 main { flex:1; width: min(var(--page-max-width), calc(100% - 2 * var(--page-gutter))); margin: 28px auto 56px; }
@@ -116,6 +118,10 @@ footer { min-height: 50px; padding: 12px var(--page-inset); background: white; b
 .verification-controls > div button { flex:1; background:#e8eef1; color:#294253; }
 .print-settings { margin-top:22px; display:flex; align-items:end; flex-wrap:wrap; gap:12px; padding:18px; background:#f5f8fa; border-radius:10px; }
 .print-settings > div { width:100%; }
+.print-confirmation { margin-top:20px; padding:24px; }
+.print-confirmation > p { color:#536d79; line-height:1.6; }
+.print-confirmation label { display:flex; align-items:flex-start; gap:10px; margin:18px 0; line-height:1.5; }
+.print-confirmation input[type=checkbox] { width:18px; height:18px; margin:0; padding:0; flex-shrink:0; accent-color:#16778f; }
 .print-settings label { width:110px; }
 .print-settings p:last-child { width:100%; margin:0; font-size:.72rem; color:#657987; }
 .production-print { display:none; }

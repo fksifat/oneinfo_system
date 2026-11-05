@@ -20,8 +20,9 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   const [delivering, setDelivering] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
   const [orderError, setOrderError] = useState("");
+  const [ratesError, setRatesError] = useState("");
+
   const [message, setMessage] = useState("");
   const [orderMessage, setOrderMessage] = useState("");
   const [coupons, setCoupons] = useState<StoreCoupon[]>([]);
@@ -47,12 +48,13 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   }
 
   async function loadRates() {
+    setRatesError("");
     try {
       const { rates, codAdvanceTaka } = await api<{ rates: ShippingRates; codAdvanceTaka: number }>(`${path}/shipping`);
       setCodAdvance(String(CodAdvanceSchema.parse(codAdvanceTaka)));
       setRates({ insideDhaka: String(rates.insideDhaka / 100), subDhaka: String(rates.subDhaka / 100), outsideDhaka: String(rates.outsideDhaka / 100) });
     } catch {
-      setError("Could not load delivery rates.");
+      setRatesError("Could not load delivery rates.");
     }
   }
 
@@ -66,6 +68,28 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     if (settingsOpen && settingsDialog.current && !settingsDialog.current.open) settingsDialog.current.showModal();
     else if (!settingsOpen && settingsDialog.current?.open) settingsDialog.current.close();
   }, [settingsOpen]);
+
+  useEffect(() => {
+    let disposed = false;
+    let pending = false;
+    const sync = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const updated: StoreOrder[] = [];
+        let hasMore = true;
+        while (hasMore && updated.length < Math.max(50, items.length)) {
+          const page = await api<{ items: StoreOrder[]; hasMore: boolean }>(`${path}/admin${updated.length ? `?beforeId=${updated.at(-1)!.id}` : ""}`, token);
+          updated.push(...page.items); hasMore = page.hasMore;
+        }
+        if (!disposed) { setItems(updated); setHasMore(hasMore); }
+      } catch (error) { if (!disposed) setOrderError(error instanceof Error ? error.message : "Order sync failed."); }
+      finally { pending = false; }
+    };
+    const interval = window.setInterval(() => void sync(), 5000);
+    return () => { disposed = true; window.clearInterval(interval); };
+  }, [token, items.length]);
+
 
   async function loadCoupons() {
     try {
@@ -104,7 +128,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     event.preventDefault();
     if (!rates || saving) return;
     setSaving(true);
-    setError("");
+    setRatesError("");
     setMessage("");
     try {
       const values = {
@@ -115,7 +139,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       await api(`${path}/shipping`, token, { method: "PUT", body: JSON.stringify(values) });
       setMessage("Delivery rates saved.");
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not save rates.");
+      setRatesError(error instanceof Error ? error.message : "Could not save rates.");
     } finally {
       setSaving(false);
     }
@@ -174,12 +198,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
       {items.map(order => <details className="store-order" key={order.id}>
         <summary>
-          <span className="store-order-customer"><strong>{order.customer.name}</strong><small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
+          <span className="store-order-customer"><strong>{order.customer.name}</strong><small>{order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}</small><small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
           <span className="store-order-total"><strong>{bdt(order.totalMinor)}</strong><small>{order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}{order.paymentStatus === "PENDING_VERIFICATION" && <em className="store-order-status is-pending">Payment pending</em>}{order.paymentStatus === "VERIFIED" && <em className="store-order-status is-paid">Payment verified</em>}</small></span>
         </summary>
         <div className="store-order-content">
           <dl>
             <div><dt>Order ID</dt><dd>{order.id}</dd></div>
+            <div><dt>QR allocation</dt><dd>{order.qrAllocation?.assigned ?? 0} assigned · {order.qrAllocation?.pending ?? 0} awaiting printed stock</dd></div>
+            <div><dt>Client activation</dt><dd>The client claims ownership using the secret code and their account.</dd></div>
+            {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{card.publicSlug}</a> · QC {card.qcStatus}</dd></div>)}
             <div><dt>Contact</dt><dd>{order.customer.phone}<br />{order.customer.email}</dd></div>
             <div><dt>Delivery address</dt><dd>{order.deliveryAddress.addressLine}<br />{order.deliveryAddress.district}{order.deliveryAddress.postalCode && ` ${order.deliveryAddress.postalCode}`}</dd></div>
             <div><dt>Delivery charge</dt><dd>{shippingZoneLabels[order.shippingZone]} · {bdt(order.shippingMinor)}</dd></div>
@@ -230,11 +257,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
         <button disabled={saving}>{saving ? "Saving…" : "Save rates"}</button>
       </form> : <button type="button" onClick={() => void loadRates()}>Load rates</button>}
         {message && <p className="store-order-feedback" role="status">{message}</p>}
-        {error && <p className="store-order-feedback is-error" role="alert">{error}</p>}
+        {ratesError && <p className="store-order-feedback is-error" role="alert">{ratesError}</p>}
       </section>
       <section className="store-settings-card">
         <div className="panel-head"><div><h2>Coupons</h2></div></div>
         <form className="store-order-rates store-coupon-form" onSubmit={saveCoupon}>
+
         <label>Coupon code<input required value={couponCode} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9_\-]{2,31}"
           onChange={event => setCouponCode(event.target.value.toUpperCase())} disabled={savingCoupon} /></label>
         <label>Discount (%)<input required type="number" min="1" max="100" value={couponPercent}
@@ -255,6 +283,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
         }}>Edit {coupon.code}</button>
       </div>)}</div>
     </section>
+
     </section>
     </dialog>
   </div>;

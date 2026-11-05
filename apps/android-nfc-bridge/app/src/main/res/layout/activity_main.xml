@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:fitsSystemWindows="true" android:background="#F2F6F7">
-<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="20dp">
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:fitsSystemWindows="true" android:background="#F2F6F7">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="16dp">
     <TextView style="@style/Eyebrow" android:text="ONEINFO / WORKSPACE" />
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Your card workshop" android:textColor="#123344" android:textSize="27sp" android:textStyle="bold" android:layout_marginTop="6dp" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Your card workshop" android:textColor="#123344" android:textSize="22sp" android:textStyle="bold" android:layout_marginTop="4dp" />
     <TextView android:id="@+id/connectionStatus" style="@style/BodyText" android:text="Not paired · Connect your workstation" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp">
         <Button android:id="@+id/tabProduction" style="@style/TabButton" android:text="Production" />
         <Button android:id="@+id/tabTools" style="@style/TabButton" android:text="NFC tools" />
         <Button android:id="@+id/tabConnect" style="@style/TabButton" android:text="Connect" />
     </LinearLayout>
-    <TextView android:id="@+id/status" style="@style/BodyText" android:layout_marginTop="12dp" android:background="@drawable/panel" android:padding="16dp" android:accessibilityLiveRegion="polite" android:text="Pair your workstation to get started." />
-    <Button android:id="@+id/cancelTask" style="@style/SecondaryButton" android:text="Stop waiting for tag" android:visibility="gone" />
+</LinearLayout>
+    <TextView android:id="@+id/status" style="@style/BodyText" android:layout_marginHorizontal="16dp" android:layout_marginBottom="10dp" android:background="@drawable/panel" android:padding="12dp" android:maxLines="4" android:ellipsize="end" android:accessibilityLiveRegion="polite" android:text="Pair your workstation to get started." />
+    <Button android:id="@+id/cancelTask" style="@style/SecondaryButton" android:layout_marginHorizontal="16dp" android:text="Stop waiting for tag" android:visibility="gone" />
+<ScrollView android:id="@+id/contentScroll" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:paddingHorizontal="16dp" android:paddingBottom="20dp">
     <LinearLayout android:id="@+id/productionPanel" style="@style/PanelLayout">
         <TextView style="@style/Eyebrow" android:text="CARD PRODUCTION" />
         <TextView style="@style/SectionTitle" android:text="From print to finished card" />
@@ -49,3 +52,4 @@
     <TextView style="@style/BodyText" android:text="ONEINFO · Production &amp; NFC tools" android:gravity="center" android:layout_marginTop="20dp" android:textSize="11sp" />
 </LinearLayout>
 </ScrollView>
+</LinearLayout>

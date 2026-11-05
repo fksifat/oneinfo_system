@@ -113,6 +113,7 @@ async function requireDevice(request: FastifyRequest): Promise<NfcDevice> {
     devices.delete(device.id);
     throw Object.assign(new Error("NFC station has been revoked"), { statusCode: 401 });
   }
+  await deviceOperator(device);
   device.lastSeenAt = new Date();
   return device;
 }
@@ -301,7 +302,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     }
     assertStationIdle(device.stationId);
     const [card] = await db.select().from(cards).where(eq(cards.id, scan.cardId)).limit(1);
-    if (!card || card.qrStatus !== "GENERATED" || card.nfcStatus === "WRITTEN" || card.qcStatus === "PASSED" || card.profileId) {
+    if (!card || card.qrStatus !== "GENERATED" || card.nfcStatus === "WRITTEN" || card.qcStatus !== "PENDING" || card.lifecycleStatus !== "IN_PRODUCTION") {
       throw Object.assign(new Error("This card is not awaiting NFC encoding. Use final QC for a written card."), { statusCode: 409 });
     }
     const [job] = await db.select().from(productionJobs).where(and(eq(productionJobs.cardId, card.id), eq(productionJobs.type, "NFC_ENCODING"))).limit(1);
@@ -327,7 +328,8 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!job) throw Object.assign(new Error("QC production job not found"), { statusCode: 404 });
     if (job.status !== "COMPLETED") await claimProductionJob(job.id, { idempotencyKey: sessionId }, operator, device);
     const result = await saveQualityCheck(job.id, { idempotencyKey: sessionId, result: "PASSED", evidenceReference: `phone-scans://${sessionId}` }, operator, device, request.id);
-    return sendCreated(reply, { ...result, qcStatus: "PASSED" });
+    const [card] = await db.select({ inventoryStatus: cards.inventoryStatus }).from(cards).where(eq(cards.id, session.cardId));
+    return sendCreated(reply, { ...result, qcStatus: "PASSED", inventoryStatus: card!.inventoryStatus });
   });
 
   app.post("/device/verification-from-qr", async (request, reply) => {

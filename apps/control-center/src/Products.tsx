@@ -82,7 +82,7 @@ export function Products({ token }: { token: string }) {
   const previewPrice = preview ? toVariant(preview) : null;
   return <section className="products-admin">
     <div className="catalog-toolbar"><div><h2>Your card collection</h2><p>{items.length} products · Manage colours, pricing and visibility.</p></div><button className="catalog-primary" onClick={() => edit()}>+ New product</button></div>
-    <div className="catalog-filters"><input aria-label="Search products" placeholder="Search products or status…" value={search} onChange={e => setSearch(e.target.value)} /><button className="catalog-secondary" onClick={() => void load()}>Refresh collection</button><a href="http://127.0.0.1:5175/#products" target="_blank" rel="noreferrer">View storefront ↗</a></div>
+    <div className="catalog-filters"><input aria-label="Search products" placeholder="Search products or status…" value={search} onChange={e => setSearch(e.target.value)} /><button className="catalog-secondary" onClick={() => void load()}>Refresh collection</button><a href={`${import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175"}/#products`} target="_blank" rel="noreferrer">View storefront ↗</a></div>
     {error && !editing && <p role="alert" className="product-error">{error}</p>}{notice && <p role="status" className="catalog-notice">{notice}</p>}
     {!loaded && !error && <p>Loading products…</p>}
     <div className="product-admin-grid">{filtered.map(p => <article className="product-admin-card" key={p.id}>

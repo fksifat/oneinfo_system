@@ -11,7 +11,7 @@ export async function api<T>(path: string, token?: string, init: RequestInit = {
   headers.set("x-request-id", crypto.randomUUID());
   const response = await fetch(`${API_URL}${path}`, { ...init, headers });
   const body = (await response.json()) as T & { message?: string };
-  if (response.status === 401 && body.message === "Invalid or expired operator token" && token && retry) {
+  if (response.status === 401 && body.message === "Invalid or expired operator token" && token && retry && import.meta.env.VITE_OPERATOR_LOGIN !== "password") {
     renewal ??= api<{ accessToken: string }>("/api/v1/dev/token", undefined, { method: "POST" }).then((result) => result.accessToken)
       .finally(() => { renewal = undefined; });
     const renewed = await renewal;
@@ -38,5 +38,5 @@ export async function uploadProductMedia(file: Blob, extension: string, token: s
 export function productMediaUrl(path: string) {
   const source = resolveProductImageUrl(path);
   const base = source.startsWith("/api/v1/product-media/") ? API_URL : import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175";
-  return new URL(source, base).href;
+  return new URL(source, base || window.location.origin).href;
 }

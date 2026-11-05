@@ -46,11 +46,28 @@ export function App() {
   const [message, setMessage] = useState("Ready");
   const [busy, setBusy] = useState(false);
   const [pairing, setPairing] = useState<{ pairingCode: string; expiresAt: string } | null>(null);
-  const [activeTab, setActiveTab] = useState("production");
+  const [activeTab, setActiveTab] = useState(() => ["tools", "connection"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "production");
   const [devices, setDevices] = useState<{ id: string; name: string; online: boolean; lastSeenAt: string }[]>([]);
   const [connectionError, setConnectionError] = useState("");
 
   const configured = Boolean(credentials.accessToken && credentials.stationKey);
+  const pairingExpired = pairing ? Date.parse(pairing.expiresAt) <= Date.now() : false;
+  useEffect(() => {
+    const changed = () => { const tab = window.location.hash.slice(1); setActiveTab(["tools", "connection"].includes(tab) ? tab : "production"); window.scrollTo(0, 0); };
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
+
+  useEffect(() => {
+    const revoked = (event: Event) => {
+      if ((event as CustomEvent<string>).detail !== credentials.stationKey.split(".")[0]) return;
+      localStorage.removeItem("oneinfo.credentials");
+      setCredentials(emptyCredentials);
+      setMessage("This station was removed or revoked in Admin. Register the workstation again.");
+    };
+    window.addEventListener("oneinfo-station-revoked", revoked);
+    return () => window.removeEventListener("oneinfo-station-revoked", revoked);
+  }, [credentials.stationKey]);
 
   const saveCredentials = (next: Credentials) => {
     localStorage.setItem("oneinfo.credentials", JSON.stringify(next));
@@ -149,30 +166,30 @@ export function App() {
           <p className="eyebrow">ONEINFO OPERATIONS</p>
           <h1>QR and NFC Production</h1>
         </div>
-        <span className={configured ? "status online" : "status"}>{configured ? "Station ready" : "Setup required"}</span>
+        <div className="header-links"><a href={import.meta.env.VITE_ADMIN_URL ?? "http://127.0.0.1:5174"} target="_blank" rel="noreferrer">Admin panel ↗</a><span className={configured ? "status online" : "status"}>{configured ? "Station ready" : "Setup required"}</span></div>
       </header>
 
-      {configured ? <nav className="workspace-nav" aria-label="Workspace">{([["production", "01", "Production"], ["tools", "02", "NFC tools"], ["connection", "03", "Connection"]] as const).map(([id, number, label]) => <button key={id} aria-pressed={activeTab === id} onClick={() => setActiveTab(id)}><span>{number}</span>{label}</button>)}<span className="connection-indicator">{connectionError ? "API unavailable" : devices.some((device) => device.online) ? "Phone connected" : "No phone online"}</span></nav> : null}
+      {configured ? <nav className="workspace-nav" aria-label="Workspace">{([["production", "01", "Production"], ["tools", "02", "NFC tools"], ["connection", "03", "Connection"]] as const).map(([id, number, label]) => <button key={id} aria-pressed={activeTab === id} onClick={() => { window.location.hash = id; }}><span>{number}</span>{label}</button>)}<span className="connection-indicator">{connectionError ? "API unavailable" : devices.some((device) => device.online) ? "NFC device connected" : "No NFC device online"}</span></nav> : null}
       <main>
         {!configured ? (
           <section className="panel setup-panel">
             <p className="section-label">First-run setup</p>
             <h2>Register this workstation</h2>
             <p>The development flow creates an administrator token and a revocable station credential.</p>
-            <label>
+            <form onSubmit={event => { event.preventDefault(); void bootstrap(); }}><label>
               Station code
-              <input value={stationCode} onChange={(event) => setStationCode(event.target.value)} />
+              <input required minLength={3} maxLength={64} pattern="[A-Za-z0-9_-]+" title="Use letters, numbers, dashes or underscores" value={stationCode} onChange={(event) => setStationCode(event.target.value)} />
             </label>
-            <button disabled={busy} onClick={() => void bootstrap()}>Register workstation</button>
+            <button disabled={busy} type="submit">{busy ? "Registering…" : "Register workstation"}</button></form>
           </section>
         ) : (
           <>
             <ProductionDesk visible={activeTab === "production"} credentials={credentials} busy={busy} onBusy={setBusy} onMessage={setMessage} onChanged={refreshJobs} />
 
-            <div hidden={activeTab !== "tools"}><NfcTools credentials={credentials} onMessage={setMessage} /></div>
+            <div hidden={activeTab !== "tools"}><NfcTools credentials={credentials} connected={devices.some(device => device.online)} onMessage={setMessage} /></div>
             <section hidden={activeTab !== "connection"} className="panel desktop-nfc-panel">
               <div><p className="section-label">LOCAL NFC DEVICE</p><h2>Your connected workstation</h2><p>Pair your Android companion over USB or wireless ADB. Keep the API and port 3001 tunnel running.</p></div>
-              {pairing ? <div className="pairing-code"><small>PAIRING CODE</small><strong>{pairing.pairingCode}</strong><span>Expires {new Date(pairing.expiresAt).toLocaleTimeString()}</span></div> : null}
+              {pairing ? <div className="pairing-code" role="status"><small>PAIRING CODE</small><strong>{pairingExpired ? "Expired" : pairing.pairingCode}</strong><span>{pairingExpired ? "Create a new pairing code to connect" : `Expires ${new Date(pairing.expiresAt).toLocaleTimeString()}`}</span></div> : null}
               <div className="nfc-bridge-actions"><button className="secondary" disabled={busy} onClick={() => void createDesktopPairing()}>{pairing ? "New pairing code" : "Pair NFC device"}</button></div>
             </section>
 

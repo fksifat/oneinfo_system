@@ -74,7 +74,8 @@ async function connectPhone(apiPort) {
     }
     if (!serial) { console.log("Phone tunnel skipped. Connect/authorize one phone, or set ANDROID_SERIAL for multiple devices."); return; }
     await capture(["-s", serial, "reverse", "tcp:3001", `tcp:${apiPort}`]);
-    console.log("Android NFC tunnel ready (USB or wireless ADB).");
+    await capture(["-s", serial, "reverse", "tcp:5174", "tcp:5174"]);
+    console.log("Android NFC/API and local card-page tunnels ready (USB or wireless ADB). Run the Admin app on port 5174 for card pages.");
   } catch { console.log("ADB tunnel was not set up. You can connect the phone later from the Connection instructions."); }
 }
 

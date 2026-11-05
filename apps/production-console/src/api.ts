@@ -34,7 +34,10 @@ export async function api<T>(
     localStorage.setItem("oneinfo.credentials", JSON.stringify(renewed));
     return api<T>(path, init, renewed, false);
   }
-  if (!response.ok) throw new Error(body.message ?? `Request failed (${response.status})`);
+  if (response.status === 401 && credentials?.stationKey && ["Invalid station credential", "Invalid or revoked station credential"].includes(body.message ?? "")) {
+    window.dispatchEvent(new CustomEvent("oneinfo-station-revoked", { detail: credentials.stationKey.split(".")[0] ?? "" }));
+  }
+  if (!response.ok) throw Object.assign(new Error(body.message ?? `Request failed (${response.status})`), { status: response.status });
   return body;
 }
 

@@ -1,18 +1,25 @@
 import { Orders } from "./Orders.js";
 import { Products } from "./Products.js";
 import { Reviews } from "./Reviews.js";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "./api.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
-import { contactVcard } from "./contact.js";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { api } from "./api.js";
+import { ProfileView } from "./ProfileView.js";
+import { CardPortal } from "./CardPortal.js";
+import { ActivationCode } from "./ActivationCode.js";
+import { CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 
 type View = "orders" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
-const viewIds: View[] = ["overview", "products", "orders", "reviews", "profiles", "cards", "batches", "production", "stations", "audit"];
+const nav: { id: View; label: string; icon: string }[] = [
+  { id: "overview", label: "Overview", icon: "◫" }, { id: "products", label: "Products", icon: "▣" },
+  { id: "orders", label: "Orders", icon: "≡" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
+  { id: "cards", label: "Cards & inventory", icon: "▱" }, { id: "batches", label: "Production batches", icon: "▦" },
+  { id: "production", label: "NFC & QR operations", icon: "⌁" }, { id: "stations", label: "Stations", icon: "⌂" },
+  { id: "audit", label: "Audit history", icon: "≡" },
+];
+const currentView = () => nav.find(item => item.id === window.location.hash.slice(1))?.id ?? "overview";
+const PRODUCTION_URL = (import.meta.env.VITE_PRODUCTION_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
 
-function viewFromHash(): View {
-  const hash = window.location.hash.slice(1) as View;
-  return viewIds.includes(hash) ? hash : "overview";
-}
 
 interface Overview {
   profiles: number;
@@ -48,6 +55,7 @@ interface Card {
   publicSlug: string;
   canonicalUrl: string;
   profileId: string | null;
+  customerAccountId: string | null;
   lifecycleStatus: string;
   qrStatus: string;
   nfcStatus: string;
@@ -56,8 +64,8 @@ interface Card {
   createdAt: string;
 }
 
-interface CardRow { card: Card; profileName: string | null }
-interface Batch { id: string; batchCode: string; productVariantId: string; plannedQuantity: number; status: string; createdAt: string }
+interface CardRow { card: Card; profileName: string | null; imageData: string | null; activationCodeIssuedAt: string | null }
+interface Batch { id: string; batchCode: string; productVariantId: string; plannedQuantity: number; status: string; createdAt: string; total: number; qrGenerated: number; nfcWritten: number; qcPassed: number }
 interface Station { id: string; stationCode: string; name: string; status: string; lastSeenAt: string | null; createdAt: string }
 interface Audit { id: string; action: string; targetType: string; targetId: string; createdAt: string }
 
@@ -127,56 +135,42 @@ function PublicProfile({ slug }: { slug: string }) {
 
   if (error) return <div className="profile-page"><div className="profile-error"><span>ONEINFO</span><h1>Profile unavailable</h1><p>{error}</p></div></div>;
   if (!data) return <div className="profile-page"><div className="profile-loader">Loading Oneinfo profile…</div></div>;
-  const { profile, links } = data;
-  return (
-    <div className={`profile-page theme-${profile.theme.toLowerCase()}`}>
-      <main className="public-profile">
-        <div className="profile-brand"><i></i> ONEINFO</div>
-        <div className="public-avatar">{profile.avatarUrl ? <img src={profile.avatarUrl} alt="" /> : initials(profile.displayName)}</div>
-        <p className="profile-kicker">DIGITAL BUSINESS PROFILE</p>
-        <h1>{profile.displayName}</h1>
-        <p className="public-headline">{profile.headline}{profile.company ? ` · ${profile.company}` : ""}</p>
-        {profile.bio ? <p className="public-bio">{profile.bio}</p> : null}
-        <div className="contact-actions">
-          {profile.phone ? <a href={`tel:${profile.phone}`}>Call</a> : null}
-          {profile.email ? <a href={`mailto:${profile.email}`}>Email</a> : null}
-          <button type="button" onClick={() => navigator.clipboard.writeText(window.location.href)}>Copy link</button>
-        </div>
-        <div className="public-links">
-          {profile.website ? <a href={profile.website} target="_blank" rel="noreferrer"><span>Website</span><b>↗</b></a> : null}
-          {links.map((link) => <a key={link.id ?? link.url} href={link.url} target="_blank" rel="noreferrer"><span>{link.label}</span><b>↗</b></a>)}
-        </div>
-        <button className="save-contact" type="button" onClick={() => {
-          const url = URL.createObjectURL(new Blob([contactVcard(profile)], { type: "text/vcard;charset=utf-8" }));
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = `${profile.publicSlug}.vcf`;
-          link.click();
-          window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-        }}>Save contact details</button>
-        <small className="profile-footer">Powered by Oneinfo · NFC + QR</small>
-      </main>
-    </div>
-  );
+  return <ProfileView data={data} />;
 }
 
 export function App() {
+  const cardPath = window.location.pathname.match(/^\/c\/([A-Za-z0-9_-]{1,64})(?:\/(?:signup|login|edit))?\/?$/);
+  if (cardPath) return <CardPortal slug={cardPath[1]!} />;
   const profileSlug = new URLSearchParams(window.location.search).get("profile");
   if (profileSlug) return <PublicProfile slug={profileSlug} />;
 
   const [token, setToken] = useState(() => localStorage.getItem("oneinfo.admin.token") ?? "");
-  const [view, setView] = useState<View>(viewFromHash);
+  const [view, setView] = useState<View>(currentView);
   const [ordersSettingsOpen, setOrdersSettingsOpen] = useState(false);
+
   const [overview, setOverview] = useState<Overview | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [cards, setCards] = useState<CardRow[]>([]);
+  const [cardPages, setCardPages] = useState(1);
+  const [moreCards, setMoreCards] = useState(false);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [audits, setAudits] = useState<Audit[]>([]);
   const [editing, setEditing] = useState<(ProfileDraft & { id?: string }) | null>(null);
+  const [profileError, setProfileError] = useState("");
   const [message, setMessage] = useState("System ready");
   const [busy, setBusy] = useState(false);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [search, setSearch] = useState("");
+  const [syncError, setSyncError] = useState("");
+  const [lastSynced, setLastSynced] = useState("");
+  const refreshing = useRef(false);
+  useEffect(() => {
+    const changed = () => { setView(currentView()); window.scrollTo(0, 0); };
+    window.addEventListener("hashchange", changed);
+    return () => window.removeEventListener("hashchange", changed);
+  }, []);
 
   useEffect(() => {
     const expired = () => { localStorage.removeItem("oneinfo.admin.token"); setToken(""); };
@@ -185,16 +179,6 @@ export function App() {
   }, []);
   useEffect(() => { setOrdersSettingsOpen(false); }, [view]);
 
-  useEffect(() => {
-    const syncView = () => {
-      const next = viewFromHash();
-      if (window.location.hash !== `#${next}`) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${next}`);
-      setView(next);
-    };
-    syncView();
-    window.addEventListener("hashchange", syncView);
-    return () => window.removeEventListener("hashchange", syncView);
-  }, []);
 
   const bootstrap = async () => {
     setBusy(true);
@@ -209,12 +193,21 @@ export function App() {
   };
 
   const refresh = useCallback(async () => {
-    if (!token) return;
+    if (!token || refreshing.current) return;
+    refreshing.current = true;
     try {
       const [summary, profileList, cardList, batchList, stationList, auditList] = await Promise.all([
         api<Overview>("/api/v1/admin/overview", token),
         api<{ items: Profile[] }>("/api/v1/profiles", token),
-        api<{ items: CardRow[] }>("/api/v1/admin/cards", token),
+        (async () => {
+          const items: CardRow[] = [];
+          let hasMore = true;
+          for (let page = 0; page < cardPages && hasMore; page++) {
+            const response = await api<{ items: CardRow[]; hasMore: boolean }>(`/api/v1/admin/cards${items.length ? `?beforeId=${items.at(-1)!.card.id}` : ""}`, token);
+            items.push(...response.items); hasMore = response.hasMore;
+          }
+          return { items, hasMore };
+        })(),
         api<{ items: Batch[] }>("/api/v1/admin/batches", token),
         api<{ items: Station[] }>("/api/v1/admin/stations", token),
         api<{ items: Audit[] }>("/api/v1/admin/audit-logs", token),
@@ -222,17 +215,28 @@ export function App() {
       setOverview(summary);
       setProfiles(profileList.items);
       setCards(cardList.items);
+      setMoreCards(cardList.hasMore);
       setBatches(batchList.items);
       setStations(stationList.items);
       setAudits(auditList.items);
+      setSyncError("");
+      setLastSynced(new Date().toLocaleTimeString());
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not refresh data");
-    }
-  }, [token]);
+      const message = error instanceof Error ? error.message : "Could not refresh data";
+      setSyncError(message); setMessage(message);
+    } finally { refreshing.current = false; }
+  }, [token, cardPages]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 5000);
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => { window.clearInterval(interval); window.removeEventListener("focus", onFocus); };
+  }, [refresh]);
 
   const editProfile = async (profile: Profile) => {
+    setProfileError("");
     setBusy(true);
     try {
       const detail = await api<Profile>(`/api/v1/profiles/${profile.id}`, token);
@@ -242,21 +246,26 @@ export function App() {
   };
 
   const saveProfile = async () => {
-    if (!editing) return;
+    if (!editing || busy) return;
+    setProfileError("");
+    const parsed = (editing.id ? UpdateProfileSchema : CreateProfileSchema).safeParse(editing);
+    if (!parsed.success) { setProfileError(parsed.error.issues[0]?.message ?? "Check your profile details."); return; }
     setBusy(true);
     try {
-      const { id, ...payload } = editing;
+      const { id } = editing;
+      const payload = parsed.data;
       const saved = id
         ? await api<Profile>(`/api/v1/profiles/${id}`, token, { method: "PATCH", body: JSON.stringify(payload) })
         : await api<Profile>("/api/v1/profiles", token, { method: "POST", body: JSON.stringify(payload) });
       setEditing(null);
       setMessage(`${saved.displayName} saved`);
       await refresh();
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not save profile"); }
+    } catch (error) { setProfileError(error instanceof Error ? error.message : "Could not save profile"); }
     finally { setBusy(false); }
   };
 
   const revokeStation = async (station: Station) => {
+    if (!window.confirm(`Revoke ${station.stationCode}? Its connected devices will lose access until the workstation is registered again.`)) return;
     setBusy(true);
     try {
       await api(`/api/v1/admin/stations/${station.id}/revoke`, token, { method: "POST" });
@@ -275,33 +284,32 @@ export function App() {
         <p className="eyebrow">CONTROL CENTER</p>
         <h1>Run the entire card lifecycle.</h1>
         <p>Manage client profiles, cards, production batches, NFC/QR operations, stations, inventory, and audit history.</p>
-        <button disabled={busy} onClick={() => void bootstrap()}>Enter development workspace</button>
-        <small>Development authentication only. Connect the production identity provider before launch.</small>
+        {import.meta.env.VITE_OPERATOR_LOGIN === "password" ? <form className="admin-login" onSubmit={event => {
+          event.preventDefault(); if (busy) return; setBusy(true); setMessage("");
+          void api<{ accessToken: string }>("/api/v1/auth/login", undefined, { method: "POST", body: JSON.stringify({ email: loginEmail, password: loginPassword }) })
+            .then(result => { localStorage.setItem("oneinfo.admin.token", result.accessToken); setToken(result.accessToken); setLoginPassword(""); })
+            .catch(error => setMessage(error instanceof Error ? error.message : "Could not sign in."))
+            .finally(() => setBusy(false));
+        }}>
+          <label>Email<input type="email" autoComplete="username" required value={loginEmail} onChange={event => setLoginEmail(event.target.value)} /></label>
+          <label>Password<input type="password" autoComplete="current-password" required maxLength={256} value={loginPassword} onChange={event => setLoginPassword(event.target.value)} /></label>
+          <button disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
+        </form> : <><button disabled={busy} onClick={() => void bootstrap()}>Enter development workspace</button><small>Local development workspace</small></>}
+        {message && <p role="alert">{message}</p>}
       </section>
       <aside className="auth-visual"><div className="auth-card-art"><span>ONEINFO</span><strong>CONTROL<br />CENTER</strong><small>IDENTITY · PRODUCTION · INVENTORY</small></div></aside>
     </div>
   );
 
-  const nav: { id: View; label: string }[] = [
-    { id: "overview", label: "Overview" },
-    { id: "products", label: "Products" },
-    { id: "orders", label: "Orders" },
-    { id: "reviews", label: "Reviews" },
-    { id: "profiles", label: "Client profiles" },
-    { id: "cards", label: "Cards & inventory" },
-    { id: "batches", label: "Production batches" },
-    { id: "production", label: "NFC & QR operations" },
-    { id: "stations", label: "Stations" },
-    { id: "audit", label: "Audit history" },
-  ];
 
   return (
     <div className="control-shell">
       <aside className="sidebar">
         <div className="logo light"><img src={oneinfoLogo} alt="Oneinfo" /></div>
         <p className="workspace-label">OPERATIONS WORKSPACE</p>
-        <nav>{nav.map((item) => <button type="button" key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => { if (window.location.hash !== `#${item.id}`) window.location.hash = item.id; }}><NavIcon name={item.id} />{item.label}</button>)}</nav>
-        <div className="sidebar-foot"><span className="health-dot"></span><div><strong>API connected</strong><small>Development environment</small></div></div>
+        <nav aria-label="Admin pages">{nav.map((item) => <button key={item.id} aria-current={view === item.id ? "page" : undefined} className={view === item.id ? "active" : ""} onClick={() => { window.location.hash = item.id; }}><NavIcon name={item.id} />{item.label}</button>)}</nav>
+        <div className="sidebar-foot"><span className={`health-dot ${syncError ? "offline" : ""}`}></span><div><strong>{syncError ? "API disconnected" : lastSynced ? "Live API connected" : "Connecting…"}</strong><small>{lastSynced ? `Synced ${lastSynced} · every 5s` : "Connecting to shared production API"}</small></div></div>
+
       </aside>
 
       <main className="workspace">
@@ -309,6 +317,8 @@ export function App() {
           <div><p className="eyebrow">{view.replaceAll("_", " ")}</p><h1>{nav.find((item) => item.id === view)?.label}</h1></div>
           <div className="header-tools">{view === "orders" && <button className="quiet" onClick={() => setOrdersSettingsOpen(true)}>Settings</button>}<button className="quiet" onClick={() => void refresh()}>Refresh</button><div className="user-chip">FA</div></div>
         </header>
+        {syncError && <div className="workspace-error" role="alert"><span>Live updates paused: {syncError}</span><button className="quiet" onClick={() => void refresh()}>Retry connection</button></div>}
+        {!lastSynced && !syncError && <p role="status">Loading your workspace…</p>}
 
         {view === "overview" && overview ? <section className="dashboard">
           <div className="metric-grid">
@@ -333,25 +343,31 @@ export function App() {
         {view === "reviews" ? <Reviews token={token} /> : null}
 
         {view === "profiles" ? <section>
-          <div className="list-toolbar"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => setEditing({ ...blankProfile })}>New client profile</button></div>
+          <div className="list-toolbar"><input type="search" aria-label="Search client profiles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => { setProfileError(""); setEditing({ ...blankProfile }); }}>New client profile</button></div>
           <div className="profile-grid">{filteredProfiles.map((profile) => <article className="profile-tile" key={profile.id}>
             <div className={`tile-cover theme-${profile.theme.toLowerCase()}`}></div><div className="tile-avatar">{initials(profile.displayName)}</div>
             <span className={profile.published ? "pill success" : "pill"}>{profile.published ? "Published" : "Draft"}</span>
             <h3>{profile.displayName}</h3><p>{profile.headline || "No headline"}{profile.company ? ` · ${profile.company}` : ""}</p>
             <small>oneinfo / {profile.publicSlug}</small><div className="tile-actions"><button onClick={() => void editProfile(profile)}>Edit</button>{profile.published ? <a href={`?profile=${profile.publicSlug}`} target="_blank">Open profile ↗</a> : null}</div>
           </article>)}</div>
-          {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Create the first digital identity, then assign a QC-passed card." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
+          {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
         </section> : null}
 
-        {view === "cards" ? <DataPanel title="Cards and inventory" columns={["Card", "Profile", "QR", "NFC", "QC", "Inventory"]} rows={cards.map(({ card, profileName }) => [card.publicSlug, profileName ?? "Unassigned", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus])} /> : null}
-        {view === "batches" ? <DataPanel title="Production batches" columns={["Batch", "Variant", "Quantity", "Status", "Created"]} rows={batches.map((batch) => [batch.batchCode, batch.productVariantId, String(batch.plannedQuantity), batch.status, formatDate(batch.createdAt)])} /> : null}
+        {view === "cards" ? <><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
+          <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <button onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button>}</> : null}
+        {view === "batches" ? <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map((batch) => [batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status, <a href={`${PRODUCTION_URL}/?batch=${encodeURIComponent(batch.id)}`} target="_blank" rel="noreferrer">Open batch ↗</a>])} /> : null}
         {view === "stations" ? <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">ACCESS CONTROL</p><h2>Production stations</h2></div></div><div className="data-table"><div className="data-row data-header"><span>Station</span><span>Status</span><span>Last seen</span><span>Action</span></div>{stations.map((station) => <div className="data-row station-row" key={station.id}><span><strong>{station.stationCode}</strong><small>{station.name}</small></span><span><b className={`status-text ${station.status.toLowerCase()}`}>{station.status}</b></span><span>{formatDate(station.lastSeenAt)}</span><span>{station.status === "ACTIVE" ? <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button> : "—"}</span></div>)}</div></section> : null}
         {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
-        {view === "production" ? <section className="production-hub"><article className="production-hero"><p className="eyebrow">PHYSICAL PRODUCTION</p><h2>QR, NFC and quality control.</h2><p>Operators use the dedicated local station console to claim authorized jobs, generate QR artifacts, write NDEF URI records, verify tag read-back, and record QC results.</p><a href="http://localhost:5173" target="_blank">Open production console ↗</a></article><div className="operation-grid"><Operation number="01" title="QR generation" text="Produce PNG assets, record checksums, and retain the canonical card URL." /><Operation number="02" title="NFC encoding" text="Write the same URL through Android USB or a PC/SC reader and verify tag read-back." /><Operation number="03" title="Quality control" text="Gate saleable inventory on QR, NFC, visual, and policy checks." /></div><p className="hardware-note"><strong>Local hardware:</strong> connect an NFC-capable Android phone through ADB, or use a PC/SC USB reader. The management system remains local.</p></section> : null}
+        {view === "production" ? <section className="production-hub">
+          <article className="panel connected-production-head"><div><p className="eyebrow">CONNECTED PRODUCTION WORKSPACE</p><h2>QR, NFC and final QC</h2><p>The console below uses the same database and API as this admin panel. Batches, cards, inventory and QC updates sync automatically within five seconds.</p></div><a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open full console ↗</a></article>
+          {overview ? <div className="metric-grid"><Metric label="Production batches" value={overview.batches} detail="Shared with the console" /><Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} QC approved and saleable`} /><Metric label="Pending jobs" value={overview.pendingJobs} detail="QR, NFC and QC" /><Metric label="Active stations" value={overview.stations} detail="Managed by this admin panel" /></div> : null}
+          <iframe className="production-frame" src={PRODUCTION_URL} title="Connected Oneinfo production console" />
+          <p className="hardware-note">Use the console's registered station and pair your phone there. Operator credentials stay in the console; no access tokens are sent in links.</p>
+        </section> : null}
       </main>
 
       <footer className="status-bar"><span className={busy ? "working" : ""}></span>{busy ? "Working…" : message}</footer>
-      {editing ? <ProfileEditor value={editing} setValue={setEditing} onClose={() => setEditing(null)} onSave={() => void saveProfile()} busy={busy} /> : null}
+      {editing ? <ProfileEditor value={editing} setValue={setEditing} onClose={() => { setEditing(null); setProfileError(""); }} onSave={() => void saveProfile()} busy={busy} error={profileError} /> : null}
     </div>
   );
 }
@@ -360,25 +376,24 @@ function Metric({ label, value, detail, highlight = false }: { label: string; va
   return <article className={`metric ${highlight ? "highlight" : ""}`}><span>{label}</span><strong>{value.toLocaleString()}</strong><small>{detail}</small></article>;
 }
 
-function Operation({ number, title, text }: { number: string; title: string; text: string }) {
-  return <article className="operation"><span>{number}</span><h3>{title}</h3><p>{text}</p></article>;
-}
-
 function Empty({ title, text, action, onAction }: { title: string; text: string; action: string; onAction: () => void }) {
   return <div className="empty-state"><span>◎</span><h2>{title}</h2><p>{text}</p><button onClick={onAction}>{action}</button></div>;
 }
 
-function DataPanel({ title, columns, rows }: { title: string; columns: string[]; rows: string[][] }) {
-  return <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">SYSTEM RECORDS</p><h2>{title}</h2></div><span>{rows.length} records</span></div><div className="data-table"><div className="data-row data-header" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(120px, 1fr))` }}>{columns.map((column) => <span key={column}>{column}</span>)}</div>{rows.map((row, index) => <div className="data-row" key={index} style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(120px, 1fr))` }}>{row.map((cell, cellIndex) => <span key={cellIndex}>{cell}</span>)}</div>)}</div>{rows.length === 0 ? <p className="empty">No records yet</p> : null}</section>;
+function DataPanel({ title, columns, rows }: { title: string; columns: string[]; rows: ReactNode[][] }) {
+  return <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">SYSTEM RECORDS</p><h2>{title}</h2></div><span>{rows.length} records</span></div><div className="data-table" role="region" aria-label={title} tabIndex={0}><table aria-label={title}><thead><tr>{columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>{rows.length === 0 ? <p className="empty">No records yet</p> : null}</section>;
 }
 
-function ProfileEditor({ value, setValue, onClose, onSave, busy }: { value: ProfileDraft & { id?: string }; setValue: (value: ProfileDraft & { id?: string }) => void; onClose: () => void; onSave: () => void; busy: boolean }) {
+function ProfileEditor({ value, setValue, onClose, onSave, busy, error }: { value: ProfileDraft & { id?: string }; setValue: (value: ProfileDraft & { id?: string }) => void; onClose: () => void; onSave: () => void; busy: boolean; error: string }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { const element = dialog.current; const opener = document.activeElement as HTMLElement | null; element?.showModal(); return () => { element?.close(); opener?.focus(); }; }, []);
   const update = (field: keyof typeof blankProfile, next: unknown) => setValue({ ...value, [field]: next });
   const addLink = () => update("links", [...value.links, { label: "", url: "https://", sortOrder: value.links.length, active: true }]);
-  return <div className="editor-overlay"><div className="editor-panel" role="dialog" aria-modal="true" aria-label="Client profile editor"><header><div><p className="eyebrow">CLIENT PROFILE</p><h2>{value.id ? "Edit digital identity" : "Create digital identity"}</h2></div><button aria-label="Close profile editor" onClick={onClose}>×</button></header><div className="editor-layout"><form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
+  return <dialog ref={dialog} className="editor-panel" aria-label="Client profile editor" onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}><header><div><p className="eyebrow">CLIENT PROFILE</p><h2>{value.id ? "Edit digital identity" : "Create digital identity"}</h2></div><button disabled={busy} aria-label="Close profile editor" onClick={onClose}>×</button></header><div className="editor-layout"><form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
     <div className="form-grid"><label>Public slug<input required disabled={Boolean(value.id)} value={value.publicSlug} onChange={(event) => update("publicSlug", event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} /></label><label>Display name<input required value={value.displayName} onChange={(event) => update("displayName", event.target.value)} /></label><label>Headline<input value={value.headline} onChange={(event) => update("headline", event.target.value)} /></label><label>Company<input value={value.company} onChange={(event) => update("company", event.target.value)} /></label><label>Email<input type="email" value={value.email} onChange={(event) => update("email", event.target.value)} /></label><label>Phone<input value={value.phone} onChange={(event) => update("phone", event.target.value)} /></label><label>Website<input type="url" value={value.website} onChange={(event) => update("website", event.target.value)} /></label><label>Theme<select value={value.theme} onChange={(event) => update("theme", event.target.value)}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label><label className="full">Bio<textarea rows={3} value={value.bio} onChange={(event) => update("bio", event.target.value)} /></label></div>
-    <div className="links-editor"><div><h3>Profile links</h3><button type="button" onClick={addLink}>Add link</button></div>{value.links.map((link, index) => <div className="link-row" key={index}><input placeholder="Label" value={link.label} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input placeholder="https://" value={link.url} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} /><button type="button" onClick={() => update("links", value.links.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div>
+    <div className="links-editor"><div><h3>Profile links</h3><button type="button" disabled={value.links.length >= 12 || busy} onClick={addLink}>Add link</button></div>{value.links.map((link, index) => <div className="link-row" key={index}><input required aria-label={`Link ${index + 1} label`} maxLength={40} placeholder="Label" value={link.label} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input required type="url" aria-label={`Link ${index + 1} URL`} maxLength={500} placeholder="https://" value={link.url} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} /><button type="button" disabled={busy} aria-label={`Remove link ${index + 1}`} onClick={() => update("links", value.links.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div>
     <label className="publish-toggle"><input type="checkbox" checked={value.published} onChange={(event) => update("published", event.target.checked)} /><span></span><div><strong>Publish profile</strong><small>Allow assigned NFC and QR cards to resolve publicly</small></div></label>
+    {error && <p role="alert" className="profile-save-error">{error}</p>}
     <button className="save-button" disabled={busy} type="submit">{busy ? "Saving…" : "Save profile"}</button>
-  </form><div className={`editor-preview theme-${value.theme.toLowerCase()}`}><span className="preview-brand">ONEINFO</span><div className="preview-avatar">{initials(value.displayName)}</div><small>DIGITAL BUSINESS PROFILE</small><h3>{value.displayName || "Client name"}</h3><p>{value.headline || "Professional headline"}{value.company ? ` · ${value.company}` : ""}</p><div className="preview-actions"><i></i><i></i><i></i></div>{value.website ? <div className="preview-link">Website <b>↗</b></div> : null}{value.links.slice(0, 3).map((link, index) => <div className="preview-link" key={index}>{link.label || "Link"}<b>↗</b></div>)}</div></div></div></div>;
+  </form><div className={`editor-preview theme-${value.theme.toLowerCase()}`}><span className="preview-brand">ONEINFO</span><div className="preview-avatar">{initials(value.displayName)}</div><small>DIGITAL BUSINESS PROFILE</small><h3>{value.displayName || "Client name"}</h3><p>{value.headline || "Professional headline"}{value.company ? ` · ${value.company}` : ""}</p><div className="preview-actions"><i></i><i></i><i></i></div>{value.website ? <div className="preview-link">Website <b>↗</b></div> : null}{value.links.slice(0, 3).map((link, index) => <div className="preview-link" key={index}>{link.label || "Link"}<b>↗</b></div>)}</div></div></dialog>;
 }
