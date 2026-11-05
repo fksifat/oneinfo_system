@@ -18,7 +18,8 @@ import { productMediaRoutes } from "./routes/product-media.js";
 import { reviewRoutes } from "./routes/reviews.js";
 
 export function buildApp() {
-  const app = Fastify({ logger: true, requestIdHeader: "x-request-id" });
+  // Vercel overwrites forwarding headers; standalone stations trust only the socket address.
+  const app = Fastify({ logger: true, requestIdHeader: "x-request-id", trustProxy: Boolean(process.env.VERCEL) });
 
   app.register(cors, {
     origin: config.CORS_ORIGIN.split(",").map((origin) => origin.trim()),
