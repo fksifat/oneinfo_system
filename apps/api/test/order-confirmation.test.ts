@@ -18,11 +18,11 @@ it("sends the order breakdown with a stable email key and skips old replays", as
     shippingZone: "subDhaka", subtotalMinor: 49900, shippingMinor: 10000, totalMinor: 54910,
     couponCode: "SAVE10", discountMinor: 4990,
   };
-  expect(await sendOrderConfirmation(order)).toBe("accepted");
+  expect(await sendOrderConfirmation(order, false)).toBe("accepted");
   const [url, request] = send.mock.calls[0]!;
   expect(url).toBe("https://api.resend.com/emails");
   expect(request.headers["Idempotency-Key"]).toBe("oneinfo-order/test-order");
   expect(JSON.parse(request.body)).toMatchObject({ to: ["buyer@example.com"], text: expect.stringContaining("Total due on delivery: BDT 549.10") });
-  expect(await sendOrderConfirmation({ ...order, createdAt: "2025-01-01T00:00:00.000Z" })).toBeUndefined();
+  expect(await sendOrderConfirmation({ ...order, createdAt: "2025-01-01T00:00:00.000Z" }, false)).toBeUndefined();
   expect(send).toHaveBeenCalledTimes(1);
 });

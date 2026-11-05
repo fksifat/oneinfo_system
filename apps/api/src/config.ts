@@ -26,10 +26,15 @@ const ConfigSchema = z
   ADMIN_EMAIL: z.string().email().optional(),
   ADMIN_PASSWORD_HASH: z.string().regex(/^scrypt:[a-f0-9]{32}:[a-f0-9]{128}$/).optional(),
     RESEND_API_KEY: z.string().trim().min(1).optional(),
+    BREVO_SMTP_USER: z.string().trim().email().optional(),
+    BREVO_SMTP_KEY: z.string().trim().min(1).optional(),
     ORDER_EMAIL_FROM: z.string().trim().min(1).optional(),
     STOREFRONT_URL: z.string().url().optional(),
   })
   .superRefine((value, context) => {
+    if ((value.BREVO_SMTP_USER || value.BREVO_SMTP_KEY) && !(value.BREVO_SMTP_USER && value.BREVO_SMTP_KEY && value.ORDER_EMAIL_FROM)) {
+      context.addIssue({ code: "custom", path: ["BREVO_SMTP_USER"], message: "Set BREVO_SMTP_USER, BREVO_SMTP_KEY and ORDER_EMAIL_FROM together" });
+    }
     if (value.NODE_ENV === "production" && value.JWT_SECRET === developmentSecret) {
       context.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "A unique production secret is required" });
     }

@@ -49,24 +49,24 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
   app.post("/admin/orders/:id/deliver", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    const token = randomBytes(32).toString("base64url");
-    const invite = await db.transaction(async tx => {
+    return db.transaction(async tx => {
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
       if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) throw Object.assign(new Error("Verify the order payment before marking it delivered"), { statusCode: 409 });
       const [existing] = await tx.select().from(storeReviewInvites).where(eq(storeReviewInvites.orderId, id));
-      if (existing?.sentAt) return { order, sent: true as const };
+      if (existing?.sentAt) return { delivered: true, invitation: "already-sent" };
+      const token = randomBytes(32).toString("base64url");
       if (existing) await tx.update(storeReviewInvites).set({ tokenHash: tokenHash(token), createdAt: new Date() }).where(eq(storeReviewInvites.id, existing.id));
       else await tx.insert(storeReviewInvites).values({ orderId: id, tokenHash: tokenHash(token) });
-      const deliveredAt = order.deliveredAt ?? new Date();
-      if (!order.deliveredAt) await tx.update(storeOrders).set({ deliveredAt }).where(eq(storeOrders.id, id));
-      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_MARKED_DELIVERED", targetType: "store_order", targetId: id, requestId: request.id, metadata: {} });
-      return { order: { ...order, deliveredAt }, sent: false as const };
+      if (!order.deliveredAt) {
+        await tx.update(storeOrders).set({ deliveredAt: new Date() }).where(eq(storeOrders.id, id));
+        await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_MARKED_DELIVERED", targetType: "store_order", targetId: id, requestId: request.id, metadata: {} });
+      }
+      // Keep the order lock until the send result is saved so a second click cannot replace the link.
+      const sent = await sendReviewInvitation(order, token);
+      if (sent) await tx.update(storeReviewInvites).set({ sentAt: new Date() }).where(eq(storeReviewInvites.orderId, id));
+      return { delivered: true, invitation: sent ? "sent" : "pending" };
     });
-    if (invite.sent) return { delivered: true, invitation: "already-sent" };
-    const sent = await sendReviewInvitation({ id, email: invite.order.customer.email }, token);
-    if (sent) await db.update(storeReviewInvites).set({ sentAt: new Date() }).where(eq(storeReviewInvites.orderId, id));
-    return { delivered: true, invitation: sent ? "sent" : "pending" };
   });
 
   app.post("/portal", { bodyLimit: 1024 }, async request => {

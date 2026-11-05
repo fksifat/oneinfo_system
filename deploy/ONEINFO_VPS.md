@@ -37,6 +37,33 @@ docker compose --env-file .env.vps -f compose.vps.yaml -f deploy/compose.docker-
 Never use `down -v`: it deletes the database and upload volumes. Changing only
 the PostgreSQL password in the environment does not rotate its stored password.
 
+## Order confirmation email
+
+Set these three values in `/opt/oneinfo/.env.vps`. The SMTP login comes from the
+Brevo SMTP settings page. Use the full SMTP key.
+
+```dotenv
+BREVO_SMTP_USER=your-login@smtp-brevo.com
+BREVO_SMTP_KEY=your-full-smtp-key
+ORDER_EMAIL_FROM="Oneinfo <no-reply@oneinfo.online>"
+```
+
+The API connects to `smtp-relay.brevo.com:587` with required STARTTLS. After
+updating the environment, recreate the API container from `/opt/oneinfo`:
+
+```bash
+docker compose --env-file .env.vps -f compose.vps.yaml -f deploy/compose.docker-proxy.yaml up -d --no-deps --no-build --wait api
+```
+
+The checkout settings endpoint `/api/v1/orders/shipping` reports whether order
+confirmation email is configured. Brevo Logs shows acceptance and delivery.
+Each new order gets one SMTP send attempt after it is saved. A failed attempt
+leaves the order in the database and shows the order ID at checkout.
+Admin payment verification sends the verified amount and any remaining balance.
+Marking an order delivered sends a delivery confirmation with the private review
+link. Set `STOREFRONT_URL` to the public storefront for that link. The delivery
+action can retry a failed invitation.
+
 ## Shared Nginx and HTTPS
 
 The existing `arisesell-nginx` owns public ports 80/443. Its configuration includes

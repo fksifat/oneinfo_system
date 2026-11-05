@@ -12,7 +12,7 @@ import { db } from "../db/client.js";
 import { auditLogs, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
 import { allocatePendingOrders, allocationSummary } from "../domain/printed-stock.js";
 
-import { confirmationEmailEnabled, sendOrderConfirmation } from "../domain/order-confirmation.js";
+import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail } from "../domain/order-confirmation.js";
 import { parseBody, sendCreated } from "../http.js";
 
 const shippingSettingsId = "default";
@@ -96,17 +96,22 @@ export const orderRoutes: FastifyPluginAsync = async app => {
   app.post("/admin/:id/verify-payment", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    return db.transaction(async tx => {
+    const { order, newlyVerified } = await db.transaction(async tx => {
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order?.transactionId || order.paymentAmountMinor <= 0) conflict("This order has no bKash payment to verify.");
-      if (order.paymentVerifiedAt) return receipt(order);
+      if (order.paymentVerifiedAt) return { order, newlyVerified: false };
       const [verified] = await tx.update(storeOrders).set({ paymentVerifiedAt: new Date() })
         .where(eq(storeOrders.id, id)).returning();
       if (!verified) throw new Error("Payment verification could not be saved");
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_PAYMENT_VERIFIED",
         targetType: "store_order", targetId: id, requestId: request.id, metadata: { amountMinor: order.paymentAmountMinor } });
-      return receipt(verified);
+      return { order: verified, newlyVerified: true };
     });
+    const result = receipt(order);
+    if (!newlyVerified || !confirmationEmailEnabled) return result;
+    const sent = await sendPaymentVerifiedEmail({ ...result, customer: order.customer });
+    if (!sent) request.log.warn({ orderId: id }, "Payment verification email was not accepted");
+    return { ...result, paymentEmail: sent ? "accepted" : "failed" };
   });
 
   app.get("/admin", async (request, reply) => {
@@ -194,7 +199,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     result.qrAllocation = allocationSummary(order.items.reduce((sum, item) => sum + item.quantity, 0), allocations.length);
     const emailStatus = order.paymentVerifiedAt ? undefined : await sendOrderConfirmation({
       ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items,
-    });
+    }, created);
     if (emailStatus === "failed") request.log.warn({ orderId: order.id }, "Order confirmation email was not accepted");
     if (emailStatus) result.confirmationEmail = emailStatus;
     return created ? sendCreated(reply, result) : result;

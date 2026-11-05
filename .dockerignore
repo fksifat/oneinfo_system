@@ -11,6 +11,8 @@
 !apps/api/src/**
 !apps/api/drizzle/
 !apps/api/drizzle/**
+!apps/api/assets/
+!apps/api/assets/oneinfo-email-logo.png
 !packages/
 !packages/contracts/
 !packages/contracts/package.json
