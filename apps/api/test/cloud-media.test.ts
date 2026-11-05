@@ -24,8 +24,12 @@ it("requires operator authentication and valid bytes before storing cloud upload
     expect(uploaded.json().url).toMatch(/^https:\/\//);
     expect(put).toHaveBeenCalledTimes(1);
     expect((await upload(Buffer.concat([png, Buffer.alloc(4 * 1024 * 1024)]))).statusCode).toBe(413);
+    vi.stubEnv("VERCEL", "");
+    expect((await upload(png)).statusCode).toBe(201);
+    expect(put).toHaveBeenCalledTimes(2);
+    vi.stubEnv("VERCEL", "1");
     vi.stubEnv("BLOB_READ_WRITE_TOKEN", "");
     expect((await upload(png)).statusCode).toBe(503);
-    expect(put).toHaveBeenCalledTimes(1);
+    expect(put).toHaveBeenCalledTimes(2);
   } finally { await app.close(); }
 });
