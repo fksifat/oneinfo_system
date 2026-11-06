@@ -141,6 +141,8 @@ export const customerAccounts = pgTable("customer_accounts", {
   id: uuid("id").primaryKey().$defaultFn(randomUUID),
   email: varchar("email", { length: 254 }).notNull(),
   passwordHash: text("password_hash").notNull(),
+  emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+  authVersion: integer("auth_version").notNull().default(0),
   profileId: uuid("profile_id").notNull().references(() => customerProfiles.id, { onDelete: "restrict" }),
   active: boolean("active").notNull().default(true),
   ...timestamps,
@@ -395,6 +397,34 @@ export const storeShippingSettings = pgTable("store_shipping_settings", {
   codAdvanceTaka: integer("cod_advance_taka").notNull().default(100),
 });
 
+export const accountTokens = pgTable("account_tokens", {
+  tokenHash: varchar("token_hash", { length: 64 }).primaryKey(),
+  email: varchar("email", { length: 254 }).notNull(),
+  purpose: text("purpose").$type<"verify" | "reset" | "invite">().notNull(),
+  details: jsonb("details").$type<Record<string, string>>().notNull().default({}),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+});
+
+export const teamEnquiries = pgTable("team_enquiries", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  requestId: uuid("request_id").notNull().unique(),
+  name: varchar("name", { length: 120 }).notNull(),
+  email: varchar("email", { length: 254 }).notNull(),
+  company: varchar("company", { length: 120 }).notNull(),
+  quantity: varchar("quantity", { length: 80 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const orderEmails = pgTable("order_emails", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  orderId: uuid("order_id").notNull().references(() => storeOrders.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<"confirmation" | "payment" | "shipping" | "delivery">().notNull(),
+  status: text("status").$type<"pending" | "sending" | "accepted" | "failed">().notNull().default("pending"),
+  claimId: uuid("claim_id"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex("order_emails_kind_unique").on(table.orderId, table.kind), index("order_emails_pending_idx").on(table.status, table.updatedAt)]);
+
 export const storeCoupons = pgTable("store_coupons", {
   code: varchar("code", { length: 32 }).primaryKey(),
   percent: integer("percent").notNull(),
@@ -424,6 +454,10 @@ export const storeOrders = pgTable("store_orders", {
   codCollectedMinor: bigint("cod_collected_minor", { mode: "number" }),
   codSettledMinor: bigint("cod_settled_minor", { mode: "number" }),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  stockReservations: jsonb("stock_reservations").$type<Array<{ productId: string; variantId: string; quantity: number }>>().notNull().default([]),
+  awaitingPayment: boolean("awaiting_payment").notNull().default(false),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  cancellationReason: text("cancellation_reason"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   uniqueIndex("store_orders_transaction_unique").on(table.transactionId),

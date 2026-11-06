@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve, win32 } from "node:path";
+import { join, resolve, win32, posix } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
@@ -16,7 +16,7 @@ export function desktopQuote(value) {
 }
 
 export function shortcut(platform, projectRoot, nodePath) {
-  const script = platform === "win32" ? win32.join(projectRoot, "scripts/start-local.mjs") : join(projectRoot, "scripts/start-local.mjs");
+  const script = platform === "win32" ? win32.join(projectRoot, "scripts/start-local.mjs") : posix.join(projectRoot, "scripts/start-local.mjs");
   if (platform === "win32") return { name: "Start Oneinfo.cmd", content: `@echo off\r\nrem ${marker}\r\nsetlocal DisableDelayedExpansion\r\n${batchQuote(nodePath)} ${batchQuote(script)} --pause-on-error\r\n` };
   if (platform === "darwin") return { name: "Start Oneinfo.command", content: `#!/bin/bash\n# ${marker}\nexec ${shellQuote(nodePath)} ${shellQuote(script)} --pause-on-error\n` };
   return { name: "oneinfo-production.desktop", content: `[Desktop Entry]\n# ${marker}\nType=Application\nVersion=1.0\nName=Start Oneinfo\nComment=Start the local Oneinfo production workstation\nExec=${desktopQuote(nodePath)} ${desktopQuote(script)} --pause-on-error\nTerminal=true\nIcon=applications-office\nCategories=Office;\n` };

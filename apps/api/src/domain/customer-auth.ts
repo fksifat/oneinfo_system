@@ -47,22 +47,24 @@ export async function readClaimToken(token: string) {
   }
 }
 
-export function issueCustomerToken(customerId: string) {
-  return new SignJWT({}).setProtectedHeader({ alg: "HS256" }).setIssuer(issuer)
+export function issueCustomerToken(customerId: string, version = 0) {
+  return new SignJWT({ version }).setProtectedHeader({ alg: "HS256" }).setIssuer(issuer)
     .setAudience("oneinfo-customer").setSubject(customerId).setIssuedAt().setExpirationTime("8h").sign(key);
 }
 
 export async function requireCustomer(request: FastifyRequest) {
   let accountId: string;
+  let tokenVersion = 0;
   try {
     const token = request.headers.authorization?.replace(/^Bearer /, "");
     if (!token) throw new Error("Missing token");
     const { payload } = await jwtVerify(token, key, { issuer, audience: "oneinfo-customer", algorithms: ["HS256"] });
     accountId = z.uuid().parse(payload.sub);
+    tokenVersion = (payload.version as number) ?? 0;
   } catch {
     throw Object.assign(new Error("Please sign in to your customer account."), { statusCode: 401 });
   }
   const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.id, accountId)).limit(1);
-  if (!account?.active) throw Object.assign(new Error("Please sign in to your customer account."), { statusCode: 401 });
+  if (!account?.active || account.authVersion !== tokenVersion) throw Object.assign(new Error("Please sign in to your customer account."), { statusCode: 401 });
   return account;
 }

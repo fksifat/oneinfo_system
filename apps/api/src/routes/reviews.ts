@@ -3,11 +3,11 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
+import { recordOrderEmail } from "../domain/order-email-history.js";
+import { sendReviewInvitation } from "../domain/review-invitation.js";
 import { db } from "../db/client.js";
 import { auditLogs, products, storeOrders, storeReviewInvites, storeReviews } from "../db/schema.js";
 import { parseBody } from "../http.js";
-import { sendReviewInvitation } from "../domain/review-invitation.js";
-import { recordOrderEmail } from "../domain/order-email-history.js";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const tokenSchema = z.object({ token: z.string().min(40).max(100) });
@@ -53,6 +53,7 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
     return db.transaction(async tx => {
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
+      if (order.cancelledAt || order.awaitingPayment) throw Object.assign(new Error("Only an open order can be delivered"), { statusCode: 409 });
       if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) throw Object.assign(new Error("Verify the order payment before marking it delivered"), { statusCode: 409 });
       const [existing] = await tx.select().from(storeReviewInvites).where(eq(storeReviewInvites.orderId, id));
       if (existing?.sentAt) return { delivered: true, invitation: "already-sent" };
@@ -63,7 +64,6 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
         await tx.update(storeOrders).set({ deliveredAt: new Date() }).where(eq(storeOrders.id, id));
         await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_MARKED_DELIVERED", targetType: "store_order", targetId: id, requestId: request.id, metadata: {} });
       }
-      // Keep the order lock until the send result is saved so a second click cannot replace the link.
       const sent = await sendReviewInvitation(order, token);
       await recordOrderEmail(tx, id, "delivery", sent);
       if (sent) await tx.update(storeReviewInvites).set({ sentAt: new Date() }).where(eq(storeReviewInvites.orderId, id));

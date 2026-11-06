@@ -1,3 +1,4 @@
+import { createAccountLink, sendAccountLink } from "../domain/account-tokens.js";
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
@@ -43,7 +44,12 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     const input = parseBody(z.object({ name, ownerEmail: email, domain: domain.optional() }), request.body);
     const [owner] = await db.select({ id: customerAccounts.id }).from(customerAccounts)
       .where(and(eq(customerAccounts.email, input.ownerEmail), eq(customerAccounts.active, true)));
-    if (!owner) fail("The company owner needs an active Oneinfo account.", 404);
+    if (!owner) {
+      const link = await createAccountLink(input.ownerEmail, "invite", { name: input.name, domain: input.domain ?? "" });
+      const sent = await sendAccountLink(input.ownerEmail, "invite", link);
+      if (!sent) fail("Invitation could not be sent. Check email configuration and try again.", 503);
+      return sendCreated(reply, { invited: true });
+    }
     const [created] = await db.insert(companies).values({ name: input.name, ownerAccountId: owner.id, domain: input.domain ?? null }).returning({ id: companies.id });
     return sendCreated(reply, created);
   });

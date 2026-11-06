@@ -2,7 +2,7 @@ import { Orders } from "./Orders.js";
 import { Products } from "./Products.js";
 import { Reviews } from "./Reviews.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.js";
 import { ProfilePhoto } from "./ProfilePhoto.js";
 import { ProfileView } from "./ProfileView.js";
@@ -285,7 +285,8 @@ export function App() {
     finally { setBusy(false); }
   };
 
-  const filteredProfiles = useMemo(() => profiles.filter((profile) => `${profile.displayName} ${profile.company} ${profile.publicSlug}`.toLowerCase().includes(search.toLowerCase())), [profiles, search]);
+  const deferredSearch = useDeferredValue(search);
+  const filteredProfiles = useMemo(() => profiles.filter((profile) => `${profile.displayName} ${profile.company} ${profile.publicSlug}`.toLowerCase().includes(deferredSearch.toLowerCase())), [profiles, deferredSearch]);
 
   if (!token) return (
     <div className="auth-page">
@@ -384,7 +385,7 @@ export function App() {
         </section> : null}
       </main>
 
-      <footer className="status-bar"><span className={busy ? "working" : ""}></span>{busy ? "Working…" : message}</footer>
+      <footer className="status-bar" role="status" aria-live="polite"><span className={busy ? "working" : ""}></span>{busy ? "Working." : message}</footer>
       {editing ? <ProfileEditor token={token} value={editing} setValue={setEditing} onClose={() => { setEditing(null); setProfileError(""); }} onSave={() => void saveProfile()} busy={busy} error={profileError} /> : null}
     </div>
   );

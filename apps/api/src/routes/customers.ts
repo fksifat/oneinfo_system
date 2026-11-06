@@ -11,6 +11,7 @@ import { codeHash, hashPassword, issueClaimToken, issueCustomerToken, matchesCod
 import { parseBody, sendCreated } from "../http.js";
 import { publicProfileFields } from "./profiles.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import { lockPrintedStock } from "../domain/printed-stock.js";
 import { config } from "../config.js";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -92,11 +93,13 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const input = parseBody(IssueActivationCodeSchema, request.body ?? {});
     const code = randomBytes(10).toString("hex").toUpperCase();
     const result = await db.transaction(async tx => {
+      await lockPrintedStock(tx);
       const card = await readyCard(tx, cardId);
       const target = new URL(card.canonicalUrl);
       if (target.pathname !== `/c/${card.publicSlug}` || target.search || target.hash) fail("Client activation requires a generated Oneinfo /c/card-id link. Custom external QR links open their own destination.");
       const [existing] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, cardId));
       if (existing && !input.replaceExisting) fail("A code was already issued. Explicitly replace it only if the old code was lost; the old code will stop working.");
+      if (card.inventoryStatus === "SALEABLE") await tx.update(cards).set({ inventoryStatus: "RESERVED", updatedAt: new Date() }).where(eq(cards.id, cardId));
       const values = { codeHash: codeHash(cardId, code), version: randomUUID(), issuedBy: operator.operatorId, issuedAt: new Date(), redeemedAt: null };
       await tx.insert(cardActivationSecrets).values({ cardId, ...values }).onConflictDoUpdate({ target: cardActivationSecrets.cardId, set: values });
       await tx.insert(auditLogs).values({ actorId: operator.operatorId, action: existing ? "ACTIVATION_CODE_REPLACED" : "ACTIVATION_CODE_ISSUED",
@@ -248,7 +251,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
       return created;
     });
     reply.header("Cache-Control", "no-store");
-    return sendCreated(reply, { accessToken: await issueCustomerToken(account.id), email: account.email });
+    return sendCreated(reply, { accessToken: await issueCustomerToken(account.id, account.authVersion), email: account.email });
   });
 
   app.post("/login", async (request, reply) => {
@@ -258,7 +261,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const valid = await verifyPassword(input.password, account?.passwordHash ?? await dummyPassword);
     if (!account?.active || !valid) fail("Email or password is incorrect.", 401);
     reply.header("Cache-Control", "no-store");
-    return { accessToken: await issueCustomerToken(account.id), email: account.email };
+    return { accessToken: await issueCustomerToken(account.id, account.authVersion), email: account.email };
   });
 
   app.get("/me", async (request, reply) => {
@@ -267,7 +270,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const [profile] = await db.select(publicProfileFields).from(customerProfiles).where(eq(customerProfiles.id, account.profileId));
     const links = await db.select().from(profileLinks).where(eq(profileLinks.profileId, account.profileId)).orderBy(asc(profileLinks.sortOrder));
     const owned = await db.select({ id: cards.id, publicSlug: cards.publicSlug, canonicalUrl: cards.canonicalUrl }).from(cards).where(eq(cards.customerAccountId, account.id));
-    return { email: account.email, profile: { ...profile, links }, cards: owned };
+    return { email: account.email, emailVerified: Boolean(account.emailVerifiedAt), profile: { ...profile, links }, cards: owned };
   });
 
   app.patch("/me/profile", async request => {
