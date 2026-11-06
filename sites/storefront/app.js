@@ -320,17 +320,36 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     void import("@google/model-viewer").catch(showError);
   }
 
+  async function renderTracking(token) {
+    const content = $("[data-tracking-content]");
+    content.textContent = "Loading your order status…";
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/orders/tracking`, { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ token }), signal: AbortSignal.timeout(7000) });
+      if (!response.ok) throw new Error(response.status === 404 ? "This private tracking link is invalid." : "Tracking is temporarily unavailable.");
+      const order = await response.json();
+      if (location.hash !== `#track/${token}`) return;
+      const steps = [["Received", order.createdAt], ["Processing", order.processingAt], ["Shipped", order.shippedAt], ["Delivered", order.deliveredAt]];
+      const status = { RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" }[order.status];
+      content.innerHTML = `<p>Current status <strong>${escapeHtml(status || "Unavailable")}</strong></p>
+        <ol>${steps.map(([label, date]) => `<li>${label}${date ? ` · ${escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" }))}` : ""}</li>`).join("")}</ol>
+        ${order.courierTrackingId ? `<p>Courier tracking ID <strong>${escapeHtml(order.courierTrackingId)}</strong></p>` : ""}`;
+    } catch (error) { if (location.hash === `#track/${token}`) content.textContent = error.message || "Tracking is temporarily unavailable."; }
+  }
+
   function renderRoute(focus = false) {
     const order = location.hash === "#order-draft";
     const payment = location.hash === "#arisepay";
     const reviewToken = location.hash.startsWith("#review/") ? location.hash.slice(8) : "";
+    const trackingToken = location.hash.startsWith("#track/") ? location.hash.slice(7) : "";
     const route = productRoute(location.hash);
     document.body.classList.toggle("product-page", Boolean(route));
-    const page = order ? "order-draft" : payment ? "arisepay" : reviewToken ? "review-portal" : route ? "product-detail" : "";
+    const page = order ? "order-draft" : payment ? "arisepay" : reviewToken ? "review-portal" : trackingToken ? "tracking-portal" : route ? "product-detail" : "";
     $$("#main > section").forEach(section => {
-      section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail", "review-portal"].includes(section.id);
+      section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail", "review-portal", "tracking-portal"].includes(section.id);
     });
     if (reviewToken) { document.title = "Your review | Oneinfo"; void renderReviewPortal(reviewToken); return; }
+    if (trackingToken) { document.title = "Track your order | Oneinfo"; void renderTracking(trackingToken); if (focus) $("#tracking-portal-title").focus(); return; }
     if (payment) {
       if (pendingOrder) {
         location.replace("#order-draft");
@@ -621,6 +640,10 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   function showReceiptDetails() {
     if (!lastReceipt) return;
     $(".order-receipt-id").textContent = lastReceipt.id;
+    const tracking = $(".order-receipt-tracking");
+    const trackingPath = typeof lastReceipt.trackingPath === "string" && /^\/#track\/[a-zA-Z0-9_.-]+$/.test(lastReceipt.trackingPath) ? lastReceipt.trackingPath : "";
+    tracking.hidden = !trackingPath;
+    tracking.href = trackingPath;
     const emailStatus = $(".order-receipt-email");
     emailStatus.hidden = !lastReceipt.confirmationEmail;
     emailStatus.textContent = lastReceipt.confirmationEmail === "accepted"

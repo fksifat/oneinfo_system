@@ -5,17 +5,20 @@ import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.js";
 import { ProfileView } from "./ProfileView.js";
+import { CardPassport } from "./CardPassport.js";
 import { CardPortal } from "./CardPortal.js";
+import { TeamAdmin, TeamPortal } from "./TeamPortal.js";
 import { ActivationCode } from "./ActivationCode.js";
 import { CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 
-type View = "orders" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production";
+type View = "orders" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production" | "companies";
 const nav: { id: View; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "◫" }, { id: "products", label: "Products", icon: "▣" },
   { id: "orders", label: "Orders", icon: "≡" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
   { id: "cards", label: "Cards & inventory", icon: "▱" }, { id: "batches", label: "Production batches", icon: "▦" },
   { id: "production", label: "NFC & QR operations", icon: "⌁" }, { id: "stations", label: "Stations", icon: "⌂" },
   { id: "audit", label: "Audit history", icon: "≡" },
+  { id: "companies", label: "Companies", icon: "▦" },
 ];
 const currentView = () => nav.find(item => item.id === window.location.hash.slice(1))?.id ?? "overview";
 const PRODUCTION_URL = (import.meta.env.VITE_PRODUCTION_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
@@ -30,6 +33,7 @@ interface Overview {
   qrArtifacts: number;
   nfcAttempts: number;
   inventory: Record<string, number>;
+  stockAlerts?: { name: string; remaining: number }[];
 }
 
 interface ProfileLink { id?: string; label: string; url: string; sortOrder: number; active: boolean }
@@ -120,6 +124,7 @@ function NavIcon({ name }: { name: string }) {
     {name === "production" ? <><path d="M7 7a7 7 0 0 1 11.8 4.9M17 17a7 7 0 0 1-11.8-4.9" /><path d="M18.8 7v4.9h-4.9M5.2 17v-4.9h4.9" /><path d="M10 10h.01M14 14h.01" /></> : null}
     {name === "stations" ? <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4M7 8h10" /></> : null}
     {name === "audit" ? <><path d="M5 4.5h10l4 4V20H5V4.5Z" /><path d="M14.5 4.8v4h4M8 12h8M8 15.5h8M8 19h5" /></> : null}
+    {name === "companies" ? <><path d="M5 20V8h6V4h8v16H5Z" /><path d="M8 11v1m0 3v1m6-9v1m0 3v1m0 3v1" /></> : null}
   </svg>;
 }
 
@@ -139,6 +144,7 @@ function PublicProfile({ slug }: { slug: string }) {
 }
 
 export function App() {
+  if (/^\/team\/?$/.test(window.location.pathname)) return <TeamPortal />;
   const cardPath = window.location.pathname.match(/^\/c\/([A-Za-z0-9_-]{1,64})(?:\/(?:signup|login|edit))?\/?$/);
   if (cardPath) return <CardPortal slug={cardPath[1]!} />;
   const profileSlug = new URLSearchParams(window.location.search).get("profile");
@@ -324,6 +330,8 @@ export function App() {
         {!lastSynced && !syncError && <p role="status">Loading your workspace…</p>}
 
         {view === "overview" && overview ? <section className="dashboard">
+          {!!overview.stockAlerts?.length && <section className="panel"><div className="panel-head"><h2>Low stock</h2></div>
+            <ul>{overview.stockAlerts.map((alert, index) => <li key={`${alert.name}-${index}`}>{alert.name} · {alert.remaining} remaining</li>)}</ul></section>}
           <div className="metric-grid">
             <Metric label="Client profiles" value={overview.profiles} detail="Digital identities" />
             <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} saleable`} />
@@ -344,6 +352,7 @@ export function App() {
         {view === "products" ? <Products token={token} /> : null}
         {view === "orders" ? <Orders token={token} settingsOpen={ordersSettingsOpen} onSettingsOpenChange={setOrdersSettingsOpen} /> : null}
         {view === "reviews" ? <Reviews token={token} /> : null}
+        {view === "companies" ? <TeamAdmin token={token} /> : null}
 
         {view === "profiles" ? <section>
           <div className="list-toolbar"><input type="search" aria-label="Search client profiles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => { setProfileError(""); setEditing({ ...blankProfile }); }}>New client profile</button></div>
@@ -356,7 +365,7 @@ export function App() {
           {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
         </section> : null}
 
-        {view === "cards" ? <><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
+        {view === "cards" ? <><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<div key={card.id}><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a><CardPassport cardId={card.id} token={token} /></div>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
           <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <button onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button>}</> : null}
         {view === "batches" ? <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map((batch) => [batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status, <a href={`${PRODUCTION_URL}/?batch=${encodeURIComponent(batch.id)}`} target="_blank" rel="noreferrer">Open batch ↗</a>])} /> : null}
         {view === "stations" ? <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">ACCESS CONTROL</p><h2>Production stations</h2></div></div><div className="data-table"><div className="data-row data-header"><span>Station</span><span>Status</span><span>Last seen</span><span>Action</span></div>{stations.map((station) => <div className="data-row station-row" key={station.id}><span><strong>{station.stationCode}</strong><small>{station.name}</small></span><span><b className={`status-text ${station.status.toLowerCase()}`}>{station.status}</b></span><span>{formatDate(station.lastSeenAt)}</span><span>{station.status === "ACTIVE" ? <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button> : "—"}</span></div>)}</div></section> : null}

@@ -1,26 +1,53 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { z } from "zod";
-import { ActivateCardSchema, ClaimCardSchema, CustomerLoginSchema, CustomerProfileSchema, CustomerSignupSchema, IssueActivationCodeSchema } from "@oneinfo/contracts";
+import { ActivateCardSchema, ClaimCardSchema, CustomerLoginSchema, CustomerProfileSchema, CustomerSignupSchema, IssueActivationCodeSchema,
+  profileModes, ProfileModesSchema, profileSources, ShareContactSchema } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, customerAccounts, customerProfiles, profileLinks } from "../db/schema.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerContactLeads, customerProfiles, profileActivity, profileLinks } from "../db/schema.js";
 import { codeHash, hashPassword, issueClaimToken, issueCustomerToken, matchesCode, readClaimToken, requireCustomer, verifyPassword } from "../domain/customer-auth.js";
 import { parseBody, sendCreated } from "../http.js";
 import { publicProfileFields } from "./profiles.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import { config } from "../config.js";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type ProfileInput = z.infer<typeof CustomerProfileSchema>;
+const profileUpdateSchema = CustomerProfileSchema.extend({ profileMode: z.enum(profileModes).optional(), modeContent: ProfileModesSchema.optional() });
+type ProfileInput = z.infer<typeof profileUpdateSchema>;
 function fail(message: string, statusCode = 409): never { throw Object.assign(new Error(message), { statusCode }); }
 const dummyPassword = hashPassword(randomBytes(32).toString("hex"));
+const cardSlugSchema = z.object({ cardSlug: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/) });
+const contactOwner = or(and(eq(cards.customerAccountId, customerAccounts.id), eq(cards.profileId, customerAccounts.profileId)), eq(companies.ownerAccountId, customerAccounts.id));
+
+function liveRecipient(tx: Transaction, cardSlug: string) {
+  return tx.select({ accountId: customerAccounts.id, profileId: customerProfiles.id, mode: customerProfiles.profileMode,
+    content: customerProfiles.modeContent, recipientName: customerProfiles.displayName, companyId: cards.companyId }).from(cards)
+    .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id))
+    .leftJoin(companies, eq(cards.companyId, companies.id))
+    .innerJoin(customerAccounts, contactOwner)
+    .innerJoin(customerProfiles, eq(cards.profileId, customerProfiles.id))
+    .where(and(eq(cards.publicSlug, cardSlug), eq(cards.lifecycleStatus, "ACTIVATED"), eq(cards.qcStatus, "PASSED"),
+      isNotNull(cardBatches.printConfirmedAt), eq(customerAccounts.active, true), eq(customerProfiles.published, true)))
+    .limit(1).for("share", { of: cards });
+}
+
+async function recordActivity(tx: Transaction, recipient: Awaited<ReturnType<typeof liveRecipient>>[number], source: typeof profileSources[number], event: string) {
+  const { profileId, mode, content } = recipient;
+  const day = new Date().toISOString().slice(0, 10);
+  const campaign = mode === "EVENT" ? content.EVENT?.title ?? "" : "";
+  await tx.insert(profileActivity).values({ profileId, day, mode, campaign, source, event }).onConflictDoUpdate({
+    target: [profileActivity.profileId, profileActivity.day, profileActivity.mode, profileActivity.campaign, profileActivity.source, profileActivity.event],
+    set: { total: sql`${profileActivity.total} + 1` },
+  });
+}
 
 async function readyCard(tx: Transaction, cardId: string) {
   const [card] = await tx.select().from(cards).where(eq(cards.id, cardId)).for("update");
   if (!card) fail("Card not found", 404);
   const [batch] = await tx.select().from(cardBatches).where(eq(cardBatches.id, card.batchId));
-  if (card.customerAccountId || !batch?.printConfirmedAt || card.qcStatus !== "PASSED" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) {
+  if (card.customerAccountId || card.companyId || !batch?.printConfirmedAt || card.qcStatus !== "PASSED" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) {
     fail("This card is already claimed or is not ready for activation.");
   }
   if (card.profileId) {
@@ -83,8 +110,11 @@ export const customerRoutes: FastifyPluginAsync = async app => {
   app.get("/cards/:cardSlug", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const { cardSlug } = request.params as { cardSlug: string };
-    const [row] = await db.select({ card: cards, confirmed: cardBatches.printConfirmedAt }).from(cards)
-      .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(eq(cards.publicSlug, cardSlug)).limit(1);
+    const [row] = await db.select({ card: cards, confirmed: cardBatches.printConfirmedAt, ownerActive: customerAccounts.active }).from(cards)
+      .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id))
+      .leftJoin(companies, eq(cards.companyId, companies.id))
+      .leftJoin(customerAccounts, contactOwner)
+      .where(eq(cards.publicSlug, cardSlug)).limit(1);
     if (!row) fail("Card not found", 404);
     const { card } = row;
     if (!row.confirmed || card.qcStatus !== "PASSED" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) return { status: "UNAVAILABLE" };
@@ -93,10 +123,96 @@ export const customerRoutes: FastifyPluginAsync = async app => {
       if (profile) {
         const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder })
           .from(profileLinks).where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
-        return { status: "PROFILE", profile, links };
+        return { status: "PROFILE", profile, links, canShareContact: row.ownerActive === true, crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL) };
       }
     }
-    return { status: card.customerAccountId ? "UNAVAILABLE" : "ACTIVATION_REQUIRED", publicSlug: card.publicSlug };
+    return { status: card.customerAccountId || card.companyId ? "UNAVAILABLE" : "ACTIVATION_REQUIRED", publicSlug: card.publicSlug };
+  });
+
+  app.post("/cards/:cardSlug/contact-leads", { bodyLimit: 8192 }, async (request, reply) => {
+    const { cardSlug } = parseBody(cardSlugSchema, request.params);
+    const { consent: _, source, ...contact } = parseBody(ShareContactSchema, request.body);
+    await limit(request);
+    await db.transaction(async tx => {
+      const [recipient] = await liveRecipient(tx, cardSlug);
+      if (!recipient) fail("This card cannot receive contact details.", 404);
+      const [lead] = await tx.insert(customerContactLeads).values({ ...contact, crmAllowed: Boolean(config.CRM_LEAD_WEBHOOK_URL && contact.crmAllowed),
+        accountId: recipient.accountId, recipientName: recipient.recipientName, companyId: recipient.companyId })
+        .onConflictDoNothing({ target: [customerContactLeads.accountId, customerContactLeads.requestId] }).returning({ id: customerContactLeads.id });
+      if (lead) await recordActivity(tx, recipient, source, "LEAD");
+    });
+    return sendCreated(reply, { sent: true });
+  });
+
+  app.post("/cards/:cardSlug/activity", { bodyLimit: 1024 }, async (request, reply) => {
+    const { cardSlug } = parseBody(cardSlugSchema, request.params);
+    const input = parseBody(z.object({ source: z.enum(profileSources), event: z.enum(["VIEW", "SAVE", "LINK"]), linkId: z.uuid().optional() }), request.body);
+    if (!await allowAuthAttempt(`activity:${request.ip}:${cardSlug}`, 100, 60_000)) return reply.code(429).send();
+    await db.transaction(async tx => {
+      const [recipient] = await liveRecipient(tx, cardSlug);
+      if (!recipient) return;
+      let event: string = input.event;
+      if (input.event === "LINK" && input.linkId) {
+        const [link] = await tx.select({ label: profileLinks.label }).from(profileLinks).where(and(eq(profileLinks.id, input.linkId), eq(profileLinks.profileId, recipient.profileId), eq(profileLinks.active, true)));
+        if (!link) return;
+        event = `LINK:${link.label}`;
+      }
+      await recordActivity(tx, recipient, input.source, event);
+    });
+    return reply.code(204).send();
+  });
+
+  app.get("/me/activity", async (request, reply) => {
+    const account = await requireCustomer(request);
+    const { companyId } = parseBody(z.object({ companyId: z.uuid().optional() }), request.query);
+    reply.header("Cache-Control", "no-store");
+    const earliest = new Date(Date.now() - 29 * 86400_000).toISOString().slice(0, 10);
+    const { profileId, mode, campaign, source, event, day, total } = profileActivity;
+    const teamProfiles = db.select({ id: companyEmployees.profileId }).from(companyEmployees)
+      .innerJoin(companies, eq(companyEmployees.companyId, companies.id))
+      .where(and(eq(companies.id, companyId ?? ""), eq(companies.ownerAccountId, account.id)));
+    const items = await db.select({ mode, campaign, source, event, total: sql<number>`sum(${total})::int` }).from(profileActivity)
+      .where(and(companyId ? inArray(profileId, teamProfiles) : eq(profileId, account.profileId), gte(day, earliest))).groupBy(mode, campaign, source, event)
+      .orderBy(desc(sql`sum(${total})`)).limit(500);
+    return { items: items.map(row => ({ ...row, label: row.event.startsWith("LINK:") ? row.event.slice(5) : null })) };
+  });
+
+  app.get("/me/contact-leads", async (request, reply) => {
+    const account = await requireCustomer(request);
+    const { before, companyId } = parseBody(z.object({ before: z.uuid().optional(), companyId: z.uuid().optional() }), request.query);
+    reply.header("Cache-Control", "no-store");
+    const leads = customerContactLeads;
+    const scope = and(eq(leads.accountId, account.id), companyId ? eq(leads.companyId, companyId) : isNull(leads.companyId));
+    const cursor = db.select({ createdAt: leads.createdAt, id: leads.id }).from(leads)
+      .where(and(scope, eq(leads.id, before ?? "")));
+    const items = await db.select({ id: leads.id, name: leads.name, email: leads.email, phone: leads.phone,
+      message: leads.message, createdAt: leads.createdAt, forwardedAt: leads.forwardedAt, crmAllowed: leads.crmAllowed, recipientName: leads.recipientName }).from(leads)
+      .where(and(scope, before ? sql`(${leads.createdAt}, ${leads.id}) < (${cursor})` : undefined))
+      .orderBy(desc(leads.createdAt), desc(leads.id)).limit(51);
+    const page = items.slice(0, 50);
+    return { items: page, nextCursor: items.length > page.length ? page.at(-1)?.id : null, crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL) };
+  });
+
+  app.post("/me/contact-leads/:id/crm", async request => {
+    const account = await requireCustomer(request);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    const url = config.CRM_LEAD_WEBHOOK_URL;
+    if (!url) fail("CRM forwarding is not configured.", 503);
+    return db.transaction(async tx => {
+      const [lead] = await tx.select().from(customerContactLeads).where(and(eq(customerContactLeads.id, id), eq(customerContactLeads.accountId, account.id))).for("update");
+      if (!lead) fail("Contact not found.", 404);
+      if (!lead.crmAllowed) fail("This visitor shared their details for the inbox only.", 403);
+      if (lead.forwardedAt) return { forwardedAt: lead.forwardedAt.toISOString() };
+      const { name, email, phone, message, createdAt, companyId, recipientName } = lead;
+      const result = await fetch(url, { method: "POST", redirect: "error", signal: AbortSignal.timeout(4500),
+        headers: { "content-type": "application/json", "idempotency-key": id,
+          ...(config.CRM_LEAD_WEBHOOK_TOKEN ? { authorization: `Bearer ${config.CRM_LEAD_WEBHOOK_TOKEN}` } : {}) },
+        body: JSON.stringify({ id, accountId: account.id, companyId, recipientName, name, email, phone, message, createdAt }) }).catch(() => undefined);
+      if (!result?.ok) fail("The CRM did not accept this contact. Please try again.", 502);
+      const forwardedAt = new Date();
+      await tx.update(customerContactLeads).set({ forwardedAt }).where(eq(customerContactLeads.id, id));
+      return { forwardedAt: forwardedAt.toISOString() };
+    });
   });
 
   app.post("/cards/:cardSlug/activate", async (request, reply) => {
@@ -156,7 +272,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
 
   app.patch("/me/profile", async request => {
     const account = await requireCustomer(request);
-    const profile = parseBody(CustomerProfileSchema, request.body);
+    const profile = parseBody(profileUpdateSchema, request.body);
     await db.transaction(async tx => {
       await saveProfile(tx, account.profileId, profile);
       await tx.insert(auditLogs).values({ actorId: account.id, action: "CUSTOMER_PROFILE_UPDATED", targetType: "customer_profile", targetId: account.profileId, requestId: request.id });
@@ -166,7 +282,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
 
   app.post("/claim", async request => {
     const account = await requireCustomer(request);
-    const input = parseBody(ClaimCardSchema, request.body);
+    const input = parseBody(ClaimCardSchema.extend({ profile: profileUpdateSchema }), request.body);
     const token = await readClaimToken(input.claimToken);
     await db.transaction(async tx => {
       const card = await claimable(tx, token);

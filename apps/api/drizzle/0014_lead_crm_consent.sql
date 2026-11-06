@@ -1,0 +1,1 @@
+ALTER TABLE "customer_contact_leads" ADD COLUMN "crm_allowed" boolean DEFAULT false NOT NULL;

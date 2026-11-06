@@ -11,6 +11,7 @@ import { profileRoutes } from "./routes/profiles.js";
 import { adminRoutes } from "./routes/admin.js";
 import { localNfcRoutes } from "./routes/local-nfc.js";
 import { customerRoutes } from "./routes/customers.js";
+import { companyRoutes } from "./routes/companies.js";
 import { operatorAuthRoutes } from "./routes/operator-auth.js";
 
 import { orderRoutes } from "./routes/orders.js";
@@ -41,6 +42,7 @@ export function buildApp(https?: ServerOptions) {
   app.register(cardRoutes, { prefix: "/api/v1/production/cards" });
   app.register(profileRoutes, { prefix: "/api/v1/profiles" });
   app.register(customerRoutes, { prefix: "/api/v1/customer" });
+  app.register(companyRoutes, { prefix: "/api/v1/company" });
   app.register(orderRoutes, { prefix: "/api/v1/orders" });
   app.register(productRoutes, { prefix: "/api/v1/products" });
   app.register(productMediaRoutes, { prefix: "/api/v1/product-media" });

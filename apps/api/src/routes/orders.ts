@@ -1,18 +1,21 @@
 import { createHash } from "node:crypto";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
   bkashNumber, CodAdvanceSchema, defaultCodAdvanceTaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
-  ShippingRatesSchema, StoreCouponSchema, variantPrice,
-  type OrderReceipt,
+  ShippingRatesSchema, StoreCouponSchema, variantPrice, AdminOrderSearchSchema, OrderFulfillmentSchema,
+  type AdminOrderSearch, type OrderReceipt,
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
 import { allocatePendingOrders, allocationSummary } from "../domain/printed-stock.js";
 
-import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail } from "../domain/order-confirmation.js";
+import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
+import { orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
+import { attemptOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
+import { usesBrevoSmtp } from "../domain/transactional-email.js";
 import { parseBody, sendCreated } from "../http.js";
 
 const shippingSettingsId = "default";
@@ -23,12 +26,12 @@ async function readCheckoutSettings(client: Pick<typeof db, "select"> = db) {
 }
 
 function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
-  const { id, shippingZone, subtotalMinor, shippingMinor, couponCode, discountMinor, createdAt } = order;
+  const { id, shippingZone, subtotalMinor, shippingMinor, couponCode, discountMinor } = order;
   const { paymentMethod, paymentAmountMinor, paymentVerifiedAt } = order;
   return { id, paymentMethod, paymentAmountMinor,
     ...(paymentAmountMinor > 0 && { paymentStatus: paymentVerifiedAt ? "VERIFIED" : "PENDING_VERIFICATION" }),
-    status: order.deliveredAt ? "DELIVERED" : "RECEIVED", deliveredAt: order.deliveredAt?.toISOString() ?? null, shippingZone, subtotalMinor, shippingMinor,
-    couponCode, discountMinor, totalMinor: subtotalMinor + shippingMinor - discountMinor, createdAt: createdAt.toISOString() };
+    ...orderTracking(order), trackingPath: trackingPath(id), shippingZone, subtotalMinor, shippingMinor,
+    couponCode, discountMinor, totalMinor: subtotalMinor + shippingMinor - discountMinor };
 }
 
 function conflict(message: string): never {
@@ -109,19 +112,106 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     });
     const result = receipt(order);
     if (!newlyVerified || !confirmationEmailEnabled) return result;
-    const sent = await sendPaymentVerifiedEmail({ ...result, customer: order.customer });
-    if (!sent) request.log.warn({ orderId: id }, "Payment verification email was not accepted");
-    return { ...result, paymentEmail: sent ? "accepted" : "failed" };
+    const status = await attemptOrderEmail(id, "payment", () => sendPaymentVerifiedEmail({ ...result, customer: order.customer }));
+    if (status === "failed") request.log.warn({ orderId: id }, "Payment verification email was not accepted");
+    return { ...result, paymentEmail: status };
   });
 
-  app.get("/admin", async (request, reply) => {
+  app.post("/tracking", { bodyLimit: 1024 }, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { token } = parseBody(z.object({ token: z.string().max(100) }), request.body);
+    const id = trackingOrderId(token);
+    if (id) {
+      const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
+      if (order) return orderTracking(order);
+    }
+    return reply.code(404).send({ message: "This private tracking link is invalid." });
+  });
+
+  app.post("/admin/:id/fulfillment", async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    const input = parseBody(OrderFulfillmentSchema, request.body);
+    const { order, shipped } = await db.transaction(async tx => {
+      const [existing] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
+      if (!existing || existing.deliveredAt) conflict("Only an open order can be updated.");
+      if (input.status === "PROCESSING" ? existing.processingAt || existing.shippedAt : existing.shippedAt && existing.courierTrackingId === input.trackingId) {
+        return { order: existing, shipped: false };
+      }
+      if (input.status === "SHIPPED" && existing.paymentAmountMinor > 0 && !existing.paymentVerifiedAt) conflict("Verify the bKash payment before shipping.");
+      const now = new Date();
+      const [updated] = await tx.update(storeOrders).set(input.status === "PROCESSING" ? { processingAt: now }
+        : { processingAt: existing.processingAt ?? now, shippedAt: existing.shippedAt ?? now, courierTrackingId: input.trackingId })
+        .where(eq(storeOrders.id, id)).returning();
+      if (!updated) throw new Error("Order update failed");
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: `STORE_ORDER_${input.status}`,
+        targetType: "store_order", targetId: id, requestId: request.id });
+      return { order: updated, shipped: input.status === "SHIPPED" && !existing.shippedAt };
+    });
+    const shippingEmail = shipped && confirmationEmailEnabled ? await attemptOrderEmail(id, "shipping", () => sendShippingEmail({ ...receipt(order), customer: order.customer })) : undefined;
+    return { ...receipt(order), shippingEmail };
+  });
+
+  app.get("/admin/:id/emails", async (request, reply) => {
+    await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    reply.header("Cache-Control", "no-store");
+    return { items: await orderEmailHistory(id) };
+  });
+
+  app.post("/admin/:id/emails/retry", async request => {
+    await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    const { kind } = parseBody(z.object({ kind: z.enum(orderEmailKinds).exclude(["delivery"]) }), request.body);
+    if (!confirmationEmailEnabled) conflict("Order email is not configured.");
+    const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
+    if (!order) conflict("Order not found.");
+    const data = { ...receipt(order), customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items };
+    const status = await attemptOrderEmail(id, kind, async () => {
+      if (kind === "payment") return sendPaymentVerifiedEmail(data);
+      if (kind === "shipping") return sendShippingEmail(data);
+      return await sendOrderConfirmation(data, true, true) === "accepted";
+    }, "retry");
+    if (!status) conflict("Only a failed email can be retried.");
+    return { status };
+  });
+
+  app.put("/admin/:id/cod", async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    const input = parseBody(z.object({ codCollectedMinor: z.number().int().nonnegative(), codSettledMinor: z.number().int().nonnegative() }), request.body);
+    return db.transaction(async tx => {
+      const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
+      if (!order?.deliveredAt || order.paymentMethod !== "COD") conflict("COD amounts can be recorded after delivery.");
+      const due = receipt(order).totalMinor - (order.paymentVerifiedAt ? order.paymentAmountMinor : 0);
+      if (input.codSettledMinor > input.codCollectedMinor || input.codCollectedMinor > due) conflict("Settlement cannot exceed collection, and collection cannot exceed the remaining order balance.");
+      if (order.codCollectedMinor === input.codCollectedMinor && order.codSettledMinor === input.codSettledMinor) return input;
+      await tx.update(storeOrders).set(input).where(eq(storeOrders.id, id));
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_COD_UPDATED", targetType: "store_order", targetId: id,
+        requestId: request.id, metadata: input });
+      return input;
+    });
+  });
+
+  app.route({ method: ["GET", "POST"], url: "/admin", bodyLimit: 2048, handler: async (request, reply) => {
     await requireOperator(request, ["SUPER_ADMIN"]);
     reply.header("Cache-Control", "no-store");
-    const { beforeId } = parseBody(z.object({ beforeId: z.uuid().optional() }), request.query);
+    const filters: AdminOrderSearch = request.method === "POST" ? parseBody(AdminOrderSearchSchema, request.body)
+      : parseBody(AdminOrderSearchSchema.pick({ beforeId: true }), request.query);
+    const { beforeId, query, payment, delivery, qr } = filters;
     const before = db.select({ createdAt: storeOrders.createdAt, id: storeOrders.id })
       .from(storeOrders).where(eq(storeOrders.id, beforeId ?? ""));
+    const state = sql`case when ${storeOrders.deliveredAt} is not null then 'DELIVERED' when ${storeOrders.shippedAt} is not null then 'SHIPPED' when ${storeOrders.processingAt} is not null then 'PROCESSING' else 'RECEIVED' end`;
+    const required = sql`(select coalesce(sum((line->>'quantity')::integer), 0) from jsonb_array_elements(${storeOrders.items}) as line)`;
+    const assigned = sql`(select count(*) from ${orderCardAllocations} where ${orderCardAllocations.orderId} = ${storeOrders.id})`;
+    const digits = query?.replace(/\D/g, "") ?? "";
+    const phone = query && digits && /^[+\d(). -]+$/.test(query) ? sql`or position(${digits} in regexp_replace(${storeOrders.customer}->>'phone', '[^0-9]', '', 'g')) > 0` : sql``;
     const rows = await db.select().from(storeOrders)
-      .where(beforeId ? sql`(${storeOrders.createdAt}, ${storeOrders.id}) < (${before})` : undefined)
+      .where(and(beforeId ? sql`(${storeOrders.createdAt}, ${storeOrders.id}) < (${before})` : undefined,
+        query ? sql`(position(lower(${query}) in lower(${storeOrders.id}::text)) > 0 or position(lower(${query}) in lower(${storeOrders.customer}->>'email')) > 0 ${phone})` : undefined,
+        payment ? sql`${storeOrders.paymentAmountMinor} > 0 and ${storeOrders.paymentVerifiedAt} is ${payment === "VERIFIED" ? sql`not null` : sql`null`}` : undefined,
+        delivery ? sql`(${state}) = ${delivery}` : undefined,
+        qr ? sql`(case when ${assigned} >= ${required} then 'ASSIGNED' when ${assigned} > 0 then 'PARTIAL' else 'AWAITING_QR' end) = ${qr}` : undefined))
       .orderBy(desc(storeOrders.createdAt), desc(storeOrders.id)).limit(51);
     const page = rows.slice(0, 50);
     const allocations = page.length ? await db.select({ orderId: orderCardAllocations.orderId, id: cards.id, publicSlug: cards.publicSlug,
@@ -132,10 +222,11 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       const assignedCards = allocations.filter(item => item.orderId === row.id).map(({ orderId: _, ...card }) => card);
       return { ...receipt(row), reviewInviteSentAt: invites.find(invite => invite.orderId === row.id)?.sentAt?.toISOString() ?? null, customer: row.customer, profileId: row.profileId, assignedCards,
         qrAllocation: allocationSummary(row.items.reduce((sum, item) => sum + item.quantity, 0), assignedCards.length),
-        deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId };
-    }), hasMore: rows.length > 50 };
+        deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId,
+        codCollectedMinor: row.codCollectedMinor, codSettledMinor: row.codSettledMinor };
+    }), hasMore: rows.length > 50, supportsSearch: true };
 
-  });
+  } });
 
   app.post("/", { bodyLimit: 32 * 1024 }, async (request, reply) => {
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
@@ -157,11 +248,12 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (shippingMinor !== input.shippingMinor) conflict("Delivery rates changed. Review your updated total and try again.");
 
       const catalog = await tx.select().from(products).where(and(eq(products.status, "PUBLISHED"),
-        inArray(products.id, input.items.map(item => item.productId)))).for("share");
+        inArray(products.id, input.items.map(item => item.productId)))).orderBy(asc(products.id)).for("update");
       const items = input.items.map(line => {
         const product = catalog.find(item => item.id === line.productId);
         const variant = product?.variants.find(item => item.id === line.variantId);
         if (!product || !variant?.available) conflict("An item in your cart is no longer available.");
+        if (variant.stockQuantity !== undefined && line.quantity > variant.stockQuantity) conflict("There are not enough units of an item in your cart.");
         const unitPriceMinor = variantPrice(variant);
         if (unitPriceMinor !== line.unitPriceMinor) conflict("An item price changed. Review your updated cart and try again.");
         return { ...line, unitPriceMinor, name: product.name, variantName: variant.name };
@@ -186,6 +278,13 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         paymentMethod, paymentAmountMinor, transactionId,
       }).onConflictDoNothing({ target: storeOrders.transactionId }).returning();
       if (!order) conflict("This bKash transaction ID is already linked to an order.");
+      for (const product of catalog) {
+        const quantities = new Map(items.filter(item => item.productId === product.id).map(item => [item.variantId, item.quantity]));
+        if (!product.variants.some(variant => variant.stockQuantity !== undefined && quantities.has(variant.id))) continue;
+        const variants = product.variants.map(variant => variant.stockQuantity !== undefined && quantities.has(variant.id)
+          ? { ...variant, stockQuantity: variant.stockQuantity - (quantities.get(variant.id) ?? 0) } : variant);
+        await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
+      }
       await allocatePendingOrders(tx);
       return { order, created: true };
     }).catch(error => {
@@ -197,9 +296,11 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const result = receipt(order);
     const allocations = await db.select({ id: orderCardAllocations.id }).from(orderCardAllocations).where(eq(orderCardAllocations.orderId, order.id));
     result.qrAllocation = allocationSummary(order.items.reduce((sum, item) => sum + item.quantity, 0), allocations.length);
-    const emailStatus = order.paymentVerifiedAt ? undefined : await sendOrderConfirmation({
-      ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items,
-    }, created);
+    const maySend = confirmationEmailEnabled && !order.paymentVerifiedAt && (created || !usesBrevoSmtp) &&
+      Date.now() - order.createdAt.getTime() < 23 * 60 * 60 * 1000;
+    const emailStatus = maySend ? await attemptOrderEmail(order.id, "confirmation", async () =>
+      await sendOrderConfirmation({ ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items }, created) === "accepted",
+      created ? "initial" : "replay") : undefined;
     if (emailStatus === "failed") request.log.warn({ orderId: order.id }, "Order confirmation email was not accepted");
     if (emailStatus) result.confirmationEmail = emailStatus;
     return created ? sendCreated(reply, result) : result;

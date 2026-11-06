@@ -1,0 +1,3 @@
+ALTER TABLE "customer_contact_leads" ADD COLUMN "recipient_name" varchar(120);--> statement-breakpoint
+ALTER TABLE "customer_contact_leads" ADD COLUMN "company_id" uuid;--> statement-breakpoint
+ALTER TABLE "customer_contact_leads" ADD CONSTRAINT "customer_contact_leads_company_id_companies_id_fk" FOREIGN KEY ("company_id") REFERENCES "public"."companies"("id") ON DELETE set null ON UPDATE no action;

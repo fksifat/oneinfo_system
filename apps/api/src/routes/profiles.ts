@@ -10,7 +10,7 @@ export const publicProfileFields = {
   id: customerProfiles.id, publicSlug: customerProfiles.publicSlug, displayName: customerProfiles.displayName,
   headline: customerProfiles.headline, company: customerProfiles.company, bio: customerProfiles.bio,
   phone: customerProfiles.phone, email: customerProfiles.email, website: customerProfiles.website,
-  avatarUrl: customerProfiles.avatarUrl, theme: customerProfiles.theme,
+  avatarUrl: customerProfiles.avatarUrl, theme: customerProfiles.theme, profileMode: customerProfiles.profileMode, modeContent: customerProfiles.modeContent,
 };
 
 async function profileWithLinks(profileId: string) {
@@ -138,7 +138,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     await db.transaction(async (tx) => {
       const [current] = await tx.select().from(cards).where(eq(cards.id, card.id)).for("update");
       const [activation] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
-      if (current?.customerAccountId || activation) throw Object.assign(new Error("This card uses client activation. Its owner must claim it with the secret code and their customer account."), { statusCode: 409 });
+      if (current?.customerAccountId || current?.companyId || activation) throw Object.assign(new Error("This card uses client or company activation. Use its assigned workflow."), { statusCode: 409 });
       if (card.profileId === profileId && card.lifecycleStatus === "ACTIVATED") return;
       const [assigned] = await tx.update(cards).set({ profileId, lifecycleStatus: "ACTIVATED", updatedAt: new Date() })
         .where(and(eq(cards.id, card.id), isNull(cards.profileId), eq(cards.qcStatus, "PASSED"), eq(cards.lifecycleStatus, "QC_PASSED"))).returning();

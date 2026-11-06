@@ -7,6 +7,7 @@ import { db } from "../db/client.js";
 import { auditLogs, products, storeOrders, storeReviewInvites, storeReviews } from "../db/schema.js";
 import { parseBody } from "../http.js";
 import { sendReviewInvitation } from "../domain/review-invitation.js";
+import { recordOrderEmail } from "../domain/order-email-history.js";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const tokenSchema = z.object({ token: z.string().min(40).max(100) });
@@ -64,6 +65,7 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
       }
       // Keep the order lock until the send result is saved so a second click cannot replace the link.
       const sent = await sendReviewInvitation(order, token);
+      await recordOrderEmail(tx, id, "delivery", sent);
       if (sent) await tx.update(storeReviewInvites).set({ sentAt: new Date() }).where(eq(storeReviewInvites.orderId, id));
       return { delivered: true, invitation: sent ? "sent" : "pending" };
     });

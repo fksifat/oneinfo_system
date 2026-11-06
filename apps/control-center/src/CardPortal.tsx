@@ -1,18 +1,19 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { ActivateCardSchema, CustomerProfileSchema } from "@oneinfo/contracts";
-import { ProfileView, type PublicProfileData } from "./ProfileView.js";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ActivateCardSchema, CustomerProfileSchema, type ContactLead } from "@oneinfo/contracts";
+import { ProfileView, ShareContact, type PublicProfileData } from "./ProfileView.js";
 import type { z } from "zod";
 
 type Draft = z.infer<typeof CustomerProfileSchema>;
-type CardResponse = { status: "PROFILE"; profile: PublicProfileData["profile"]; links: PublicProfileData["links"] } |
+type CardResponse = { status: "PROFILE"; canShareContact?: boolean; crmEnabled?: boolean; profile: PublicProfileData["profile"]; links: PublicProfileData["links"] } |
   { status: "ACTIVATION_REQUIRED" | "UNAVAILABLE" };
-const emptyProfile: Draft = { displayName: "", headline: "", company: "", bio: "", phone: "", email: "", website: "", avatarUrl: "", theme: "MIDNIGHT", links: [] };
+const emptyProfile: Draft = { displayName: "", headline: "", company: "", bio: "", phone: "", email: "", website: "", avatarUrl: "", theme: "MIDNIGHT", links: [], profileMode: "BUSINESS", modeContent: {} };
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
 
-async function customerApi<T>(path: string, method = "GET", body?: unknown, token?: string): Promise<T> {
-  const response = await fetch(`${API_URL}/api/v1/customer${path}`, { method, cache: "no-store", headers: {
+export async function customerApi<T>(path: string, method = "GET", body?: unknown, token?: string, namespace = "customer"): Promise<T> {
+  const response = await fetch(`${API_URL}/api/v1/${namespace}${path}`, { method, cache: "no-store", headers: {
     ...(body ? { "content-type": "application/json" } : {}), ...(token ? { authorization: `Bearer ${token}` } : {}),
   }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  if (response.status === 204) return undefined as T;
   const data = await response.json();
   if (!response.ok) throw Object.assign(new Error(data.message ?? "Request failed. Please try again."), { status: response.status });
   return data as T;
@@ -32,7 +33,19 @@ export function CardPortal({ slug }: { slug: string }) {
   const [profile, setProfile] = useState<Draft>(emptyProfile);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const trackedView = useRef("");
   const base = `/c/${encodeURIComponent(slug)}`;
+  const rawSource = new URLSearchParams(location.search).get("source");
+  const source = rawSource === "nfc" ? "NFC" : rawSource === "qr" ? "QR" : "DIRECT";
+  const track = (event: "VIEW" | "SAVE" | "LINK", linkId?: string) => {
+    void customerApi(`/cards/${encodeURIComponent(slug)}/activity`, "POST", { event, source, linkId }).catch(() => {});
+  };
+  useEffect(() => {
+    const key = `${slug}:${source}`;
+    if (mode !== "public" || card?.status !== "PROFILE" || !card.canShareContact || trackedView.current === key) return;
+    trackedView.current = key;
+    track("VIEW");
+  }, [slug, source, mode, card]);
   const navigate = (next: string) => {
     setMode(next);
     window.history.pushState(null, "", `${base}${next === "public" ? "" : next === "details" ? "/edit" : `/${next}`}`);
@@ -67,7 +80,7 @@ export function CardPortal({ slug }: { slug: string }) {
   async function loadOwner(accessToken: string) {
     const owner = await customerApi<{ email: string; profile: Draft; cards: { publicSlug: string }[] }>("/me", "GET", undefined, accessToken);
     if (!claimToken && !owner.cards.some(card => card.publicSlug === slug)) throw new Error("Your account does not own this card. Use its secret code to claim an unactivated card.");
-    setEmail(owner.email); setProfile(owner.profile); navigate("details");
+    setEmail(owner.email); setProfile({ ...emptyProfile, ...owner.profile }); navigate("details");
   }
   useEffect(() => {
     if (mode !== "loading-owner") return;
@@ -109,7 +122,8 @@ export function CardPortal({ slug }: { slug: string }) {
     })}>Manage this card</button>
     {token && <button onClick={() => { sessionStorage.removeItem("oneinfo.customer.token"); setToken(""); }}>Sign out</button>}
     {error && <span role="alert">{error}</span>}
-  </div><ProfileView data={card} /></>;
+  </div><ProfileView data={card} onActivity={card.canShareContact ? track : undefined} contactAction={card.canShareContact && <ShareContact key={slug} crmEnabled={Boolean(card.crmEnabled)}
+    send={input => customerApi(`/cards/${encodeURIComponent(slug)}/contact-leads`, "POST", { ...input, source })} />} /></>;
 
   return <main className="card-portal"><section>
     <p className="eyebrow">ONEINFO · YOUR DIGITAL CARD</p>
@@ -142,6 +156,17 @@ export function CardPortal({ slug }: { slug: string }) {
           <label>Photo URL<input type="url" maxLength={500} value={profile.avatarUrl} onChange={event => update("avatarUrl", event.target.value)} /></label>
           <label>Theme<select value={profile.theme} onChange={event => update("theme", event.target.value as Draft["theme"])}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label>
         </fieldset>
+        <fieldset><legend>Card mode</legend>
+          <label>Active mode<select value={profile.profileMode} onChange={event => update("profileMode", event.target.value as Draft["profileMode"])}>
+            <option value="BUSINESS">Business</option><option value="EVENT">Event</option><option value="PORTFOLIO">Portfolio</option>
+          </select></label>
+          {(["EVENT", "PORTFOLIO"] as const).map(mode => <div key={mode} className="portal-link" hidden={profile.profileMode !== mode}>
+            <label>{mode === "EVENT" ? "Event name" : "Portfolio title"}<input maxLength={120} value={profile.modeContent[mode]?.title ?? ""}
+              onChange={event => update("modeContent", { ...profile.modeContent, [mode]: { description: profile.modeContent[mode]?.description ?? "", title: event.target.value } })} /></label>
+            <label>Description<textarea maxLength={600} value={profile.modeContent[mode]?.description ?? ""}
+              onChange={event => update("modeContent", { ...profile.modeContent, [mode]: { title: profile.modeContent[mode]?.title ?? "", description: event.target.value } })} /></label>
+          </div>)}
+        </fieldset>
         <fieldset><legend>Social & other links</legend>{profile.links.map((link, index) => <div className="portal-link" key={index}>
           <label>Label<input required maxLength={40} value={link.label} onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, label: event.target.value } : item))} /></label>
           <label>URL<input required type="url" maxLength={500} value={link.url} onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, url: event.target.value } : item))} /></label>
@@ -149,8 +174,86 @@ export function CardPortal({ slug }: { slug: string }) {
         </div>)}<button type="button" className="quiet" disabled={profile.links.length >= 12} onClick={() => update("links", [...profile.links, { label: "", url: "", sortOrder: profile.links.length, active: true }])}>Add link</button></fieldset>
         <button disabled={busy}>{busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
       </form>{mode === "signup" && <button className="quiet" disabled={busy} onClick={() => navigate("login")}>Already have an account? Sign in</button>}
+      {mode === "details" && !claimToken && <><LeadInbox key={token} token={token} /><ProfileAnalytics token={token} base={base} />
+        <p><a href="/team?manage=1">Company workspace</a></p></>}
     </>}
     {error && <p className="portal-error" role="alert">{error}</p>}
     <small className="profile-footer">Powered by Oneinfo · NFC + QR</small>
   </section></main>;
+}
+
+export function ProfileAnalytics({ token, base, companyId }: { token: string; base?: string; companyId?: string }) {
+  const [items, setItems] = useState<{ mode: string; campaign: string; source: string; event: string; label: string | null; total: number }[]>();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function load() {
+    setBusy(true); setError("");
+    try { setItems((await customerApi<{ items: NonNullable<typeof items> }>(`/me/activity${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`, "GET", undefined, token)).items); }
+    catch { setError("Could not load analytics. Check your session and try again."); }
+    finally { setBusy(false); }
+  }
+  return <section className="lead-inbox"><h2>Profile analytics</h2><p>Last 30 days. Contact saves count button clicks.</p>
+    {base && <p><a href={`${base}?source=nfc`}>NFC link</a> · <a href={`${base}?source=qr`}>QR link</a></p>}
+    <button type="button" className="quiet" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : "Load analytics"}</button>
+    {error && <p role="alert">{error}</p>}
+    {items?.length === 0 && <p>No activity recorded yet.</p>}
+    {!!items?.length && <ul>{items.map(item => <li key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}>
+      <strong>{item.label ?? ({ VIEW: "Profile views", SAVE: "Contact-save clicks", LINK: "Website clicks", LEAD: "Leads" }[item.event] ?? item.event)} · {item.total}</strong>
+      <span>{item.campaign || item.mode} · {item.source}</span>
+    </li>)}</ul>}
+  </section>;
+}
+
+export function LeadInbox({ token, companyId }: { token: string; companyId?: string }) {
+  const [items, setItems] = useState<ContactLead[]>();
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [crmEnabled, setCrmEnabled] = useState(false);
+
+  async function load(before?: string) {
+    if (loading) return;
+    setLoading(true); setError("");
+    try {
+      const query = new URLSearchParams();
+      if (before) query.set("before", before);
+      if (companyId) query.set("companyId", companyId);
+      const page = await customerApi<{ items: ContactLead[]; nextCursor: string | null; crmEnabled?: boolean }>(
+        `/me/contact-leads${query.size ? `?${query}` : ""}`, "GET", undefined, token);
+      setItems(previous => before ? [...(previous ?? []), ...page.items] : page.items);
+      setNextCursor(page.nextCursor);
+      setCrmEnabled(Boolean(page.crmEnabled));
+    } catch (error) {
+      setError((error as { status?: number }).status === 401 ? "Your session expired. Go back to your card and sign in again." : "Could not load your inbox. Please try again.");
+    } finally { setLoading(false); }
+  }
+
+  async function forward(lead: ContactLead) {
+    if (loading || !confirm("Send this visitor’s shared contact details to the connected CRM?")) return;
+    setLoading(true); setError("");
+    try {
+      const { forwardedAt } = await customerApi<{ forwardedAt: string }>(`/me/contact-leads/${lead.id}/crm`, "POST", undefined, token);
+      setItems(previous => previous?.map(item => item.id === lead.id ? { ...item, forwardedAt } : item));
+    } catch (error) { setError(error instanceof Error ? error.message : "Could not send to CRM."); }
+    finally { setLoading(false); }
+  }
+
+  return <section className="lead-inbox" aria-labelledby="lead-inbox-heading">
+    <h2 id="lead-inbox-heading">Lead Inbox</h2>
+    <p>Contacts that visitors chose to share with you.</p>
+    <button type="button" className="quiet" disabled={loading} onClick={() => void load()}>
+      {loading ? "Loading…" : items ? "Refresh inbox" : "Open inbox"}
+    </button>
+    {error && <p className="portal-error" role="alert">{error}</p>}
+    {items?.length === 0 && <p role="status">No contacts have been shared yet.</p>}
+    {!!items?.length && <ul>{items.map(lead => <li key={lead.id}>
+      <strong>{lead.name}</strong> <time dateTime={lead.createdAt}>{new Date(lead.createdAt).toLocaleString()}</time>
+      {lead.recipientName && <small>Shared via {lead.recipientName}’s card</small>}
+      {lead.email && <a href={`mailto:${lead.email}`}>{lead.email}</a>}
+      {lead.phone && <a href={`tel:${lead.phone}`}>{lead.phone}</a>}
+      {lead.message && <p>{lead.message}</p>}
+      {lead.forwardedAt ? <small>Sent to CRM</small> : crmEnabled && lead.crmAllowed && <button className="quiet" type="button" disabled={loading} onClick={() => void forward(lead)}>Send to CRM</button>}
+    </li>)}</ul>}
+    {nextCursor && <button type="button" className="quiet" disabled={loading} onClick={() => void load(nextCursor)}>Load older contacts</button>}
+  </section>;
 }

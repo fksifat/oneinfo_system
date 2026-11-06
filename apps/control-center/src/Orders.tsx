@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
+import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api } from "./api.js";
 
 const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
 const bdt = (minor: number) => money.format(minor / 100);
 const path = "/api/v1/orders";
+const searchFields = ["payment", "delivery", "qr"] as const;
+const statusLabels = { RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 
 export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void }) {
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [items, setItems] = useState<StoreOrder[]>([]);
   const [hasMore, setHasMore] = useState(false);
+  const [supportsSearch, setSupportsSearch] = useState(false);
   const [rates, setRates] = useState<Record<ShippingZone, string>>();
   const [codAdvance, setCodAdvance] = useState<string>();
   const [paymentMessage, setPaymentMessage] = useState("");
@@ -19,6 +22,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   const [verifyingPayment, setVerifyingPayment] = useState<string>();
   const [delivering, setDelivering] = useState<string>();
   const [loading, setLoading] = useState(false);
+  const [filters, setFilters] = useState<AdminOrderSearch>({});
+  const activeFilters = useRef(filters);
   const [saving, setSaving] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [ratesError, setRatesError] = useState("");
@@ -33,17 +38,27 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   const [couponError, setCouponError] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
 
-  async function loadOrders(beforeId?: string) {
+  function readOrders(filters: AdminOrderSearch, beforeId?: string) {
+    type Page = { items: StoreOrder[]; hasMore: boolean; supportsSearch?: boolean };
+    if (filters.query || filters.payment || filters.delivery || filters.qr) {
+      return api<Page>(`${path}/admin`, token, { method: "POST", body: JSON.stringify({ ...filters, beforeId }) });
+    }
+    return api<Page>(`${path}/admin${beforeId ? `?beforeId=${encodeURIComponent(beforeId)}` : ""}`, token);
+  }
+
+  async function loadOrders(beforeId?: string, applied = filters) {
     setLoading(true);
     setOrderError("");
     try {
-      const page = await api<{ items: StoreOrder[]; hasMore: boolean }>(`${path}/admin${beforeId ? `?beforeId=${beforeId}` : ""}`, token);
+      const page = await readOrders(applied, beforeId);
+      if (activeFilters.current !== applied) return;
       setItems(previous => beforeId ? [...previous, ...page.items] : page.items);
       setHasMore(page.hasMore);
+      setSupportsSearch(Boolean(page.supportsSearch));
     } catch (error) {
-      setOrderError(error instanceof Error ? error.message : "Could not load orders.");
+      if (activeFilters.current === applied) setOrderError(error instanceof Error ? error.message : "Could not load orders.");
     } finally {
-      setLoading(false);
+      if (activeFilters.current === applied) setLoading(false);
     }
   }
 
@@ -59,10 +74,10 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   }
 
   useEffect(() => {
-    void loadOrders();
     void loadRates();
     void loadCoupons();
   }, [token]);
+  useEffect(() => { void loadOrders(undefined, filters); }, [token, filters]);
 
   useEffect(() => {
     if (settingsOpen && settingsDialog.current && !settingsDialog.current.open) settingsDialog.current.showModal();
@@ -79,16 +94,26 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
         const updated: StoreOrder[] = [];
         let hasMore = true;
         while (hasMore && updated.length < Math.max(50, items.length)) {
-          const page = await api<{ items: StoreOrder[]; hasMore: boolean }>(`${path}/admin${updated.length ? `?beforeId=${updated.at(-1)!.id}` : ""}`, token);
+          const page = await readOrders(filters, updated.at(-1)?.id);
           updated.push(...page.items); hasMore = page.hasMore;
+          if (!disposed && activeFilters.current === filters) setSupportsSearch(Boolean(page.supportsSearch));
         }
-        if (!disposed) { setItems(updated); setHasMore(hasMore); }
+        if (!disposed && activeFilters.current === filters) { setItems(updated); setHasMore(hasMore); }
       } catch (error) { if (!disposed) setOrderError(error instanceof Error ? error.message : "Order sync failed."); }
       finally { pending = false; }
     };
     const interval = window.setInterval(() => void sync(), 5000);
     return () => { disposed = true; window.clearInterval(interval); };
-  }, [token, items.length]);
+  }, [token, items.length, filters]);
+
+  function searchOrders(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const selected = Object.fromEntries(searchFields.flatMap(field => data.get(field) ? [[field, data.get(field)]] : []));
+    const next = { query: String(data.get("query") ?? "").trim(), ...selected };
+    activeFilters.current = next;
+    setItems([]); setHasMore(false); setFilters(next);
+  }
 
 
   async function loadCoupons() {
@@ -190,9 +215,42 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     finally { setDelivering(undefined); }
   }
 
+  async function updateFulfillment(order: StoreOrder, status: "PROCESSING" | "SHIPPED", trackingId?: string) {
+    if (delivering) return;
+    setDelivering(order.id); setOrderError(""); setOrderMessage("");
+    try {
+      const updated = await api<OrderReceipt & { shippingEmail?: string }>(`${path}/admin/${order.id}/fulfillment`, token,
+        { method: "POST", body: JSON.stringify({ status, trackingId }) });
+      setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated } : item));
+      setOrderMessage(updated.shippingEmail === "failed" ? "Shipping saved. The email could not be sent." : "Order status updated.");
+    } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not update order status."); }
+    finally { setDelivering(undefined); }
+  }
+
+  async function saveCod(event: FormEvent<HTMLFormElement>, order: StoreOrder) {
+    event.preventDefault();
+    if (delivering) return;
+    const data = new FormData(event.currentTarget);
+    const input = { codCollectedMinor: Math.round(Number(data.get("collected")) * 100), codSettledMinor: Math.round(Number(data.get("settled")) * 100) };
+    setDelivering(order.id); setOrderError(""); setOrderMessage("");
+    try {
+      const updated = await api<typeof input>(`${path}/admin/${order.id}/cod`, token, { method: "PUT", body: JSON.stringify(input) });
+      setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated } : item));
+      setOrderMessage("COD collection and settlement saved.");
+    } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not save COD amounts."); }
+    finally { setDelivering(undefined); }
+  }
+
   return <div className="store-orders">
     <section className="panel store-orders-list">
       <div className="panel-head"><div><h2>Received orders</h2><p>Review payments, delivery details, and order items.</p></div><button type="button" className="quiet" disabled={loading} onClick={() => void loadOrders()}>Refresh</button></div>
+      {supportsSearch && <form className="order-filter-form" onSubmit={searchOrders}>
+        <label>Search orders<input type="search" name="query" maxLength={254} placeholder="Order ID, phone or email" /></label>
+        <label>Payment<select name="payment"><option value="">Any</option><option value="PENDING_VERIFICATION">Pending</option><option value="VERIFIED">Verified</option></select></label>
+        <label>Delivery<select name="delivery"><option value="">Any</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label>QR allocation<select name="qr"><option value="">Any</option><option value="AWAITING_QR">Awaiting QR</option><option value="PARTIAL">Partially assigned</option><option value="ASSIGNED">Assigned</option></select></label>
+        <button type="submit" className="quiet">Apply filters</button>
+      </form>}
       {orderError && <p className="store-order-notice is-error" role="alert">{orderError}</p>}
       {orderMessage && <p className="store-order-notice" role="status">{orderMessage}</p>}
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
@@ -206,7 +264,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               {order.paymentStatus === "PENDING_VERIFICATION" && <em className="store-order-status is-pending">Payment pending</em>}
               {order.paymentStatus === "VERIFIED" && <em className="store-order-status is-paid">Payment verified</em>}
             </small>
-            {order.status === "DELIVERED" && <small><em className="store-order-status is-delivered">Delivered</em></small>}
+            <small><em className={`store-order-status ${order.status === "DELIVERED" ? "is-delivered" : "is-pending"}`}>{statusLabels[order.status]}</em></small>
           </span>
         </summary>
         <div className="store-order-content">
@@ -224,8 +282,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
             {order.transactionId && order.paymentMethod === "COD" && <div><dt>Remaining on delivery after verification</dt>
               <dd>{bdt(order.totalMinor - (order.paymentAmountMinor ?? 0))}</dd></div>}
             {order.customer.note && <div><dt>Order note</dt><dd>{order.customer.note}</dd></div>}
+            {order.courierTrackingId && <div><dt>Courier tracking ID</dt><dd>{order.courierTrackingId}</dd></div>}
+            {order.trackingPath && <div><dt>Private tracking link</dt><dd><a href={new URL(order.trackingPath, import.meta.env.VITE_STOREFRONT_URL || location.origin).href} target="_blank" rel="noreferrer">Open order tracking</a></dd></div>}
           </dl>
           <div className="store-order-actions">
+            {order.trackingPath && order.status === "RECEIVED" && <button className="quiet" type="button" disabled={Boolean(delivering)} onClick={() => void updateFulfillment(order, "PROCESSING")}>Start processing</button>}
             {order.paymentStatus === "PENDING_VERIFICATION" && <button className="quiet" type="button"
               disabled={Boolean(verifyingPayment)} onClick={() => void verifyPayment(order)}>
               {verifyingPayment === order.id ? "Verifying…" : "Verify bKash payment"}
@@ -234,6 +295,18 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
             </button>
           </div>
+          {order.trackingPath && order.status !== "DELIVERED" && order.paymentStatus !== "PENDING_VERIFICATION" && <form className="order-filter-form" onSubmit={event => {
+            event.preventDefault(); void updateFulfillment(order, "SHIPPED", String(new FormData(event.currentTarget).get("trackingId")));
+          }}>
+            <label>Courier tracking ID<input name="trackingId" maxLength={100} required defaultValue={order.courierTrackingId ?? ""} /></label>
+            <button type="submit" className="quiet" disabled={Boolean(delivering)}>{order.status === "SHIPPED" ? "Update tracking ID" : "Mark shipped"}</button>
+          </form>}
+          {order.trackingPath && order.status === "DELIVERED" && order.paymentMethod === "COD" && <form className="order-filter-form" onSubmit={event => void saveCod(event, order)}>
+            <label>Courier collected (৳)<input name="collected" type="number" min="0" step="0.01" required defaultValue={(order.codCollectedMinor ?? 0) / 100} /></label>
+            <label>Courier settled (৳)<input name="settled" type="number" min="0" step="0.01" required defaultValue={(order.codSettledMinor ?? 0) / 100} /></label>
+            <button type="submit" className="quiet" disabled={Boolean(delivering)}>Save COD amounts</button>
+          </form>}
+          {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} />}
           <ul>{order.items.map(item => <li key={`${item.productId}:${item.variantId}`}>
             {item.quantity} × {item.name} · {item.variantName} · {bdt(item.unitPriceMinor * item.quantity)}
           </li>)}</ul>
@@ -294,5 +367,37 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
 
     </section>
     </dialog>
+  </div>;
+}
+
+type EmailAttempt = { id: string; kind: "confirmation" | "payment" | "shipping" | "delivery"; status: "accepted" | "failed"; createdAt: string };
+
+function OrderEmailHistory({ orderId, token }: { orderId: string; token: string }) {
+  const [items, setItems] = useState<EmailAttempt[]>();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const endpoint = `${path}/admin/${orderId}/emails`;
+
+  async function refresh(kind?: EmailAttempt["kind"]) {
+    if (busy) return;
+    setBusy(true); setMessage("");
+    try {
+      if (kind === "delivery") await api(`/api/v1/reviews/admin/orders/${orderId}/deliver`, token, { method: "POST" });
+      else if (kind) await api(`${endpoint}/retry`, token, { method: "POST", body: JSON.stringify({ kind }) });
+      const page = await api<{ items: EmailAttempt[] }>(endpoint, token);
+      setItems(page.items);
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load email history."); }
+    finally { setBusy(false); }
+  }
+
+  return <div className="order-email-history">
+    <button type="button" className="quiet" disabled={busy} onClick={() => void refresh()}>{items ? "Refresh email history" : "Show email history"}</button>
+    {message && <p role="alert">{message}</p>}
+    {items?.length === 0 && <p>No email attempts recorded for this order.</p>}
+    {!!items?.length && <ul>{items.map((item, index) => <li key={item.id}>
+      {item.kind} · {item.status === "accepted" ? "Accepted by email service" : "Send failed"} · {new Date(item.createdAt).toLocaleString()}
+      {item.status === "failed" && items.findIndex(attempt => attempt.kind === item.kind) === index &&
+        <button type="button" className="quiet" disabled={busy} onClick={() => void refresh(item.kind)}>Retry {item.kind}</button>}
+    </li>)}</ul>}
   </div>;
 }

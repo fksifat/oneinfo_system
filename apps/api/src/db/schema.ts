@@ -1,8 +1,10 @@
-import type { OrderLine, PlaceOrderInput, ProductVariant, ShippingRates, ShippingZone } from "@oneinfo/contracts";
+import type { CustomerProfileSchema, OrderLine, PlaceOrderInput, ProductVariant, ShippingRates, ShippingZone, profileModes, profileSources } from "@oneinfo/contracts";
+import type { z } from "zod";
 import { randomUUID } from "node:crypto";
 import {
   bigint,
   boolean,
+  date,
   check,
   index,
   integer,
@@ -100,6 +102,8 @@ export const customerProfiles = pgTable(
     website: text("website").notNull().default(""),
     avatarUrl: text("avatar_url").notNull().default(""),
     theme: profileTheme("theme").notNull().default("MIDNIGHT"),
+    profileMode: text("profile_mode").$type<typeof profileModes[number]>().notNull().default("BUSINESS"),
+    modeContent: jsonb("mode_content").$type<z.infer<typeof CustomerProfileSchema>["modeContent"]>().notNull().default({}),
     published: boolean("published").notNull().default(false),
     ...timestamps,
   },
@@ -123,6 +127,16 @@ export const profileLinks = pgTable(
   (table) => [index("profile_links_profile_sort_idx").on(table.profileId, table.sortOrder)],
 );
 
+export const profileActivity = pgTable("profile_activity", {
+  profileId: uuid("profile_id").notNull().references(() => customerProfiles.id, { onDelete: "cascade" }),
+  day: date("day").notNull(),
+  mode: text("mode").$type<typeof profileModes[number]>().notNull(),
+  campaign: varchar("campaign", { length: 120 }).notNull(),
+  source: text("source").$type<typeof profileSources[number]>().notNull(),
+  event: varchar("event", { length: 72 }).notNull(),
+  total: integer("total").notNull().default(1),
+}, table => [uniqueIndex("profile_activity_bucket_unique").on(table.profileId, table.day, table.mode, table.campaign, table.source, table.event)]);
+
 export const customerAccounts = pgTable("customer_accounts", {
   id: uuid("id").primaryKey().$defaultFn(randomUUID),
   email: varchar("email", { length: 254 }).notNull(),
@@ -131,6 +145,49 @@ export const customerAccounts = pgTable("customer_accounts", {
   active: boolean("active").notNull().default(true),
   ...timestamps,
 }, table => [uniqueIndex("customer_accounts_email_unique").on(table.email), uniqueIndex("customer_accounts_profile_unique").on(table.profileId)]);
+
+export const customerContactLeads = pgTable("customer_contact_leads", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  accountId: uuid("account_id").notNull().references(() => customerAccounts.id, { onDelete: "cascade" }),
+  requestId: uuid("request_id").notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  email: varchar("email", { length: 254 }).notNull(),
+  phone: varchar("phone", { length: 40 }).notNull(),
+  message: text("message").notNull(),
+  recipientName: varchar("recipient_name", { length: 120 }),
+  companyId: uuid("company_id").references(() => companies.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  forwardedAt: timestamp("forwarded_at", { withTimezone: true }),
+  crmAllowed: boolean("crm_allowed").notNull().default(false),
+}, table => [
+  uniqueIndex("customer_contact_leads_request_unique").on(table.accountId, table.requestId),
+  index("customer_contact_leads_inbox_idx").on(table.accountId, table.createdAt, table.id),
+]);
+
+export const companies = pgTable("companies", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  ownerAccountId: uuid("owner_account_id").notNull().references(() => customerAccounts.id, { onDelete: "restrict" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  domain: varchar("domain", { length: 253 }),
+  logoUrl: text("logo_url").notNull().default(""),
+  headline: varchar("headline", { length: 160 }).notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  theme: profileTheme("theme").notNull().default("MIDNIGHT"),
+  allowEmployeeEdits: boolean("allow_employee_edits").notNull().default(false),
+  ...timestamps,
+}, table => [uniqueIndex("companies_domain_unique").on(table.domain), index("companies_owner_idx").on(table.ownerAccountId)]);
+
+export const companyEmployees = pgTable("company_employees", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "restrict" }),
+  profileId: uuid("profile_id").notNull().references(() => customerProfiles.id, { onDelete: "restrict" }),
+  email: varchar("email", { length: 254 }).notNull(),
+  active: boolean("active").notNull().default(true),
+  editTokenHash: varchar("edit_token_hash", { length: 64 }),
+  editTokenExpiresAt: timestamp("edit_token_expires_at", { withTimezone: true }),
+  ...timestamps,
+}, table => [uniqueIndex("company_employees_email_unique").on(table.companyId, table.email),
+  uniqueIndex("company_employees_profile_unique").on(table.profileId), uniqueIndex("company_employees_edit_token_unique").on(table.editTokenHash)]);
 
 export const cardBatches = pgTable(
   "card_batches",
@@ -155,6 +212,7 @@ export const cards = pgTable(
     batchId: uuid("batch_id").notNull().references(() => cardBatches.id, { onDelete: "restrict" }),
     profileId: uuid("profile_id").references(() => customerProfiles.id, { onDelete: "set null" }),
     customerAccountId: uuid("customer_account_id").references(() => customerAccounts.id, { onDelete: "restrict" }),
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "restrict" }),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     publicSlug: varchar("public_slug", { length: 64 }).notNull(),
     canonicalUrl: text("canonical_url").notNull(),
@@ -170,6 +228,7 @@ export const cards = pgTable(
     uniqueIndex("cards_canonical_url_unique").on(table.canonicalUrl),
     index("cards_batch_idx").on(table.batchId),
     index("cards_profile_idx").on(table.profileId),
+    index("cards_company_idx").on(table.companyId),
   ],
 );
 
@@ -359,6 +418,11 @@ export const storeOrders = pgTable("store_orders", {
   paymentAmountMinor: bigint("payment_amount_minor", { mode: "number" }).notNull().default(0),
   transactionId: varchar("transaction_id", { length: 20 }),
   paymentVerifiedAt: timestamp("payment_verified_at", { withTimezone: true }),
+  processingAt: timestamp("processing_at", { withTimezone: true }),
+  shippedAt: timestamp("shipped_at", { withTimezone: true }),
+  courierTrackingId: varchar("courier_tracking_id", { length: 100 }),
+  codCollectedMinor: bigint("cod_collected_minor", { mode: "number" }),
+  codSettledMinor: bigint("cod_settled_minor", { mode: "number" }),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [

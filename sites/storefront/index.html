@@ -48,6 +48,11 @@
     <main id="main">
       <section id="product-detail" class="section-pad product-detail" hidden aria-label="Product details"></section>
       <section id="review-portal" class="review-portal-page" hidden aria-labelledby="review-portal-title"></section>
+      <section id="tracking-portal" class="review-portal-page" hidden aria-labelledby="tracking-portal-title">
+        <a class="back-to-products" href="#products">Back to cards</a>
+        <div class="review-portal-card"><h1 id="tracking-portal-title" tabindex="-1">Track your Oneinfo order</h1>
+          <div data-tracking-content role="status"></div></div>
+      </section>
       <section id="order-draft" class="order-page" hidden aria-labelledby="order-title">
         <div class="order-shell">
           <a class="back-to-products" href="#products">← Back to cards</a>
@@ -70,6 +75,7 @@
             <h2 tabindex="-1">Order received</h2>
             <p class="order-receipt-payment"></p>
             <p class="order-receipt-email" role="status" hidden></p>
+            <a class="order-receipt-tracking" hidden>Track your order</a>
             <dl class="order-saved-details">
               <div><dt>Order ID</dt><dd class="order-receipt-id"></dd></div>
               <div><dt>Shipping</dt><dd class="order-receipt-shipping"></dd></div>

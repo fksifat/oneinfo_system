@@ -18,7 +18,9 @@ export const productRoutes: FastifyPluginAsync = async app => {
     reply.header("Cache-Control", "no-store");
     const items = await db.select().from(products).where(eq(products.status, "PUBLISHED"))
       .orderBy(asc(products.sortOrder), asc(products.name), asc(products.id));
-    return { items };
+    return { items: items.map(item => ({ ...item, variants: item.variants.map(({ stockQuantity, ...variant }) => ({
+      ...variant, available: variant.available && stockQuantity !== 0,
+    })) })) };
   });
   app.get("/", async request => {
     await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);

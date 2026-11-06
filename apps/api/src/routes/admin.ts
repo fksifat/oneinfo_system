@@ -5,6 +5,7 @@ import { parseBody } from "../http.js";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { productionBatchSummary } from "../domain/workflow.js";
+import { printedStockAvailable } from "../domain/printed-stock.js";
 import {
   auditLogs,
   cardBatches,
@@ -14,6 +15,7 @@ import {
   nfcEncodingAttempts,
   productionJobs,
   productionStations,
+  products,
   qrArtifacts,
 } from "../db/schema.js";
 
@@ -40,6 +42,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .from(cards)
       .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(isNotNull(cardBatches.printConfirmedAt))
       .groupBy(cards.inventoryStatus);
+    const [[printed], catalog] = await Promise.all([
+      db.select({ value: count() }).from(cards).innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(printedStockAvailable()),
+      db.select({ name: products.name, variants: products.variants }).from(products).where(eq(products.status, "PUBLISHED")),
+    ]);
+    const threshold = 5;
+    const stockAlerts = catalog.flatMap(product => product.variants.flatMap(variant =>
+      variant.available && variant.stockQuantity !== undefined && variant.stockQuantity <= threshold
+        ? [{ name: `${product.name} · ${variant.name}`, remaining: variant.stockQuantity }] : []));
+    if ((printed?.value ?? 0) <= threshold) stockAlerts.unshift({ name: "Printed QR stock", remaining: printed?.value ?? 0 });
     return {
       profiles: profileTotal[0]?.value ?? 0,
       cards: cardTotal[0]?.value ?? 0,
@@ -49,6 +60,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       qrArtifacts: qrTotal[0]?.value ?? 0,
       nfcAttempts: nfcAttemptTotal[0]?.value ?? 0,
       inventory: Object.fromEntries(statusRows.map((row) => [row.status, row.value])),
+      stockAlerts,
     };
   });
 

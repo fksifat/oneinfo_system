@@ -18,13 +18,19 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   let client: typeof import("../src/db/client.js");
   let schema: typeof import("../src/db/schema.js");
   let headers: Record<string, string>;
+  let failNextShippingEmail = false;
   const productId = randomUUID(), variantId = randomUUID();
 
   beforeAll(async () => {
     const { config } = await import("../src/config.js");
     if (!/^\/oneinfo_print_stock_\d+_test$/.test(new URL(config.DATABASE_URL).pathname)) throw new Error("Disposable test database required");
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === process.env.CRM_LEAD_WEBHOOK_URL) return Response.json({ accepted: true });
       if (url !== "https://api.resend.com/emails") throw new Error("Unexpected external request");
+      if (failNextShippingEmail && String(init?.body).includes("Your Oneinfo order has shipped")) {
+        failNextShippingEmail = false;
+        return Response.json({}, { status: 503 });
+      }
       return Response.json({ id: "test-email" });
     }));
     client = await import("../src/db/client.js");
@@ -40,6 +46,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     await client.db.insert(schema.storeShippingSettings).values({ id: "default", rates: { insideDhaka: 6000, subDhaka: 10000, outsideDhaka: 12000 }, codAdvanceTaka: 0 });
   });
   beforeEach(async () => {
+    failNextShippingEmail = false;
     await client.db.execute(sql`truncate table card_batches, customer_profiles, store_orders, audit_logs cascade`);
   });
   afterAll(async () => { await app?.close(); await client?.closeDatabase(); vi.unstubAllGlobals(); });
@@ -125,6 +132,175 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect((await activate(card!.publicSlug, replacement.secretCode)).claimToken).toBeTruthy();
     const legacyProfile = await request("/api/v1/profiles", { publicSlug: "cannot-bypass-secret", displayName: "Cannot bypass" });
     expect((await app.inject({ method: "POST", url: `/api/v1/profiles/${legacyProfile.id}/assign-card`, headers, payload: { cardId: card!.id } })).statusCode).toBe(409);
+  });
+
+  it("keeps opt-in contact shares private, deduplicates retries and pages older contacts", async () => {
+    const card = await readyForClaim();
+    const sendUrl = `/api/v1/customer/cards/${card.publicSlug}/contact-leads`;
+    const inboxUrl = "/api/v1/customer/me/contact-leads";
+    const payload = { requestId: randomUUID(), name: "Test visitor", email: "visitor@example.com", message: "Please follow up", consent: true, crmAllowed: true, source: "NFC" };
+    const send = (body: object) => app.inject({ method: "POST", url: sendUrl, payload: body });
+    expect((await send(payload)).statusCode).toBe(404);
+    const grant = await activate(card.publicSlug, (await issue(card.id)).secretCode);
+    const owner = await signup(grant.claimToken, "lead-owner@example.com");
+    expect(owner.statusCode, owner.body).toBe(201);
+    const otherCard = await readyForClaim();
+    const otherGrant = await activate(otherCard.publicSlug, (await issue(otherCard.id)).secretCode);
+    const other = await signup(otherGrant.claimToken, "other-owner@example.com");
+    expect(other.statusCode, other.body).toBe(201);
+    expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toMatchObject({ status: "PROFILE", canShareContact: true });
+    expect((await send({ ...payload, consent: false })).statusCode).toBe(400);
+    expect((await send({ ...payload, email: "" })).statusCode).toBe(400);
+    const retries = await Promise.all([send(payload), send(payload)]);
+    for (const result of retries) expect(result.statusCode, result.body).toBe(201);
+    const [lead] = await client.db.select().from(schema.customerContactLeads);
+    expect(lead).toBeTruthy();
+    const auth = (accessToken: string) => ({ authorization: `Bearer ${accessToken}` });
+    const get = (accessToken: string, before?: string) => app.inject({ method: "GET", url: before ? `${inboxUrl}?before=${before}` : inboxUrl, headers: auth(accessToken) });
+    expect((await app.inject(inboxUrl)).statusCode).toBe(401);
+    expect((await get(other.json().accessToken, lead!.id)).json()).toMatchObject({ items: [], nextCursor: null });
+    const inbox = await get(owner.json().accessToken);
+    expect(inbox.json().items).toEqual([expect.objectContaining({ name: payload.name, email: payload.email, message: payload.message })]);
+    expect(inbox.headers["cache-control"]).toBe("no-store");
+    const activity = `/api/v1/customer/cards/${card.publicSlug}/activity`;
+    const update = await app.inject({ method: "PATCH", url: "/api/v1/customer/me/profile", headers: auth(owner.json().accessToken),
+      payload: { ...publicDetails, profileMode: "EVENT", modeContent: { EVENT: { title: "Oneinfo Expo", description: "Meet the team" } } } });
+    expect(update.statusCode, update.body).toBe(200);
+    expect((await app.inject({ method: "POST", url: activity, payload: { source: "QR", event: "VIEW" } })).statusCode).toBe(204);
+    const stats = await app.inject({ url: "/api/v1/customer/me/activity", headers: auth(owner.json().accessToken) });
+    expect(stats.json().items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ mode: "EVENT", campaign: "Oneinfo Expo", source: "QR", event: "VIEW", total: 1 }),
+      expect.objectContaining({ mode: "BUSINESS", source: "NFC", event: "LEAD", total: 1 }),
+    ]));
+    if (inbox.json().crmEnabled) {
+      const forward = (accessToken: string) => app.inject({ method: "POST", url: `${inboxUrl}/${lead!.id}/crm`, headers: auth(accessToken) });
+      expect((await forward(other.json().accessToken)).statusCode).toBe(404);
+      const sent = await forward(owner.json().accessToken);
+      expect(sent.statusCode, sent.body).toBe(200);
+      expect((await forward(owner.json().accessToken)).json()).toEqual(sent.json());
+    }
+    await client.db.insert(schema.customerContactLeads).values(Array.from({ length: 50 }, () => ({
+      accountId: lead!.accountId, requestId: randomUUID(), name: "Later visitor", email: "later@example.com", phone: "", message: "", createdAt: new Date(Date.now() + 60_000),
+    })));
+    const firstPage = (await get(owner.json().accessToken)).json();
+    expect(firstPage.items).toHaveLength(50);
+    expect(firstPage.nextCursor).toBeTruthy();
+    const secondPage = await get(owner.json().accessToken, firstPage.nextCursor);
+    expect(secondPage.statusCode, secondPage.body).toBe(200);
+    expect(secondPage.json().items).toEqual([expect.objectContaining({ id: lead!.id })]);
+    await client.db.update(schema.cards).set({ lifecycleStatus: "SUSPENDED" }).where(eq(schema.cards.id, card.id));
+    expect((await send({ ...payload, requestId: randomUUID() })).statusCode).toBe(404);
+  });
+
+  it("keeps tracking private, searches the full order list, and validates shipping and COD settlement", async () => {
+    const result = await order();
+    const url = `/api/v1/orders/admin/${result.id}`;
+    const inject = (method: "POST" | "PUT", url: string, payload: object, auth = headers) => app.inject({ method, url, payload, headers: auth });
+    const token = result.trackingPath.split("#track/")[1];
+    const track = async (secret: string) => inject("POST", "/api/v1/orders/tracking", { token: secret }, {});
+    expect((await track(token.slice(0, -1) + (token.endsWith("a") ? "b" : "a"))).statusCode).toBe(404);
+    expect((await track(token)).json()).toMatchObject({ status: "RECEIVED" });
+    expect((await inject("PUT", `${url}/cod`, { codCollectedMinor: 100, codSettledMinor: 0 })).statusCode).toBe(409);
+    const processing = await inject("POST", `${url}/fulfillment`, { status: "PROCESSING" });
+    expect(processing.statusCode, processing.body).toBe(200);
+    failNextShippingEmail = true;
+    const shipped = await inject("POST", `${url}/fulfillment`, { status: "SHIPPED", trackingId: "COURIER-42" });
+    expect(shipped.statusCode, shipped.body).toBe(200);
+    if (shipped.json().shippingEmail) {
+      expect(shipped.json().shippingEmail).toBe("failed");
+      const retry = await inject("POST", `${url}/emails/retry`, { kind: "shipping" });
+      expect(retry.statusCode, retry.body).toBe(200);
+      expect(retry.json().status).toBe("accepted");
+    }
+    const tracking = await track(token);
+    expect(tracking.headers["cache-control"]).toBe("no-store");
+    expect(tracking.json()).toMatchObject({ status: "SHIPPED", courierTrackingId: "COURIER-42" });
+    expect(tracking.body).not.toContain("buyer@example.com");
+    expect(tracking.body).not.toContain("Test address");
+    const search = await inject("POST", "/api/v1/orders/admin", { query: "(017) 123-45678", delivery: "SHIPPED", qr: "AWAITING_QR" });
+    expect(search.statusCode, search.body).toBe(200);
+    expect(search.json().items.map((item: { id: string }) => item.id)).toEqual([result.id]);
+    expect((await inject("POST", "/api/v1/orders/admin", { query: "buyer@EXAMPLE.COM", delivery: "RECEIVED" })).json().items).toEqual([]);
+    const delivered = await inject("POST", `/api/v1/reviews/admin/orders/${result.id}/deliver`, {});
+    expect(delivered.statusCode, delivered.body).toBe(200);
+    expect((await track(token)).json().status).toBe("DELIVERED");
+    expect((await inject("PUT", `${url}/cod`, { codCollectedMinor: 100, codSettledMinor: 101 })).statusCode).toBe(409);
+    const cod = await inject("PUT", `${url}/cod`, { codCollectedMinor: 100, codSettledMinor: 50 });
+    expect(cod.statusCode, cod.body).toBe(200);
+    expect(cod.json()).toEqual({ codCollectedMinor: 100, codSettledMinor: 50 });
+    const history = await request(`${url}/emails`);
+    expect(history.items).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "delivery", status: expect.stringMatching(/^(failed|accepted)$/) })]));
+  });
+
+  it("keeps company management tenant-scoped and handles employee edits, reassignment and replacement", async () => {
+    const ownerCard = await readyForClaim();
+    const owner = await signup((await activate(ownerCard.publicSlug, (await issue(ownerCard.id)).secretCode)).claimToken, "team-owner@example.com");
+    expect(owner.statusCode, owner.body).toBe(201);
+    const secondOwnerCard = await readyForClaim();
+    const second = await signup((await activate(secondOwnerCard.publicSlug, (await issue(secondOwnerCard.id)).secretCode)).claimToken, "other-team@example.com");
+    expect(second.statusCode, second.body).toBe(201);
+    const ownerHeaders = { authorization: `Bearer ${owner.json().accessToken}` }, otherHeaders = { authorization: `Bearer ${second.json().accessToken}` };
+    const { id } = await request("/api/v1/company/admin", { name: "Oneinfo Team", ownerEmail: "team-owner@example.com", domain: "team.example.com" });
+    const url = `/api/v1/company/me/${id}`;
+    const send = (method: "GET" | "POST" | "PUT" | "PATCH", url: string, payload?: object, auth = ownerHeaders) => app.inject({ method, url, headers: auth, ...(payload ? { payload } : {}) });
+    expect((await send("GET", url, undefined, otherHeaders)).statusCode).toBe(404);
+    const branding = await send("PUT", `${url}/settings`, { name: "Oneinfo Team", logoUrl: "https://team.example.com/logo.png", headline: "Team member", bio: "Team bio", theme: "MINT", allowEmployeeEdits: true });
+    expect(branding.statusCode, branding.body).toBe(200);
+    const imported = await send("POST", `${url}/employees`, { employees: [{ name: "First Employee", email: "employee@example.com" }, { name: "Other Employee", email: "other-employee@example.com" }] });
+    expect(imported.statusCode, imported.body).toBe(200);
+    const stock = await readyForClaim();
+    await request(`/api/v1/company/admin/${id}/cards`, { cardSlug: stock.publicSlug });
+    const workspace = (await send("GET", url)).json();
+    const [employee, colleague] = workspace.employees;
+    const teamCard = `/api/v1/customer/cards/${stock.publicSlug}`;
+    expect((await send("PUT", `${url}/cards/${stock.id}`, { employeeId: employee.id })).statusCode).toBe(200);
+    expect((await request(teamCard)).profile).toMatchObject({ displayName: "First Employee", theme: "MINT", email: "" });
+    expect((await request(teamCard)).canShareContact).toBe(true);
+    expect((await send("POST", `${teamCard}/contact-leads`, { requestId: randomUUID(), name: "Company visitor", email: "visitor@example.com", consent: true, source: "QR" }, {})).statusCode).toBe(201);
+    const leadUrl = `/api/v1/customer/me/contact-leads?companyId=${id}`;
+    expect((await send("GET", leadUrl)).json().items).toEqual([expect.objectContaining({ recipientName: "First Employee" })]);
+    expect((await send("GET", leadUrl, undefined, otherHeaders)).json().items).toEqual([]);
+    expect((await send("GET", `/api/v1/customer/me/activity?companyId=${id}`)).json().items).toEqual([expect.objectContaining({ event: "LEAD", source: "QR", total: 1 })]);
+    const edit = await send("POST", `${url}/employees/${employee.id}/edit-link`);
+    expect(edit.statusCode, edit.body).toBe(200);
+    const secret = edit.json().path.split("#edit/")[1];
+    const editor = "/api/v1/company/employee/profile";
+    expect((await send("POST", editor, { token: secret, profile: { displayName: "Edited Employee", company: "Untrusted Company" } }, {})).json().profile)
+      .toMatchObject({ displayName: "Edited Employee", company: "Oneinfo Team" });
+    const publicPortal = await app.inject({ url: "/api/v1/company/public/team.example.com", headers: { origin: "https://team.example.com" } });
+    expect(publicPortal.headers["access-control-allow-origin"]).toBe("*");
+    expect(publicPortal.body).not.toContain("employee@example.com");
+    expect((await send("PATCH", `${url}/employees/${employee.id}`, { active: false })).statusCode).toBe(200);
+    expect((await request(teamCard)).status).toBe("UNAVAILABLE");
+    expect((await send("POST", editor, { token: secret }, {})).statusCode).toBe(404);
+    expect((await send("PUT", `${url}/cards/${stock.id}`, { employeeId: colleague.id })).statusCode).toBe(200);
+    expect((await request(teamCard)).profile.displayName).toBe("Other Employee");
+    const replacement = await readyForClaim();
+    await request(`/api/v1/production/cards/${stock.id}/disable`, {});
+    await request(`/api/v1/production/cards/${stock.id}/replace`, { replacementSlug: replacement.publicSlug });
+    expect((await request(teamCard)).status).toBe("UNAVAILABLE");
+    expect((await request(`/api/v1/customer/cards/${replacement.publicSlug}`)).profile.displayName).toBe("Other Employee");
+    const passport = await request(`/api/v1/production/cards/${stock.id}/history`);
+    expect(passport.events.map((event: { eventType: string }) => event.eventType)).toContain("CARD_REPLACED");
+  });
+
+  it("prevents concurrent checkout from overselling tracked variants and reports low stock", async () => {
+    const [original] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
+    expect(original).toBeTruthy();
+    await client.db.update(schema.products).set({ variants: original!.variants.map(variant => ({ ...variant, stockQuantity: 1 })) }).where(eq(schema.products.id, productId));
+    try {
+      const submit = () => app.inject({ method: "POST", url: "/api/v1/orders", payload: orderPayload() });
+      const orders = await Promise.all([submit(), submit()]);
+      expect(orders.map(result => result.statusCode).sort()).toEqual([201, 409]);
+      const overview = await request("/api/v1/admin/overview");
+      expect(overview.stockAlerts).toContainEqual({ name: "Test card · Standard", remaining: 0 });
+      const publicProducts = await request("/api/v1/products/public");
+      const item = publicProducts.items.find((product: { id: string }) => product.id === productId);
+      expect(item.variants[0].available).toBe(false);
+      expect(item.variants[0].stockQuantity).toBeUndefined();
+    } finally {
+      await client.db.update(schema.products).set({ variants: original!.variants }).where(eq(schema.products.id, productId));
+    }
   });
 
   it("allows exactly one concurrent claim without leaving an orphan account", async () => {

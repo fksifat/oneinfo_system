@@ -64,6 +64,21 @@ Marking an order delivered sends a delivery confirmation with the private review
 link. Set `STOREFRONT_URL` to the public storefront for that link. The delivery
 action can retry a failed invitation.
 
+Order tracking links use `JWT_SECRET` to sign a private link and `STOREFRONT_URL`
+for links in email. Keep both production values stable between releases. Admin
+Orders shows recent send attempts and can retry failures. An accepted send means
+the mail service accepted the message for delivery.
+
+Lead forwarding is optional. Set `CRM_LEAD_WEBHOOK_URL` to a trusted HTTPS
+receiver and, if required, set `CRM_LEAD_WEBHOOK_TOKEN`. The receiver gets a POST
+with the lead ID as its `Idempotency-Key`. Visitors choose whether the card owner
+can forward their details. The card owner must initiate the send from the inbox.
+
+For a branded company portal, attach the customer's hostname to the frontend
+hosting project and verify its DNS and HTTPS there. In Admin → Companies, save
+that hostname on the workspace. The public portal opens at `/team` on the
+customer hostname. Company owners sign in at `/team?manage=1` on Oneinfo.
+
 ## Shared Nginx and HTTPS
 
 The existing `arisesell-nginx` owns public ports 80/443. Its configuration includes

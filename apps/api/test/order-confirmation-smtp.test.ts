@@ -10,13 +10,14 @@ vi.mock("../src/config.js", () => ({
   config: {
     BREVO_SMTP_USER: "login@smtp-brevo.com", BREVO_SMTP_KEY: "test-key",
     ORDER_EMAIL_FROM: "Oneinfo <no-reply@example.com>", STOREFRONT_URL: "https://www.oneinfo.online/",
+    JWT_SECRET: "fixture-secret-for-order-tracking-tests",
   },
 }));
 
 it("sends an inline logo and escaped receipt once, with an accurate pending payment status", async () => {
   sendMail.mockResolvedValue({ accepted: ["buyer@example.com"] });
   const order: StoreOrder = {
-    id: "test-order", createdAt: new Date().toISOString(), paymentMethod: "COD",
+    id: "00000000-0000-4000-8000-000000000001", createdAt: new Date().toISOString(), paymentMethod: "COD",
     paymentAmountMinor: 10000, paymentStatus: "PENDING_VERIFICATION", status: "RECEIVED",
     customer: { name: "<Buyer & Co>", email: "buyer@example.com", phone: "01700000000", note: "" },
     deliveryAddress: { district: "Dhaka", addressLine: "House 12 <West>" },
@@ -41,6 +42,7 @@ it("sends an inline logo and escaped receipt once, with an accurate pending paym
   expect(message.html).toContain("House 12 &lt;West&gt;");
   expect(message.html).toContain("bKash payment pending verification: BDT 100.00");
   expect(message.text).toContain("Remaining on delivery after verification: BDT 449.10");
+  expect(message.html).toMatch(/href="https:\/\/www\.oneinfo\.online\/#track\/00000000-0000-4000-8000-000000000001\.[a-zA-Z0-9_-]{43}"/);
   sendMail.mockRejectedValueOnce(new Error("SMTP unavailable"));
   expect(await sendOrderConfirmation(order, true)).toBe("failed");
 });

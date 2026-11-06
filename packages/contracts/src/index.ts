@@ -148,7 +148,27 @@ export const AssignCardSchema = z.object({
   cardId: z.uuid(),
 });
 
-export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true });
+export const profileModes = ["BUSINESS", "EVENT", "PORTFOLIO"] as const;
+export const profileSources = ["NFC", "QR", "DIRECT"] as const;
+export const ProfileModeContentSchema = z.object({ title: z.string().trim().max(120), description: z.string().trim().max(600) });
+export const ProfileModesSchema = z.object({ EVENT: ProfileModeContentSchema.optional(), PORTFOLIO: ProfileModeContentSchema.optional() });
+export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true }).extend({
+  profileMode: z.enum(profileModes).default("BUSINESS"), modeContent: ProfileModesSchema.default({}),
+});
+
+export const ShareContactSchema = z.object({
+  requestId: z.uuid(),
+  name: z.string().trim().min(2).max(120),
+  email: z.union([z.email().max(254), z.literal("")]).default(""),
+  phone: z.string().trim().max(40).refine(value => !value || (/^\+?[\d(). -]+$/.test(value) && value.replace(/\D/g, "").length >= 5), "Enter a valid phone number.").default(""),
+  message: z.string().trim().max(600).default(""),
+  consent: z.literal(true),
+  crmAllowed: z.boolean().default(false),
+  source: z.enum(profileSources).default("DIRECT"),
+}).refine(value => Boolean(value.email || value.phone), "Enter an email address or phone number.");
+
+export type ContactLead = { id: string; name: string; email: string; phone: string; message: string; createdAt: string; forwardedAt?: string | null;
+  crmAllowed?: boolean; recipientName?: string | null };
 export const CustomerPasswordSchema = z.string().min(12).max(128);
 export const CustomerEmailSchema = z.string().trim().toLowerCase().email().max(254);
 export const ActivateCardSchema = z.object({
@@ -279,6 +299,7 @@ export const ProductVariantSchema = z.object({
   priceMinor: z.number().int().min(1).max(100_000_000),
   salePriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null),
   available: z.boolean().default(true),
+  stockQuantity: z.number().int().min(0).max(1_000_000).optional(),
   finish: z.string().trim().max(80).default(""),
   appearance: z.enum(["light", "dark", "metal"]).default("light"),
   imageUrl: ProductImageSchema.default(""),
@@ -425,24 +446,42 @@ export const PlaceOrderSchema = z.object({
 });
 export type PlaceOrderInput = z.infer<typeof PlaceOrderSchema>;
 export type OrderLine = z.infer<typeof OrderLineSchema> & { name: string; variantName: string };
-export type OrderReceipt = {
+export const orderStatuses = ["RECEIVED", "PROCESSING", "SHIPPED", "DELIVERED"] as const;
+export const OrderFulfillmentSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("PROCESSING") }),
+  z.object({ status: z.literal("SHIPPED"), trackingId: z.string().trim().min(1).max(100) }),
+]);
+export const AdminOrderSearchSchema = z.object({
+  beforeId: z.uuid().optional(), query: z.string().trim().max(254).optional(),
+  payment: z.enum(["PENDING_VERIFICATION", "VERIFIED"]).optional(),
+  delivery: z.enum(orderStatuses).optional(), qr: z.enum(["AWAITING_QR", "PARTIAL", "ASSIGNED"]).optional(),
+});
+export type AdminOrderSearch = z.infer<typeof AdminOrderSearchSchema>;
+export type OrderTracking = {
+  status: typeof orderStatuses[number];
+  createdAt: string;
+  processingAt?: string | null;
+  shippedAt?: string | null;
+  deliveredAt?: string | null;
+  courierTrackingId?: string | null;
+};
+export type OrderReceipt = OrderTracking & {
   id: string;
   paymentMethod: z.infer<typeof PaymentMethodSchema>;
   paymentAmountMinor?: number;
   paymentStatus?: "PENDING_VERIFICATION" | "VERIFIED";
-  status: "RECEIVED" | "DELIVERED";
   shippingZone: ShippingZone;
   subtotalMinor: number;
   shippingMinor: number;
   couponCode: string | null;
   discountMinor: number;
   totalMinor: number;
-  createdAt: string;
   confirmationEmail?: "accepted" | "failed";
-  deliveredAt?: string | null;
+  trackingPath?: string;
   reviewInviteSentAt?: string | null;
   qrAllocation?: { required: number; assigned: number; pending: number; status: "AWAITING_QR" | "PARTIAL" | "ASSIGNED" };
 
 };
 export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null;
+  codCollectedMinor?: number | null; codSettledMinor?: number | null;
   profileId?: string | null; assignedCards?: { id: string; publicSlug: string; canonicalUrl: string; qcStatus: string }[] };

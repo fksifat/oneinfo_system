@@ -10,6 +10,7 @@
     { "source": "/health", "destination": "/api/index" },
     { "source": "/admin", "destination": "/dashboard/index.html" },
     { "source": "/admin/:path*", "destination": "/dashboard/index.html" },
+    { "source": "/team", "destination": "/dashboard/index.html" },
     { "source": "/c/:path*", "destination": "/dashboard/index.html" }
   ],
   "headers": [

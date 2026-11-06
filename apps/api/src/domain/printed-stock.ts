@@ -14,6 +14,14 @@ export async function lockPrintedStock(tx: Transaction) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended('oneinfo-printed-qr-stock', 0))`);
 }
 
+export function printedStockAvailable() {
+  return and(isNotNull(cardBatches.printConfirmedAt), eq(cards.qrStatus, "GENERATED"), isNull(cards.profileId), isNull(cards.companyId),
+    sql`${cards.canonicalUrl} = ${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")} || '/' || ${cards.publicSlug}`,
+    inArray(cards.inventoryStatus, ["NOT_READY", "SALEABLE"]), inArray(cards.lifecycleStatus, ["IN_PRODUCTION", "QC_PASSED"]),
+    inArray(cards.qcStatus, ["PENDING", "PASSED"]),
+    sql`not exists (select 1 from ${orderCardAllocations} a where a.card_id = ${cards.id})`);
+}
+
 export async function allocatePendingOrders(tx: Transaction) {
   await lockPrintedStock(tx);
   const waiting = await tx.select().from(storeOrders).where(sql`
@@ -33,11 +41,7 @@ export async function allocatePendingOrders(tx: Transaction) {
     // shortcut: batches contain generic QR stock; add catalog variant matching when physical finishes are tracked per batch.
     const available = await tx.select({ card: cards }).from(cards)
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
-      .where(and(isNotNull(cardBatches.printConfirmedAt), eq(cards.qrStatus, "GENERATED"), isNull(cards.profileId),
-        sql`${cards.canonicalUrl} = ${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")} || '/' || ${cards.publicSlug}`,
-        inArray(cards.inventoryStatus, ["NOT_READY", "SALEABLE"]), inArray(cards.lifecycleStatus, ["IN_PRODUCTION", "QC_PASSED"]),
-        inArray(cards.qcStatus, ["PENDING", "PASSED"]),
-        sql`not exists (select 1 from ${orderCardAllocations} a where a.card_id = ${cards.id})`))
+      .where(printedStockAvailable())
       .orderBy(asc(cardBatches.printConfirmedAt), asc(cards.createdAt), asc(cards.id)).limit(slots.length).for("update");
     if (!available.length) break;
     for (let index = 0; index < available.length; index++) {
