@@ -43,7 +43,7 @@ export function ProfileView({ data, contactAction, onActivity }: { data: PublicP
     <a className="save-contact" href={`${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api/v1/profiles/public/${encodeURIComponent(profile.publicSlug)}/contact.vcf`}
       onClick={() => onActivity?.("SAVE")}><ContactIcon kind="save" />Save to Contacts</a>
     {contactAction}
-    <small className="profile-footer">Powered by Oneinfo · NFC + QR</small>
+    <small className="profile-footer">Powered by Arise Studio</small>
   </main></div>;
 }
 
