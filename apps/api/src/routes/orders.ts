@@ -9,15 +9,15 @@ import {
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
-import { allocatePendingOrders, allocationSummary } from "../domain/printed-stock.js";
+import { auditLogs, cardActivationSecrets, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
+import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
 import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
 import { orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
-import { attemptOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
-import { usesBrevoSmtp } from "../domain/transactional-email.js";
-import { parseBody, sendCreated } from "../http.js";
+import { attemptOrderEmail, queueOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
+import { dispatchOrderEmail } from "../domain/order-email-worker.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import { parseBody, sendCreated } from "../http.js";
 
 const shippingSettingsId = "default";
 
@@ -102,13 +102,14 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
     const { order, newlyVerified } = await db.transaction(async tx => {
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
-      if (!order?.transactionId || order.paymentAmountMinor <= 0) conflict("This order has no bKash payment to verify.");
+      if (order?.cancelledAt || !order?.transactionId || order.paymentAmountMinor <= 0) conflict("This order has no bKash payment to verify.");
       if (order.paymentVerifiedAt) return { order, newlyVerified: false };
       const [verified] = await tx.update(storeOrders).set({ paymentVerifiedAt: new Date() })
         .where(eq(storeOrders.id, id)).returning();
       if (!verified) throw new Error("Payment verification could not be saved");
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_PAYMENT_VERIFIED",
         targetType: "store_order", targetId: id, requestId: request.id, metadata: { amountMinor: order.paymentAmountMinor } });
+      await queueOrderEmail(tx, id, "payment");
       return { order: verified, newlyVerified: true };
     });
     const result = receipt(order);
@@ -116,6 +117,40 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const status = await attemptOrderEmail(id, "payment", () => sendPaymentVerifiedEmail({ ...result, customer: order.customer }));
     if (status === "failed") request.log.warn({ orderId: id }, "Payment verification email was not accepted");
     return { ...result, paymentEmail: status };
+  });
+
+  app.post("/admin/:id/cancel", async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    const { reason, refundConfirmed } = parseBody(z.object({ reason: z.string().trim().min(5).max(500), refundConfirmed: z.boolean().default(false) }), request.body);
+    return db.transaction(async tx => {
+      await lockPrintedStock(tx);
+      const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
+      if (!order) conflict("Order not found.");
+      if (order.cancelledAt) return receipt(order);
+      if (order.shippedAt || order.deliveredAt) conflict("A shipped order requires a return, not cancellation.");
+      if (order.transactionId && !refundConfirmed) conflict("Check the payment and resolve any refund before cancelling.");
+      const allocated = await tx.select({ card: cards }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
+        .where(eq(orderCardAllocations.orderId, id)).for("update", { of: cards });
+      for (const { card } of allocated) {
+        const [secret] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
+        if (card.profileId || card.customerAccountId || card.companyId || secret || !["IN_PRODUCTION", "QC_PASSED"].includes(card.lifecycleStatus)) conflict("An allocated card has been issued. Recover it and revoke its activation code before cancelling.");
+      }
+      const catalog = await tx.select().from(products).where(inArray(products.id, order.items.map(item => item.productId))).orderBy(asc(products.id)).for("update");
+      for (const product of catalog) {
+        const variants = product.variants.map(variant => {
+          const line = order.stockReservations.find(item => item.productId === product.id && item.variantId === variant.id);
+          return line && variant.stockQuantity !== undefined ? { ...variant, stockQuantity: variant.stockQuantity + line.quantity } : variant;
+        });
+        await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
+      }
+      await tx.delete(orderCardAllocations).where(eq(orderCardAllocations.orderId, id));
+      for (const { card } of allocated) await tx.update(cards).set({ inventoryStatus: card.qcStatus === "PASSED" ? "SALEABLE" : "NOT_READY", updatedAt: new Date() }).where(eq(cards.id, card.id));
+      const [cancelled] = await tx.update(storeOrders).set({ cancelledAt: new Date(), cancellationReason: reason }).where(eq(storeOrders.id, id)).returning();
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_CANCELLED", targetType: "store_order", targetId: id, metadata: { reason, refundConfirmed } });
+      await allocatePendingOrders(tx);
+      return receipt(cancelled!);
+    });
   });
 
   app.post("/tracking", { bodyLimit: 1024 }, async (request, reply) => {
@@ -135,7 +170,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const input = parseBody(OrderFulfillmentSchema, request.body);
     const { order, shipped } = await db.transaction(async tx => {
       const [existing] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
-      if (!existing || existing.deliveredAt) conflict("Only an open order can be updated.");
+      if (!existing || existing.deliveredAt || existing.cancelledAt || existing.awaitingPayment) conflict("Only an open order can be updated.");
       if (input.status === "PROCESSING" ? existing.processingAt || existing.shippedAt : existing.shippedAt && existing.courierTrackingId === input.trackingId) {
         return { order: existing, shipped: false };
       }
@@ -147,6 +182,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (!updated) throw new Error("Order update failed");
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: `STORE_ORDER_${input.status}`,
         targetType: "store_order", targetId: id, requestId: request.id });
+      if (input.status === "SHIPPED" && !existing.shippedAt) await queueOrderEmail(tx, id, "shipping");
       return { order: updated, shipped: input.status === "SHIPPED" && !existing.shippedAt };
     });
     const shippingEmail = shipped && confirmationEmailEnabled ? await attemptOrderEmail(id, "shipping", () => sendShippingEmail({ ...receipt(order), customer: order.customer })) : undefined;
@@ -163,17 +199,12 @@ export const orderRoutes: FastifyPluginAsync = async app => {
   app.post("/admin/:id/emails/retry", async request => {
     await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    const { kind } = parseBody(z.object({ kind: z.enum(orderEmailKinds).exclude(["delivery"]) }), request.body);
+    const { kind } = parseBody(z.object({ kind: z.enum(orderEmailKinds) }), request.body);
     if (!confirmationEmailEnabled) conflict("Order email is not configured.");
     const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
     if (!order) conflict("Order not found.");
-    const data = { ...receipt(order), customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items };
-    const status = await attemptOrderEmail(id, kind, async () => {
-      if (kind === "payment") return sendPaymentVerifiedEmail(data);
-      if (kind === "shipping") return sendShippingEmail(data);
-      return await sendOrderConfirmation(data, true, true) === "accepted";
-    }, "retry");
-    if (!status) conflict("Only a failed email can be retried.");
+    const status = await dispatchOrderEmail(id, kind, true);
+    if (!status) conflict("This email is already being sent. Refresh its history shortly.");
     return { status };
   });
 
@@ -202,7 +233,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const { beforeId, query, payment, delivery, qr } = filters;
     const before = db.select({ createdAt: storeOrders.createdAt, id: storeOrders.id })
       .from(storeOrders).where(eq(storeOrders.id, beforeId ?? ""));
-    const state = sql`case when ${storeOrders.deliveredAt} is not null then 'DELIVERED' when ${storeOrders.shippedAt} is not null then 'SHIPPED' when ${storeOrders.processingAt} is not null then 'PROCESSING' else 'RECEIVED' end`;
+    const state = sql`case when ${storeOrders.cancelledAt} is not null then 'CANCELLED' when ${storeOrders.awaitingPayment} then 'AWAITING_PAYMENT' when ${storeOrders.deliveredAt} is not null then 'DELIVERED' when ${storeOrders.shippedAt} is not null then 'SHIPPED' when ${storeOrders.processingAt} is not null then 'PROCESSING' else 'RECEIVED' end`;
     const required = sql`(select coalesce(sum((line->>'quantity')::integer), 0) from jsonb_array_elements(${storeOrders.items}) as line)`;
     const assigned = sql`(select count(*) from ${orderCardAllocations} where ${orderCardAllocations.orderId} = ${storeOrders.id})`;
     const digits = query?.replace(/\D/g, "") ?? "";
@@ -229,7 +260,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   } });
 
-  app.post("/", { bodyLimit: 32 * 1024 }, async (request, reply) => {
+  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 32 * 1024 }, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const reserving = route === "/reserve";
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
     const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
     const [replay] = await db.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.requestId, requestId)).limit(1);
@@ -237,13 +270,27 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       return reply.code(429).header("Retry-After", "900").send({ message: "Too many checkout attempts. Please wait fifteen minutes and try again." });
     }
     const { order, created } = await db.transaction(async tx => {
+      await lockPrintedStock(tx);
       // Serialize retries before checking prices so a committed request always returns its receipt.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`);
       const [previous] = await tx.select().from(storeOrders).where(eq(storeOrders.requestId, requestId));
+      if (previous?.cancelledAt) conflict("This order was cancelled. Do not send payment. Contact Oneinfo if you already paid.");
+      if (previous?.awaitingPayment && !reserving) {
+        const reservedInput = { ...input, payment: input.payment ? { method: input.payment.method, amountMinor: input.payment.amountMinor } : undefined };
+        if (previous.requestHash !== createHash("sha256").update(JSON.stringify(reservedInput)).digest("hex")) conflict("Use the original reserved order and payment amount.");
+        if (!input.payment?.transactionId) conflict("Enter your bKash transaction ID.");
+        const [duplicate] = await tx.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.transactionId, input.payment.transactionId));
+        if (duplicate) conflict("This bKash transaction ID is already linked to an order.");
+        const [completed] = await tx.update(storeOrders).set({ transactionId: input.payment.transactionId, requestHash, awaitingPayment: false }).where(eq(storeOrders.id, previous.id)).returning();
+        await allocatePendingOrders(tx);
+        await queueOrderEmail(tx, previous.id, "confirmation");
+        return { order: completed!, created: true };
+      }
       if (previous) {
         if (previous.requestHash !== requestHash) conflict("This order request has already been used.");
         return { order: previous, created: false };
       }
+      if (reserving && input.payment?.transactionId) conflict("Reserve your order before entering payment details.");
       const { district, dhakaArea, addressLine } = input.deliveryAddress;
       // Keep pending requests from older checkout pages valid during the rollout.
       const zone = dhakaArea ? deliveryZone(district, dhakaArea) : checkoutDeliveryZone(district, addressLine);
@@ -275,12 +322,13 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       const paymentAmountMinor = paymentDueNow(subtotalMinor + shippingMinor - discountMinor, paymentMethod, codAdvanceTaka);
       if ((input.payment?.amountMinor ?? 0) !== paymentAmountMinor) conflict("Payment amount changed. Review the updated amount before paying. If you already paid, contact Oneinfo with your bKash transaction ID.");
       const transactionId = input.payment?.transactionId ?? null;
-      if (paymentAmountMinor > 0 && !transactionId) conflict("Enter your bKash transaction ID.");
+      if (!reserving && paymentAmountMinor > 0 && !transactionId) conflict("Enter your bKash transaction ID.");
       if (paymentAmountMinor === 0 && transactionId) conflict("No bKash payment is required for this order.");
       const [order] = await tx.insert(storeOrders).values({
         requestId, requestHash, customer: input.customer, deliveryAddress: input.deliveryAddress,
+        stockReservations: items.filter(line => catalog.find(product => product.id === line.productId)?.variants.find(variant => variant.id === line.variantId)?.stockQuantity !== undefined).map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
         items, shippingZone: zone, subtotalMinor, shippingMinor, couponCode: input.coupon?.code, discountMinor,
-        paymentMethod, paymentAmountMinor, transactionId,
+        paymentMethod, paymentAmountMinor, transactionId, awaitingPayment: reserving && paymentAmountMinor > 0,
       }).onConflictDoNothing({ target: storeOrders.transactionId }).returning();
       if (!order) conflict("This bKash transaction ID is already linked to an order.");
       for (const product of catalog) {
@@ -291,6 +339,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
       }
       await allocatePendingOrders(tx);
+      if (!order.awaitingPayment) await queueOrderEmail(tx, order.id, "confirmation");
       return { order, created: true };
     }).catch(error => {
       if (error instanceof Error && "statusCode" in error) throw error;
@@ -301,11 +350,8 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const result = receipt(order);
     const allocations = await db.select({ id: orderCardAllocations.id }).from(orderCardAllocations).where(eq(orderCardAllocations.orderId, order.id));
     result.qrAllocation = allocationSummary(order.items.reduce((sum, item) => sum + item.quantity, 0), allocations.length);
-    const maySend = confirmationEmailEnabled && !order.paymentVerifiedAt && (created || !usesBrevoSmtp) &&
-      Date.now() - order.createdAt.getTime() < 23 * 60 * 60 * 1000;
-    const emailStatus = maySend ? await attemptOrderEmail(order.id, "confirmation", async () =>
-      await sendOrderConfirmation({ ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items }, created) === "accepted",
-      created ? "initial" : "replay") : undefined;
+    const emailStatus = !order.awaitingPayment && confirmationEmailEnabled ? await attemptOrderEmail(order.id, "confirmation", async () =>
+      await sendOrderConfirmation({ ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items }, true, true) === "accepted") : undefined;
     if (emailStatus === "failed") request.log.warn({ orderId: order.id }, "Order confirmation email was not accepted");
     if (emailStatus) result.confirmationEmail = emailStatus;
     return created ? sendCreated(reply, result) : result;

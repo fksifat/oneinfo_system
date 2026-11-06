@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
 import { managedCardBases } from "./card-urls.js";
-import { auditLogs, cardBatches, cardEvents, cards, orderCardAllocations, storeOrders } from "../db/schema.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, orderCardAllocations, storeOrders } from "../db/schema.js";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -19,12 +19,14 @@ export function printedStockAvailable() {
     sql`${cards.canonicalUrl} in (${sql.join(managedCardBases().map(base => sql`${base} || '/' || ${cards.publicSlug}`), sql`, `)})`,
     inArray(cards.inventoryStatus, ["NOT_READY", "SALEABLE"]), inArray(cards.lifecycleStatus, ["IN_PRODUCTION", "QC_PASSED"]),
     inArray(cards.qcStatus, ["PENDING", "PASSED"]),
+    sql`not exists (select 1 from ${cardActivationSecrets} s where s.card_id = ${cards.id})`,
     sql`not exists (select 1 from ${orderCardAllocations} a where a.card_id = ${cards.id})`);
 }
 
 export async function allocatePendingOrders(tx: Transaction) {
   await lockPrintedStock(tx);
   const waiting = await tx.select().from(storeOrders).where(sql`
+    ${storeOrders.cancelledAt} is null and not ${storeOrders.awaitingPayment} and
     (select count(*) from ${orderCardAllocations} a where a.order_id = ${storeOrders.id}) <
     (select coalesce(sum((item->>'quantity')::integer), 0) from jsonb_array_elements(${storeOrders.items}) item)
   `).orderBy(asc(storeOrders.createdAt), asc(storeOrders.id)).for("update");

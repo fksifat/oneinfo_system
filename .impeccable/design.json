@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T22:04:10.000Z",
+  "title": "Design System: Oneinfo",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Deep Forest Ink",
+        "canonical": "oklch(24% 0.04 185)",
+        "tonalRamp": ["#071414", "#0c1f1f", "#112b2b", "#1e4544", "#306160", "#548684", "#8bb2b0", "#d1e4e3"]
+      },
+      "primary-container": {
+        "role": "primary",
+        "displayName": "Ink Container",
+        "canonical": "oklch(30% 0.05 185)",
+        "tonalRamp": ["#091c1c", "#102a29", "#183b3a", "#295b59", "#417c7a", "#69a19f", "#9fc7c5", "#dceeed"]
+      },
+      "accent-lime": {
+        "role": "secondary",
+        "displayName": "Electric Lime",
+        "canonical": "oklch(90% 0.22 130)",
+        "tonalRamp": ["#2e4905", "#4c750b", "#70a814", "#97dc28", "#b9f56a", "#cff88f", "#e3fab9", "#f4fde6"]
+      },
+      "accent-mint": {
+        "role": "secondary",
+        "displayName": "Soft Mint",
+        "canonical": "oklch(93% 0.06 150)",
+        "tonalRamp": ["#1c452b", "#2f6b45", "#479663", "#74bf90", "#a6dfbc", "#d7f4dd", "#ecfaee", "#f7fdf8"]
+      },
+      "interactive-teal": {
+        "role": "tertiary",
+        "displayName": "Oceanic Teal",
+        "canonical": "oklch(55% 0.11 215)",
+        "tonalRamp": ["#0c2a33", "#14424e", "#1d5e6e", "#27849a", "#37a7c2", "#66c4da", "#a2deec", "#ddf3f8"]
+      },
+      "neutral-paper": {
+        "role": "neutral",
+        "displayName": "Warm Paper",
+        "canonical": "oklch(98% 0.01 90)",
+        "tonalRamp": ["#282620", "#4f4c42", "#7d786a", "#ada897", "#d8d3c2", "#eeebe2", "#fbfaf5", "#ffffff"]
+      },
+      "neutral-cream": {
+        "role": "neutral",
+        "displayName": "Warm Cream",
+        "canonical": "oklch(95% 0.02 85)",
+        "tonalRamp": ["#262319", "#4b4433", "#766d54", "#a59a7a", "#cfc5a6", "#e8e1cb", "#f4f0e5", "#faf8f2"]
+      },
+      "neutral-surface": {
+        "role": "neutral",
+        "displayName": "Pure White",
+        "canonical": "oklch(100% 0 0)",
+        "tonalRamp": ["#1c1c1c", "#383838", "#5c5c5c", "#858585", "#b3b3b3", "#d9d9d9", "#f2f2f2", "#ffffff"]
+      },
+      "neutral-muted": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "oklch(52% 0.02 175)",
+        "tonalRamp": ["#141918", "#27302e", "#3f4a47", "#596662", "#64716d", "#889591", "#b4bebc", "#e2e6e5"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero brand statements and large storefront headlines with negative tracking."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Section titles, card finish names, and primary modal headers."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Component group titles, panel headers, and customer names."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Editorial narratives, specifications, and primary readable descriptions."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Tracked uppercase kickers, telemetry chips, table headers, and status badges."
+      }
+    },
+    "shadows": [
+      {
+        "name": "card-ambient",
+        "value": "0 24px 80px rgba(17, 43, 43, 0.13)",
+        "purpose": "Diffuse elevation for physical smart cards resting on surfaces."
+      },
+      {
+        "name": "card-hero",
+        "value": "0 36px 70px rgba(17, 43, 43, 0.28)",
+        "purpose": "Dramatic 3D depth for dark cards and showcase hero art."
+      },
+      {
+        "name": "panel-rest",
+        "value": "0 8px 25px rgba(20, 48, 68, 0.04)",
+        "purpose": "Subtle depth on administrative workbench tiles."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease-hover",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "Quick responsive tactile lift on button and card hover."
+      },
+      {
+        "name": "pulse-signal",
+        "value": "ease-in-out 1.8s infinite",
+        "purpose": "Continuous pulsing aura for active NFC reader ready states."
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "md", "value": "768px" },
+      { "name": "lg", "value": "1024px" },
+      { "name": "xl", "value": "1280px" },
+      { "name": "workspace", "value": "1440px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Dominant action trigger with tactile hover lift and deep ink fill.",
+      "html": "<button class=\"ds-btn-primary\">Explore Cards <svg class=\"ds-btn-icon\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\"><path d=\"M3 8h10M9 4l4 4-4 4\"/></svg></button>",
+      "css": ".ds-btn-primary { background: #112b2b; color: #ffffff; padding: 13px 20px; font-family: Inter, Arial, sans-serif; font-size: 0.86rem; font-weight: 800; border: none; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; gap: 12px; cursor: pointer; transition: transform 0.2s ease, background 0.2s ease; } .ds-btn-primary:hover { background: #183b3a; transform: translateY(-2px); } .ds-btn-primary:focus-visible { outline: 3px solid #27849a; outline-offset: 3px; } .ds-btn-icon { width: 14px; height: 14px; }"
+    },
+    {
+      "name": "Accent Signal Button",
+      "kind": "button",
+      "refersTo": "button-accent",
+      "description": "High-visibility Electric Lime pill for tap-and-go actions and cart counts.",
+      "html": "<button class=\"ds-btn-accent\"><span class=\"ds-btn-dot\"></span> Tap To Connect</button>",
+      "css": ".ds-btn-accent { background: #b9f56a; color: #112b2b; padding: 10px 18px; font-family: Inter, Arial, sans-serif; font-size: 0.8rem; font-weight: 850; border: none; border-radius: 100px; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: transform 0.2s ease, filter 0.2s ease; } .ds-btn-accent:hover { filter: brightness(1.06); transform: translateY(-1px); } .ds-btn-dot { width: 7px; height: 7px; border-radius: 50%; background: #112b2b; }"
+    },
+    {
+      "name": "Form Input Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Clean, high-legibility input field with Oceanic Teal active focus aura.",
+      "html": "<div class=\"ds-field-wrap\"><label class=\"ds-field-label\">DELIVERY ADDRESS</label><input type=\"text\" class=\"ds-input\" placeholder=\"House, road, district...\" value=\"Dhaka, Bangladesh\"></div>",
+      "css": ".ds-field-wrap { display: grid; gap: 6px; font-family: Inter, Arial, sans-serif; width: 100%; max-width: 380px; } .ds-field-label { font-size: 0.68rem; font-weight: 850; letter-spacing: 0.12em; color: #64716d; text-transform: uppercase; } .ds-input { padding: 11px 12px; border: 1px solid #cbd6dc; border-radius: 8px; font-size: 0.9rem; color: #112b2b; background: #ffffff; outline: none; transition: border-color 0.18s, box-shadow 0.18s; } .ds-input:focus { border-color: #27849a; box-shadow: 0 0 0 3px rgba(39, 132, 154, 0.12); }"
+    },
+    {
+      "name": "Workbench Card Panel",
+      "kind": "card",
+      "refersTo": "card-panel",
+      "description": "Clean white structural panel with subtle ambient elevation and hairline border.",
+      "html": "<div class=\"ds-card-panel\"><div class=\"ds-card-head\"><h3>Batch 2026-NFC-01</h3><span class=\"ds-card-badge\">QC PASSED</span></div><p class=\"ds-card-meta\">50 cards encoded & verified  Ready for delivery release</p></div>",
+      "css": ".ds-card-panel { background: #ffffff; border: 1px solid rgba(17, 43, 43, 0.14); border-radius: 14px; padding: 22px; box-shadow: 0 8px 25px rgba(20, 48, 68, 0.04); font-family: Inter, Arial, sans-serif; } .ds-card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; } .ds-card-head h3 { margin: 0; font-size: 1.05rem; color: #112b2b; font-weight: 700; } .ds-card-badge { background: #daf3e4; color: #237548; font-size: 0.65rem; font-weight: 850; letter-spacing: 0.08em; padding: 4px 8px; border-radius: 100px; text-transform: uppercase; } .ds-card-meta { margin: 0; font-size: 0.8rem; color: #64716d; }"
+    },
+    {
+      "name": "Status Pill Indicator",
+      "kind": "chip",
+      "refersTo": "badge-pill",
+      "description": "Continuous pill showing device connectivity or hardware operational state.",
+      "html": "<div class=\"ds-status-pill\"><span class=\"ds-pulse-dot\"></span> NFC READER ONLINE</div>",
+      "css": ".ds-status-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: #ffffff; border: 1px solid rgba(17, 43, 43, 0.14); border-radius: 100px; font-family: Inter, Arial, sans-serif; font-size: 0.7rem; font-weight: 850; letter-spacing: 0.1em; color: #112b2b; } .ds-pulse-dot { width: 8px; height: 8px; border-radius: 50%; background: #50bb81; box-shadow: 0 0 0 4px rgba(80, 187, 129, 0.18); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Tactile Architect",
+    "overview": "Oneinfo bridges durable, precision-engineered hardware with warm, modern editorial craft. Inspired by matte architectural paper, deep forest inks, and the tactile snap of physical business cards, the visual language balances grounded substance with electric digital immediacy. The surfaces avoid generic corporate SaaS sterility; instead, they evoke a workshop of considered materials where every printed millimeter and encoded byte is deliberate.",
+    "keyCharacteristics": [
+      "Material Grounding: Warm paper backgrounds and deep forest inks anchor the experience in physical reality.",
+      "Electric Telemetry: Vibrant acid lime and mint serve as high-visibility signal lights for NFC taps and primary actions.",
+      "Tactile Weight: Generous card corner radii, solid pill action triggers, and deep ambient drop shadows communicate tangible physical objects.",
+      "Disciplined Precision: Hairline translucent dividers and uppercase tracked labels establish industrial clarity."
+    ],
+    "rules": [
+      {
+        "name": "The Rarity Rule",
+        "body": "Electric Lime (#b9f56a) must never cover more than 5% of any view. Its authority comes entirely from contrast against deep ink and neutral paper.",
+        "section": "colors"
+      },
+      {
+        "name": "The Surface Hierarchy Rule",
+        "body": "Dark ink cards float over warm paper, never over deep dark backgrounds without a hairline separation border.",
+        "section": "colors"
+      },
+      {
+        "name": "The No-Float Headings Rule",
+        "body": "Headings must never sit isolated above content with equal margin above and below; they anchor closely to following copy.",
+        "section": "typography"
+      },
+      {
+        "name": "The Resting Flat Rule",
+        "body": "Functional data tables, form inputs, and status badges remain strictly flat at rest. Shadows are reserved for physical cards and floating triggers.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do anchor layouts around physical card representations and tactile finishes.",
+      "Do use Electric Lime (#b9f56a) strictly as an intentional signal for active NFC states, confirmation dots, and primary CTAs.",
+      "Do maintain the canonical 1.585 aspect ratio whenever depicting Oneinfo smart cards.",
+      "Do pair bold high-contrast display headlines with generously tracked uppercase micro-labels.",
+      "Do preserve the tactile paper canvas (#fbfaf5) on public storefront views."
+    ],
+    "donts": [
+      "Don't use generic vibrant purple/blue gradient fills; stick to rich natural emerald/forest gradients or deep carbon tones.",
+      "Don't apply heavy drop shadows to flat administrative tables and data lists.",
+      "Don't shrink body copy below 14px on mobile profiles or checkout forms.",
+      "Don't crowd touch targets; buttons and interactive card chips must maintain a minimum touch area of 44x44px.",
+      "Don't rely on color alone for hardware pass/fail verification; always pair color with clear iconographic and textual status cues."
+    ]
+  }
+}

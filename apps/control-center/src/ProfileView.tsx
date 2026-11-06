@@ -21,6 +21,10 @@ export function ProfileView({ data, contactAction, onActivity }: { data: PublicP
   const [photoFailed, setPhotoFailed] = useState(false);
   const { profile, links } = data;
   useEffect(() => { setPhotoFailed(false); }, [profile.avatarUrl]);
+  const android = /Android/i.test(globalThis.navigator?.userAgent ?? "");
+  const contactPath = `${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api/v1/profiles/public/${encodeURIComponent(profile.publicSlug)}/contact.vcf`;
+  const contactFields = new URLSearchParams({ name: profile.displayName, phone: profile.phone, email: profile.email, company: profile.company, title: profile.headline, website: profile.website });
+  const saveContactInApp = android ? `intent://save?${contactFields}#Intent;scheme=oneinfo-contact;package=com.oneinfo.nfcbridge;S.browser_fallback_url=${encodeURIComponent(new URL("#contacts-app-required", window.location.href).href)};end` : null;
   const mode = profile.profileMode ?? "BUSINESS";
   const content = mode === "BUSINESS" ? undefined : profile.modeContent?.[mode];
   const initials = profile.displayName.split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase();
@@ -40,8 +44,12 @@ export function ProfileView({ data, contactAction, onActivity }: { data: PublicP
       {profile.website && <a href={profile.website} target="_blank" rel="noreferrer" onClick={() => onActivity?.("LINK")}><span>Website</span><b>↗</b></a>}
       {links.map(link => <a key={link.id ?? link.url} href={link.url} target="_blank" rel="noreferrer" onClick={() => onActivity?.("LINK", link.id)}><span>{link.label}</span><b>↗</b></a>)}
     </div>
-    <a className="save-contact" href={`${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api/v1/profiles/public/${encodeURIComponent(profile.publicSlug)}/contact.vcf`}
-      onClick={() => onActivity?.("SAVE")}><ContactIcon kind="save" />Save to Contacts</a>
+    <a className="save-contact" href={contactPath} onClick={() => onActivity?.("SAVE")}><ContactIcon kind="save" />Save to Contacts</a>
+    {saveContactInApp && <details className="share-contact">
+      <summary>Already have the Oneinfo app?</summary>
+      <a href={saveContactInApp} onClick={() => onActivity?.("SAVE")}>Open Contacts using Oneinfo</a>
+    </details>}
+    {saveContactInApp && <p id="contacts-app-required" className="contacts-app-required" role="status">The Oneinfo app could not open. Use Save to Contacts above.</p>}
     {contactAction}
     <small className="profile-footer">Powered by Arise Studio</small>
   </main></div>;

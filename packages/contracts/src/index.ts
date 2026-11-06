@@ -447,7 +447,7 @@ export const PlaceOrderSchema = z.object({
 });
 export type PlaceOrderInput = z.infer<typeof PlaceOrderSchema>;
 export type OrderLine = z.infer<typeof OrderLineSchema> & { name: string; variantName: string };
-export const orderStatuses = ["RECEIVED", "PROCESSING", "SHIPPED", "DELIVERED"] as const;
+export const orderStatuses = ["AWAITING_PAYMENT", "RECEIVED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
 export const OrderFulfillmentSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("PROCESSING") }),
   z.object({ status: z.literal("SHIPPED"), trackingId: z.string().trim().min(1).max(100) }),
@@ -465,6 +465,8 @@ export type OrderTracking = {
   shippedAt?: string | null;
   deliveredAt?: string | null;
   courierTrackingId?: string | null;
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
 };
 export type OrderReceipt = OrderTracking & {
   id: string;

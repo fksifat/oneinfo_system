@@ -1,3 +1,4 @@
+import { accountRecoveryRoutes } from "./routes/account-recovery.js";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
 import type { ServerOptions } from "node:https";
@@ -45,6 +46,7 @@ export function buildApp(https?: ServerOptions) {
   app.register(jobRoutes, { prefix: "/api/v1/production/jobs" });
   app.register(cardRoutes, { prefix: "/api/v1/production/cards" });
   app.register(profileRoutes, { prefix: "/api/v1/profiles" });
+  app.register(accountRecoveryRoutes, { prefix: "/api/v1/customer" });
   app.register(customerRoutes, { prefix: "/api/v1/customer" });
   app.register(companyRoutes, { prefix: "/api/v1/company" });
   app.register(orderRoutes, { prefix: "/api/v1/orders" });

@@ -273,14 +273,6 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         </aside>
       </div>
       <div class="review-list" data-review-list></div>
-      <div class="review-examples">
-        <div class="review-examples-heading"><div><h3>Review examples</h3><p>Examples of the feedback buyers can share after delivery.</p></div><span class="review-example-label">Sample content</span></div>
-        <div class="review-example-list">
-          <article class="review-card"><div class="review-example-meta"><span class="review-example-name">A. Rahman</span><span class="review-stars" aria-label="5 out of 5 stars">★★★★★</span></div><h3>Easy to share</h3><p>One tap opens my contact page, making it quick to share my details.</p></article>
-          <article class="review-card"><div class="review-example-meta"><span class="review-example-name">N. Sultana</span><span class="review-stars" aria-label="5 out of 5 stars">★★★★★</span></div><h3>Clean, professional finish</h3><p>The neat design feels right at home when I meet a new client.</p></article>
-          <article class="review-card"><div class="review-example-meta"><span class="review-example-name">T. Hasan</span><span class="review-stars" aria-label="4 out of 5 stars">★★★★☆</span></div><h3>Convenient at events</h3><p>It is handy to share my profile without carrying paper cards.</p></article>
-        </div>
-      </div>
     </section>`;
   }
 
@@ -290,8 +282,10 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const response = await fetch(`${apiUrl}/api/v1/reviews/products/${encodeURIComponent(product.slug)}`, { signal: AbortSignal.timeout(7000) });
       if (!response.ok) throw new Error("Reviews unavailable");
       const data = await response.json();
-      summary.textContent = data.count ? `${data.average.toFixed(1)} out of 5 · ${data.count} ${data.count === 1 ? "review" : "reviews"}` : "No verified reviews yet.";
-      list.innerHTML = data.items.map(review => `<article class="review-card"><div class="review-stars" aria-label="${review.rating} out of 5 stars">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</div><h3>${escapeHtml(review.title)}</h3><p>${escapeHtml(review.body)}</p><small>${escapeHtml(review.displayName)} · Verified buyer · ${new Date(review.createdAt).toLocaleDateString("en-BD")}</small></article>`).join("");
+      summary.textContent = data.count ? `${data.average.toFixed(1)} out of 5 · ${data.count} ${data.count === 1 ? "review" : "reviews"}` : "No public reviews yet for this finish. Verified cardholders receive an invitation after delivery.";
+      list.innerHTML = data.items.length
+        ? data.items.map(review => `<article class="review-card"><div class="review-stars" aria-label="${review.rating} out of 5 stars">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</div><h3>${escapeHtml(review.title)}</h3><p>${escapeHtml(review.body)}</p><small>${escapeHtml(review.displayName)} · Verified buyer · ${new Date(review.createdAt).toLocaleDateString("en-BD")}</small></article>`).join("")
+        : `<p class="review-empty">No reviews published yet. Every review comes from a confirmed, delivered order.</p>`;
     } catch { summary.textContent = "Reviews could not load. Please try again later."; }
   }
 

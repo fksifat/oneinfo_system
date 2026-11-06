@@ -7,7 +7,7 @@ const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT
 const bdt = (minor: number) => money.format(minor / 100);
 const path = "/api/v1/orders";
 const searchFields = ["payment", "delivery", "qr"] as const;
-const statusLabels = { RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
+const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 
 export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void }) {
   const settingsDialog = useRef<HTMLDialogElement>(null);
