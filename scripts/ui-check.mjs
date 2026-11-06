@@ -23,6 +23,8 @@ try {
   await admin.query(`create database "${database}"`); created = true;
   source.pathname = '/' + database;
   process.env.DATABASE_URL = source.href; process.env.NODE_ENV = 'test';
+  process.env.PRODUCT_MEDIA_DIR = join(chromeProfile, 'profile-media');
+  delete process.env.BLOB_READ_WRITE_TOKEN; delete process.env.VERCEL;
   const { npmCommand } = await import(pathToFileURL(join(root,'scripts/start-local.mjs')).href);
   const {config}=await import(pathToFileURL(join(root,'apps/api/dist/config.js')).href);
   assert.equal(new URL(config.DATABASE_URL).pathname,'/'+database,'Refusing to populate a non-test database');
@@ -92,11 +94,11 @@ try {
         if(contactShare)contactAttempts.push(JSON.parse(paused.request.postData));
         const failed=(contactShare&&contactFailure==='before-save')||(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
         const result = failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
-          ...(paused.request.postData && { payload: paused.request.postData }) });
+          ...(paused.request.postDataEntries?.some(entry=>entry.bytes) ? {payload:Buffer.concat(paused.request.postDataEntries.map(entry=>Buffer.from(entry.bytes??'','base64')))} : paused.request.postData ? { payload: paused.request.postData } : {}) });
         if(contactShare&&contactFailure==='after-save'){result.statusCode=503;result.body=JSON.stringify({message:'Saved response interrupted; retry your contact.'});result.headers['content-length']=String(Buffer.byteLength(result.body));}
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
-          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: Buffer.from(result.body).toString('base64') });
+          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (String(result.headers['content-type']).startsWith('image/') ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
       } catch (error) {
         if(closing||/Invalid InterceptionId/i.test(error.message))return;
         browserErrors.push(error.message);
@@ -130,6 +132,11 @@ try {
     const data=await evaluate(`(()=>{const visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,hiddenVisible:[...document.querySelectorAll('[hidden]')].filter(visible).map(e=>e.className),unlabelled:[...document.querySelectorAll('input:not([type=hidden]),select,textarea')].filter(visible).filter(e=>!e.closest('label')&&!e.getAttribute('aria-label')&&!e.getAttribute('aria-labelledby')&&![...document.querySelectorAll('label[for]')].some(l=>l.htmlFor===e.id)).map(e=>e.placeholder||e.id||e.type),buttons:[...document.querySelectorAll('button')].filter(visible).filter(e=>!e.textContent.trim()&&!e.getAttribute('aria-label')).length}})()`);
     console.log(name,JSON.stringify(data));assert.ok(data.documentWidth<=requestedWidth+2,name+' overflows the requested viewport');assert.equal(data.hiddenVisible.length,0,name+' shows hidden panels');assert.equal(data.unlabelled.length,0,name+' has unlabelled fields');assert.equal(data.buttons,0,name+' has unlabelled buttons');await screenshot('audit-'+name);
   }
+  const uploadPhoto = async () => {
+  await evaluate(`(async()=>{const canvas=document.createElement('canvas');canvas.width=900;canvas.height=600;const ctx=canvas.getContext('2d');ctx.fillStyle='#367c7a';ctx.fillRect(0,0,900,600);ctx.fillStyle='#f4d7a4';ctx.beginPath();ctx.arc(450,280,160,0,Math.PI*2);ctx.fill();const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));const transfer=new DataTransfer();transfer.items.add(new File([blob],'portrait.png',{type:'image/png'}));const input=document.querySelector('input[aria-label="Upload profile photo"]');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  await until(`!!document.querySelector('.photo-editor-avatar img') && !document.querySelector('input[aria-label="Upload profile photo"]').disabled`);
+  assert.equal(await evaluate(`document.querySelector('.photo-editor-avatar img').src.includes('/api/v1/product-media/')`),true);
+  };
   for(const width of [1440,768,390,320]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     await command('Page.navigate',{url:'http://127.0.0.1:5174/'});await until(`!!document.querySelector('.sidebar')`);await delay(250);
@@ -140,7 +147,7 @@ try {
       if(label==='NFC & QR operations')assert.equal(await evaluate(`!!document.querySelector('.production-frame')`),true);
       if(label==='Client profiles'){
         await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);await inspect('admin-profile-editor-'+width);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.activeElement)`),true);
-        if(width===1440){await fill('Public slug','ui-created-profile');await fill('Display name','UI Created Profile');failProfileSave=true;await click('Save profile');await until(`!!document.querySelector('.profile-save-error')`);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.querySelector('[role=alert]'))`),true);failProfileSave=false;await click('Save profile');await until(`!document.querySelector('.editor-panel[open]')`);await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);}
+        if(width===1440){await uploadPhoto();await fill('Public slug','ui-created-profile');await fill('Display name','UI Created Profile');failProfileSave=true;await click('Save profile');await until(`!!document.querySelector('.profile-save-error')`);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.querySelector('[role=alert]'))`),true);failProfileSave=false;await click('Save profile');await until(`!document.querySelector('.editor-panel[open]')`);await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await delay(100);assert.equal(await evaluate(`!!document.querySelector('.editor-panel[open]')`),false);console.log('profile-editor-escape PASS');
       }
       if(label==='Products'){const opened=await evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Edit ')&&b.classList.contains('catalog-secondary'));if(!b)return false;b.click();return true})()`);if(opened){await delay(200);await inspect('admin-product-editor-'+width);for(const section of ['Details','Colours & prices','Media','Warranty','Publishing']){await evaluate(`(()=>{const b=[...document.querySelectorAll('.catalog-editor-nav button')].find(b=>b.textContent===${JSON.stringify(section)});b.click()})()`);assert.equal(await evaluate(`document.querySelectorAll('.catalog-section:not([hidden])').length`),1);}await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});}}
@@ -230,9 +237,11 @@ try {
   await screenshot('customer-signup');
   await fill('Account email', 'browser-owner@example.com'); await fill('Password', 'a secure browser test password');
   await fill('Full name', 'Browser Test Owner'); await fill('Headline', 'Profile verified in browser');
+  await uploadPhoto();
   await click('Create account & save profile');
   await until(`document.querySelector('h1')?.textContent === 'Browser Test Owner'`);
   assert.equal(await evaluate(`document.body.innerText.includes('browser-owner@example.com')`), false);
+  await until(`document.querySelector('.public-avatar img')?.naturalWidth === 600`);
   await screenshot('customer-public-profile');
   await evaluate(`document.querySelector('.share-contact').open=true`);
   for(const width of [320,390,1440]){
@@ -260,13 +269,16 @@ try {
   console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
   await reload();await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
   assert.equal(await evaluate(`document.querySelector('input[autocomplete=name]').value`),'Browser Test Owner');
+  const previousPhoto=await evaluate(`document.querySelector('.photo-editor-avatar img').src`);await uploadPhoto();assert.notEqual(await evaluate(`document.querySelector('.photo-editor-avatar img').src`),previousPhoto);
+  await click('Remove photo');assert.equal(await evaluate(`!!document.querySelector('.photo-editor-avatar img')`),false);
   await fill('Full name', 'Updated Browser Owner'); await click('Save profile');
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(await evaluate(`document.body.innerText.includes('visitor@example.com')`),false);
+  assert.equal(await evaluate(`!!document.querySelector('.public-avatar img')`),false);
   await evaluate('sessionStorage.clear()'); await command('Page.navigate', { url });
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
-  console.log('PASS: real browser activation → signup → public scan → owner edit → fresh visitor scan; private account email hidden.');
+  console.log('PASS: Admin/activation/owner photo upload, public image, replacement/removal; signup → owner edit → fresh scan; private email hidden.');
   await api('/api/v1/company/admin',{name:'Browser Team',ownerEmail:'browser-owner@example.com',domain:'team-ui.example'},headers);
   await command('Page.navigate',{url:'http://127.0.0.1:5174/team?manage=1'});await until(`!!document.querySelector('input[name=email]')`);
   await fill('Account email','browser-owner@example.com');await fill('Password','a secure browser test password');await click('Sign in');

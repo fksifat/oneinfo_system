@@ -22,7 +22,7 @@ This repository implements an end-to-end QR/NFC card platform from the technical
 - Card events and security-sensitive audit records
 - React production console connected to a VS Code desktop NFC bridge
 - Administrative dashboard for profiles, cards, batches, stations, and audit activity
-- Client profile editor with publishing, contact information, theme, and social links
+- Client profile editor with photo uploads, publishing, contact information, theme, and social links
 - Public mobile-friendly profile pages resolved by profile or card slug
 - Assignment workflow that links a QC-passed card to a client and activates it
 - PostgreSQL migrations, domain tests, and an end-to-end smoke test
@@ -250,6 +250,8 @@ compose.yaml                Local PostgreSQL service
 4. Account creation, profile publication, card ownership and secret consumption are saved in one transaction. Abandoning signup does not consume the code; submitting it successfully makes it unusable for another claim. Order reservation and QC do not activate or publish a client identity.
 5. Later QR/NFC scans show the owner's public profile. **Manage this card** lets its owner sign in and update their profile. Account email/password are private; only explicitly entered public contact details are displayed. Customer and operator authentication use separate token audiences.
 6. Visitors can use **Share my contact** with their consent to save a name and email/phone in the owner's private inbox. The owner opens **Manage this card → Shared contacts → Open inbox** to read them. Sharing does not send an email or SMS notification. Shared contacts are never shown on the public profile.
+
+Use **Upload photo** during signup or under **Manage this card → Public profile** to choose a JPEG, PNG or WebP (up to 10 MB). Photos are centre-cropped to a square and resized to at most 640px before uploading to the existing persistent media storage. Select **Save profile** to publish the photo, or **Remove photo** and save to return to initials. Admin profile editors also support uploads. Customer uploads require a signed-in account or a current activation grant, accept raster images up to 2 MB, and allow 30 attempts per account/card per hour. Removing a photo detaches it from the profile; stored media is retained with the existing media backups.
 
 For local testing, generated URLs default to `http://127.0.0.1:5174/c`; run `npm run dev:control` along with the local API/console. The launcher's ADB connection and `npm run android:usb` forward ports 3001 and 5174 for a connected test phone. These loopback URLs work only on the workstation or a phone with the tunnel; before printing real client cards, set `PUBLIC_CARD_BASE_URL` to your hosted HTTPS customer site ending in `/c`, set its `VITE_API_URL`/API CORS origins, and serve SPA fallbacks for `/c/*`. Existing printed links remain unchanged; keep their domain/routing alive. This change does not deploy the customer site or alter existing saved QR links.
 

@@ -6,6 +6,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
 import { put } from "@vercel/blob";
+import { requireCustomer, readClaimToken } from "../domain/customer-auth.js";
+import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import { db } from "../db/client.js";
+import { cardActivationSecrets } from "../db/schema.js";
+import { eq } from "drizzle-orm";
 
 const directory = resolve(process.env.PRODUCT_MEDIA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.product-media"));
 const formats = {
@@ -88,9 +93,20 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     }
   });
 
-  app.post<{ Params: { extension: string } }>("/upload/:extension", { bodyLimit: maxMediaBytes }, async (request, reply) => {
-    await requireOperator(request, ["SUPER_ADMIN"]);
+  for (const kind of ["upload", "profile", "profile-claim"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: kind === "upload" ? maxMediaBytes : 2 * 1024 * 1024 }, async (request, reply) => {
+    if (kind === "upload") await requireOperator(request, ["SUPER_ADMIN"]);
+    else {
+      let subject: string;
+      if (kind === "profile-claim") {
+        const claim = await readClaimToken(request.headers.authorization?.replace(/^Bearer /, "") ?? "");
+        const [secret] = await db.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, claim.cardId)).limit(1);
+        if (!secret?.codeHash || secret.redeemedAt || secret.version !== claim.version) return reply.code(401).send({ message: "Activation expired. Scan your card and enter its secret code again." });
+        subject = `claim:${claim.cardId}`;
+      } else subject = `customer:${(await requireCustomer(request)).id}`;
+      if (!await allowAuthAttempt(`profile-photo:${subject}`, 30, 60 * 60_000)) return reply.code(429).header("Retry-After", "3600").send({ message: "Photo upload limit reached. Please try again in an hour." });
+    }
     const extension = request.params.extension.toLowerCase();
+    if (kind !== "upload" && !["png", "jpg", "webp"].includes(extension)) return reply.code(415).send({ message: "Choose a JPEG, PNG or WebP photo" });
     if (!Object.hasOwn(formats, extension)) return reply.code(415).send({ message: "Unsupported media format" });
     if (!Buffer.isBuffer(request.body) || request.body.length === 0) return reply.code(400).send({ message: "Choose a media file to upload" });
     const body = request.body;

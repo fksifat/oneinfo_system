@@ -3,6 +3,8 @@ import { ActivateCardSchema, CustomerProfileSchema, type ContactLead } from "@on
 import { ProfileView, ShareContact, type PublicProfileData } from "./ProfileView.js";
 import type { z } from "zod";
 
+import { ProfilePhoto } from "./ProfilePhoto.js";
+
 type Draft = z.infer<typeof CustomerProfileSchema>;
 type CardResponse = { status: "PROFILE"; canShareContact?: boolean; crmEnabled?: boolean; profile: PublicProfileData["profile"]; links: PublicProfileData["links"] } |
   { status: "ACTIVATION_REQUIRED" | "UNAVAILABLE" };
@@ -32,6 +34,7 @@ export function CardPortal({ slug }: { slug: string }) {
   const [password, setPassword] = useState("");
   const [profile, setProfile] = useState<Draft>(emptyProfile);
   const [busy, setBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState("");
   const trackedView = useRef("");
   const base = `/c/${encodeURIComponent(slug)}`;
@@ -100,7 +103,7 @@ export function CardPortal({ slug }: { slug: string }) {
     const result = await customerApi<{ accessToken: string }>("/login", "POST", { email, password });
     remember(result.accessToken); await loadOwner(result.accessToken);
   }); };
-  const save = (event: FormEvent) => { event.preventDefault(); void run(async () => {
+  const save = (event: FormEvent) => { event.preventDefault(); if (photoBusy) return; void run(async () => {
     const parsed = CustomerProfileSchema.safeParse(profile);
     if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Check your profile details.");
     if (mode === "signup") {
@@ -147,14 +150,13 @@ export function CardPortal({ slug }: { slug: string }) {
           <label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
           <label>Password (at least 12 characters)<input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)} /></label>
         </fieldset>}
-        <fieldset><legend>Public profile</legend><label>Full name<input autoComplete="name" minLength={2} maxLength={120} required value={profile.displayName} onChange={event => update("displayName", event.target.value)} /></label>
+        <fieldset><legend>Public profile</legend><ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} /><label>Full name<input autoComplete="name" minLength={2} maxLength={120} required value={profile.displayName} onChange={event => update("displayName", event.target.value)} /></label>
           <label>Headline / profession<input maxLength={160} value={profile.headline} onChange={event => update("headline", event.target.value)} /></label>
           <label>Company<input maxLength={120} value={profile.company} onChange={event => update("company", event.target.value)} /></label>
           <label>About you<textarea maxLength={600} value={profile.bio} onChange={event => update("bio", event.target.value)} /></label>
           <label>Public phone<input type="tel" maxLength={40} value={profile.phone} onChange={event => update("phone", event.target.value)} /></label>
           <label>Public email<input type="email" value={profile.email} onChange={event => update("email", event.target.value)} /></label>
           <label>Website<input type="url" maxLength={500} value={profile.website} onChange={event => update("website", event.target.value)} /></label>
-          <label>Photo URL<input type="url" maxLength={500} value={profile.avatarUrl} onChange={event => update("avatarUrl", event.target.value)} /></label>
           <label>Theme<select value={profile.theme} onChange={event => update("theme", event.target.value as Draft["theme"])}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label>
         </fieldset>
         <fieldset><legend>Card mode</legend>
@@ -173,7 +175,7 @@ export function CardPortal({ slug }: { slug: string }) {
           <label>URL<input required type="url" maxLength={500} value={link.url} onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, url: event.target.value } : item))} /></label>
           <button type="button" className="quiet" onClick={() => update("links", profile.links.filter((_, i) => i !== index))}>Remove link</button>
         </div>)}<button type="button" className="quiet" disabled={profile.links.length >= 12} onClick={() => update("links", [...profile.links, { label: "", url: "", sortOrder: profile.links.length, active: true }])}>Add link</button></fieldset>
-        <button disabled={busy}>{busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
+        <button disabled={busy || photoBusy}>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
       </form>{mode === "signup" && <button className="quiet" disabled={busy} onClick={() => navigate("login")}>Already have an account? Sign in</button>}
       {mode === "details" && !claimToken && <><ProfileAnalytics token={token} base={base} />
         <p><a href="/team?manage=1">Company workspace</a></p></>}
