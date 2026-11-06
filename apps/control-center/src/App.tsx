@@ -4,6 +4,7 @@ import { Reviews } from "./Reviews.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.js";
+import { ProfilePhoto } from "./ProfilePhoto.js";
 import { ProfileView } from "./ProfileView.js";
 import { CardPassport } from "./CardPassport.js";
 import { CardPortal } from "./CardPortal.js";
@@ -384,7 +385,7 @@ export function App() {
       </main>
 
       <footer className="status-bar"><span className={busy ? "working" : ""}></span>{busy ? "Working…" : message}</footer>
-      {editing ? <ProfileEditor value={editing} setValue={setEditing} onClose={() => { setEditing(null); setProfileError(""); }} onSave={() => void saveProfile()} busy={busy} error={profileError} /> : null}
+      {editing ? <ProfileEditor token={token} value={editing} setValue={setEditing} onClose={() => { setEditing(null); setProfileError(""); }} onSave={() => void saveProfile()} busy={busy} error={profileError} /> : null}
     </div>
   );
 }
@@ -401,16 +402,20 @@ function DataPanel({ title, columns, rows }: { title: string; columns: string[];
   return <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">SYSTEM RECORDS</p><h2>{title}</h2></div><span>{rows.length} records</span></div><div className="data-table" role="region" aria-label={title} tabIndex={0}><table aria-label={title}><thead><tr>{columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>{rows.length === 0 ? <p className="empty">No records yet</p> : null}</section>;
 }
 
-function ProfileEditor({ value, setValue, onClose, onSave, busy, error }: { value: ProfileDraft & { id?: string }; setValue: (value: ProfileDraft & { id?: string }) => void; onClose: () => void; onSave: () => void; busy: boolean; error: string }) {
+function ProfileEditor({ token, value, setValue, onClose, onSave, busy, error }: { token: string; value: ProfileDraft & { id?: string }; setValue: (value: ProfileDraft & { id?: string }) => void; onClose: () => void; onSave: () => void; busy: boolean; error: string }) {
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const currentValue = useRef(value);
+  currentValue.current = value;
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => { const element = dialog.current; const opener = document.activeElement as HTMLElement | null; element?.showModal(); return () => { element?.close(); opener?.focus(); }; }, []);
-  const update = (field: keyof typeof blankProfile, next: unknown) => setValue({ ...value, [field]: next });
+  const update = (field: keyof typeof blankProfile, next: unknown) => setValue({ ...currentValue.current, [field]: next });
   const addLink = () => update("links", [...value.links, { label: "", url: "https://", sortOrder: value.links.length, active: true }]);
-  return <dialog ref={dialog} className="editor-panel" aria-label="Client profile editor" onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}><header><div><p className="eyebrow">CLIENT PROFILE</p><h2>{value.id ? "Edit digital identity" : "Create digital identity"}</h2></div><button disabled={busy} aria-label="Close profile editor" onClick={onClose}>×</button></header><div className="editor-layout"><form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
+  return <dialog ref={dialog} className="editor-panel" aria-label="Client profile editor" onCancel={event => { event.preventDefault(); if (!busy && !photoBusy) onClose(); }}><header><div><p className="eyebrow">CLIENT PROFILE</p><h2>{value.id ? "Edit digital identity" : "Create digital identity"}</h2></div><button disabled={busy || photoBusy} aria-label="Close profile editor" onClick={onClose}>×</button></header><div className="editor-layout"><form onSubmit={(event) => { event.preventDefault(); if (!photoBusy) onSave(); }}>
+    <ProfilePhoto value={value.avatarUrl} name={value.displayName} token={token} operator onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
     <div className="form-grid"><label>Public slug<input required disabled={Boolean(value.id)} value={value.publicSlug} onChange={(event) => update("publicSlug", event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} /></label><label>Display name<input required value={value.displayName} onChange={(event) => update("displayName", event.target.value)} /></label><label>Headline<input value={value.headline} onChange={(event) => update("headline", event.target.value)} /></label><label>Company<input value={value.company} onChange={(event) => update("company", event.target.value)} /></label><label>Email<input type="email" value={value.email} onChange={(event) => update("email", event.target.value)} /></label><label>Phone<input value={value.phone} onChange={(event) => update("phone", event.target.value)} /></label><label>Website<input type="url" value={value.website} onChange={(event) => update("website", event.target.value)} /></label><label>Theme<select value={value.theme} onChange={(event) => update("theme", event.target.value)}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label><label className="full">Bio<textarea rows={3} value={value.bio} onChange={(event) => update("bio", event.target.value)} /></label></div>
     <div className="links-editor"><div><h3>Profile links</h3><button type="button" disabled={value.links.length >= 12 || busy} onClick={addLink}>Add link</button></div>{value.links.map((link, index) => <div className="link-row" key={index}><input required aria-label={`Link ${index + 1} label`} maxLength={40} placeholder="Label" value={link.label} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item))} /><input required type="url" aria-label={`Link ${index + 1} URL`} maxLength={500} placeholder="https://" value={link.url} onChange={(event) => update("links", value.links.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} /><button type="button" disabled={busy} aria-label={`Remove link ${index + 1}`} onClick={() => update("links", value.links.filter((_, itemIndex) => itemIndex !== index))}>×</button></div>)}</div>
     <label className="publish-toggle"><input type="checkbox" checked={value.published} onChange={(event) => update("published", event.target.checked)} /><span></span><div><strong>Publish profile</strong><small>Allow assigned NFC and QR cards to resolve publicly</small></div></label>
     {error && <p role="alert" className="profile-save-error">{error}</p>}
-    <button className="save-button" disabled={busy} type="submit">{busy ? "Saving…" : "Save profile"}</button>
-  </form><div className={`editor-preview theme-${value.theme.toLowerCase()}`}><span className="preview-brand">ONEINFO</span><div className="preview-avatar">{initials(value.displayName)}</div><small>DIGITAL BUSINESS PROFILE</small><h3>{value.displayName || "Client name"}</h3><p>{value.headline || "Professional headline"}{value.company ? ` · ${value.company}` : ""}</p><div className="preview-actions"><i></i><i></i><i></i></div>{value.website ? <div className="preview-link">Website <b>↗</b></div> : null}{value.links.slice(0, 3).map((link, index) => <div className="preview-link" key={index}>{link.label || "Link"}<b>↗</b></div>)}</div></div></dialog>;
+    <button className="save-button" disabled={busy || photoBusy} type="submit">{busy ? "Saving…" : "Save profile"}</button>
+  </form><div className={`editor-preview theme-${value.theme.toLowerCase()}`}><span className="preview-brand">ONEINFO</span><div className="preview-avatar">{value.avatarUrl ? <img src={value.avatarUrl} alt="Profile preview" /> : initials(value.displayName)}</div><small>DIGITAL BUSINESS PROFILE</small><h3>{value.displayName || "Client name"}</h3><p>{value.headline || "Professional headline"}{value.company ? ` · ${value.company}` : ""}</p><div className="preview-actions"><i></i><i></i><i></i></div>{value.website ? <div className="preview-link">Website <b>↗</b></div> : null}{value.links.slice(0, 3).map((link, index) => <div className="preview-link" key={index}>{link.label || "Link"}<b>↗</b></div>)}</div></div></dialog>;
 }
