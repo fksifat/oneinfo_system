@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -57,11 +57,22 @@ test('failed migration leaves the running API untouched',()=>{
 
 test('failed cutover restores the previous image without restoring or deleting database/media',()=>{
   const f=fixture('health-failure');try{
+    const previous='b'.repeat(40);mkdirSync(join(f.root,'releases',previous));writeFileSync(join(f.root,'releases',previous,'compose.vps.yaml'),'services: {}\n');writeFileSync(join(f.root,'current-release'),previous);
     const result=f.run(`deploy ${revision}`);assert.notEqual(result.status,0);
     assert.match(f.log(),/rollback.yaml.*up -d --no-deps --no-build --wait/);
+    assert.ok(f.log().includes(join(f.root,'releases',previous,'compose.vps.yaml')));
     assert.match(readFileSync(join(f.root,'releases',revision,'rollback.yaml'),'utf8'),/image: oneinfo-vps-api:rollback-/);
     assert.equal(readFileSync(join(f.root,'media/keep.txt'),'utf8'),'existing media');
-    assert.ok(!existsSync(join(f.root,'current-release')));
+    assert.equal(readFileSync(join(f.root,'current-release'),'utf8'),previous);
+  }finally{rmSync(f.root,{recursive:true,force:true});}
+});
+
+test('compressed release cannot expand without a bound and fill the shared VPS disk',()=>{
+  const f=fixture();try{
+    mkdirSync(join(f.root,'source/apps'));const file=join(f.root,'source/apps/oversized.bin');writeFileSync(file,'');truncateSync(file,201*1024*1024);
+    assert.equal(spawnSync('tar',['-czf',join(f.root,`releases/${revision}.tar.gz`),'-C',join(f.root,'source'),'apps']).status,0);
+    const result=f.run(`deploy ${revision}`);assert.notEqual(result.status,0);assert.match(result.stderr,/Expanded release archive too large/);
+    assert.ok(!existsSync(join(f.root,'releases',revision,'apps/oversized.bin')));assert.equal(f.log(),'');
   }finally{rmSync(f.root,{recursive:true,force:true});}
 });
 

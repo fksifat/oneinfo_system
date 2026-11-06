@@ -5,7 +5,7 @@ import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, orderCardAllocations } from "../db/schema.js";
 import { parseBody } from "../http.js";
-import { config } from "../config.js";
+import { isManagedCardUrl } from "../domain/card-urls.js";
 
 export const cardRoutes: FastifyPluginAsync = async (app) => {
   app.get("/:cardId/history", async (request, reply) => {
@@ -51,7 +51,7 @@ export const cardRoutes: FastifyPluginAsync = async (app) => {
       const old = locked.find(card => card.id === cardId), next = locked.find(card => card.id === candidate?.id && card.id !== cardId);
       if (!old?.profileId || !["ACTIVATED", "SUSPENDED", "RETIRED"].includes(old.lifecycleStatus) || !next || next.profileId || next.customerAccountId || next.companyId ||
         next.qcStatus !== "PASSED" || next.lifecycleStatus !== "QC_PASSED" || next.inventoryStatus !== "SALEABLE" ||
-        next.canonicalUrl !== `${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")}/${next.publicSlug}`) {
+        !isManagedCardUrl(next.canonicalUrl, next.publicSlug)) {
         throw Object.assign(new Error("Choose an active or suspended card and a different, unassigned QC-passed Oneinfo card."), { statusCode: 409 });
       }
       const [batch] = await tx.select({ confirmed: cardBatches.printConfirmedAt }).from(cardBatches).where(eq(cardBatches.id, next.batchId));

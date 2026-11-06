@@ -3,7 +3,7 @@ import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchem
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cardEvents, cards, customerProfiles, profileLinks } from "../db/schema.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
 import { parseBody, sendCreated } from "../http.js";
 
 export const publicProfileFields = {
@@ -148,8 +148,11 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       const [current] = await tx.select().from(cards).where(eq(cards.id, card.id)).for("update");
       const [activation] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
       if (current?.customerAccountId || current?.companyId || activation) throw Object.assign(new Error("This card uses client or company activation. Use its assigned workflow."), { statusCode: 409 });
-      if (card.profileId === profileId && card.lifecycleStatus === "ACTIVATED") return;
-      const [assigned] = await tx.update(cards).set({ profileId, lifecycleStatus: "ACTIVATED", updatedAt: new Date() })
+      if (current?.profileId === profileId && current.lifecycleStatus === "ACTIVATED") return;
+      const [allocation] = await tx.select({ id: orderCardAllocations.id }).from(orderCardAllocations).where(eq(orderCardAllocations.cardId, card.id)).limit(1);
+      const [batch] = await tx.select({ confirmed: cardBatches.printConfirmedAt }).from(cardBatches).where(eq(cardBatches.id, card.batchId)).limit(1);
+      if (allocation || !batch?.confirmed || current?.inventoryStatus !== "SALEABLE") throw Object.assign(new Error("Use confirmed, unreserved stock. Cards reserved for orders must use client activation."), { statusCode: 409 });
+      const [assigned] = await tx.update(cards).set({ profileId, lifecycleStatus: "ACTIVATED", inventoryStatus: "RESERVED", updatedAt: new Date() })
         .where(and(eq(cards.id, card.id), isNull(cards.profileId), eq(cards.qcStatus, "PASSED"), eq(cards.lifecycleStatus, "QC_PASSED"))).returning();
       if (!assigned) throw Object.assign(new Error("Card is already assigned or is not available for activation"), { statusCode: 409 });
       await tx.insert(cardEvents).values({

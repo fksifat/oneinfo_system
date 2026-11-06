@@ -1,5 +1,7 @@
 import { createRequire } from "node:module";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
@@ -44,6 +46,31 @@ try {
         assert.equal((await fixture.query('SELECT count(*) FROM products')).rows[0].count, before);
         console.log("PASS: fresh migrations, local branch reconciliation and repeated migration preserve catalog data.");
       } finally { await fixture.end(); }
+    }
+  }
+  if (!process.exitCode) {
+    const nonce = randomUUID();
+    const env = { ...process.env, DATABASE_URL: source.href, NODE_ENV: "test", ONEINFO_SMOKE_NONCE: nonce };
+    const api = spawn(process.execPath, ["--import", "tsx", "--input-type=module", "-e", `
+      import {buildApp} from './src/app.ts';
+      import {config} from './src/config.ts';
+      if(!/^\\/oneinfo_print_stock_\\d+_test$/.test(new URL(config.DATABASE_URL).pathname))throw Error('Disposable database required');
+      const app=buildApp();
+      app.get('/__smoke-test-guard',()=>({nonce:process.env.ONEINFO_SMOKE_NONCE}));
+      await app.listen({port:0,host:'127.0.0.1'});
+      process.send({port:app.server.address().port});
+    `], { cwd: `${root}/apps/api`, env, stdio: ["ignore", "ignore", "ignore", "ipc"] });
+    const timeout = setTimeout(() => api.kill(), 20_000);
+    try {
+      const [message] = await Promise.race([once(api, "message"), once(api, "exit").then(() => { throw Error("Disposable smoke API did not start"); })]);
+      clearTimeout(timeout);
+      const result = spawnSync(process.execPath, ["scripts/smoke-test.mjs"], { cwd: root, env: { ...env, API_URL: `http://127.0.0.1:${message.port}` }, stdio: "inherit", timeout: 90_000 });
+      if (result.error) throw result.error;
+      if (result.status !== 0) process.exitCode = result.status ?? 1;
+      else console.log("PASS: full QR/NFC utility and legacy profile smoke flow in a disposable API/database.");
+    } finally {
+      clearTimeout(timeout);
+      if (api.exitCode === null && api.signalCode === null) { const stopped = once(api, "exit");api.kill();await stopped; }
     }
   }
 } finally {

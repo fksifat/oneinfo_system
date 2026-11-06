@@ -4,6 +4,29 @@ import { config } from "../src/config.js";
 
 const defaultProxyHops = config.TRUST_PROXY_HOPS;
 
+it("prevents API response caching while retaining explicit public media caching", async () => {
+  const app = buildApp();
+  app.get("/test-private", async () => ({ private: true }));
+  app.get("/test-media", async (_request, reply) => reply.header("Cache-Control", "public, max-age=300").send("media"));
+  try {
+    expect((await app.inject("/test-private")).headers["cache-control"]).toBe("no-store");
+    expect((await app.inject("/test-media")).headers["cache-control"]).toBe("public, max-age=300");
+  } finally { await app.close(); }
+});
+
+it("does not write SQL parameters or credentials into request error logs", async () => {
+  const app = buildApp();
+  const log = vi.fn();
+  app.addHook("onRequest", async request => { request.log.error = log; });
+  app.get("/test-private-error", async () => { throw Object.assign(new Error("private query"), { query: "insert ...", params: ["private-password"], cause: { code: "08006" } }); });
+  try {
+    const response = await app.inject("/test-private-error");
+    expect(response.statusCode).toBe(500);
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/private-password|private query|insert/);
+    expect(log).toHaveBeenCalledWith({ name: "Error", code: "08006", statusCode: 500 }, "request failed");
+  } finally { await app.close(); }
+});
+
 afterEach(() => {
   vi.unstubAllEnvs();
   config.TRUST_PROXY_HOPS = defaultProxyHops;

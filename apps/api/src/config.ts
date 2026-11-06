@@ -6,6 +6,10 @@ const envPath = fileURLToPath(new URL("../../../.env", import.meta.url));
 if (existsSync(envPath)) process.loadEnvFile(envPath);
 
 const developmentSecret = "development-only-secret-change-before-prod";
+const cardBaseUrl = z.string().url().refine(value => {
+  const url = new URL(value);
+  return ["http:", "https:"].includes(url.protocol) && url.pathname.replace(/\/$/, "") === "/c" && !url.search && !url.hash && !url.username && !url.password;
+}, "Use the customer site's /c base URL without credentials, query parameters or fragments");
 
 const ConfigSchema = z
   .object({
@@ -17,10 +21,8 @@ const ConfigSchema = z
   NFC_LAN_PORT: z.coerce.number().int().min(1).max(65_535).default(3443),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(1).default(0),
   JWT_SECRET: z.string().min(32).default(developmentSecret),
-  PUBLIC_CARD_BASE_URL: z.string().url().refine(value => {
-    const url = new URL(value);
-    return url.pathname.replace(/\/$/, "") === "/c" && !url.search && !url.hash;
-  }, "Use the customer site's /c base URL without query parameters or fragments").default("http://127.0.0.1:5174/c"),
+  PUBLIC_CARD_BASE_URL: cardBaseUrl.default("http://127.0.0.1:5174/c"),
+  PUBLIC_CARD_BASE_URL_ALIASES: z.string().default("").transform(value => value.split(",").map(item => item.trim()).filter(Boolean)).pipe(z.array(cardBaseUrl)),
   CORS_ORIGIN: z.string().default("http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:5175,http://127.0.0.1:5175"),
   DEV_ADMIN_EMAIL: z.string().email().default("admin@oneinfo.local"),
   ADMIN_EMAIL: z.string().email().optional(),
@@ -40,8 +42,10 @@ const ConfigSchema = z
     if (value.NODE_ENV === "production" && value.JWT_SECRET === developmentSecret) {
       context.addIssue({ code: "custom", path: ["JWT_SECRET"], message: "A unique production secret is required" });
     }
-    const cardUrl = new URL(value.PUBLIC_CARD_BASE_URL);
-    if (value.NODE_ENV === "production" && (cardUrl.protocol !== "https:" || cardUrl.hostname.endsWith(".example") || ["localhost", "127.0.0.1", "[::1]"].includes(cardUrl.hostname))) {
+    if (value.NODE_ENV === "production" && [value.PUBLIC_CARD_BASE_URL, ...value.PUBLIC_CARD_BASE_URL_ALIASES].some(base => {
+      const cardUrl = new URL(base);
+      return cardUrl.protocol !== "https:" || cardUrl.hostname.endsWith(".example") || ["localhost", "127.0.0.1", "[::1]"].includes(cardUrl.hostname);
+    })) {
       context.addIssue({ code: "custom", path: ["PUBLIC_CARD_BASE_URL"], message: "The real public card domain is required" });
     }
   });

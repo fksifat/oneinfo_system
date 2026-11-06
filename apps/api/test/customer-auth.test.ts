@@ -19,6 +19,7 @@ it("keeps customer login tokens separate from card activation tokens", async () 
   expect(await readClaimToken(await issueClaimToken(cardId, version))).toEqual({ cardId, version });
   await expect(readClaimToken(await issueCustomerToken(cardId))).rejects.toMatchObject({ statusCode: 401 });
   await expect(readClaimToken("invalid-token")).rejects.toMatchObject({ statusCode: 401 });
+  await expect(readClaimToken(await issueClaimToken("invalid-card-id", version))).rejects.toMatchObject({ statusCode: 401 });
   const expired = await new SignJWT({ version }).setProtectedHeader({ alg: "HS256" }).setIssuer("oneinfo-customer-api")
     .setAudience("oneinfo-card-claim").setSubject(cardId).setExpirationTime(1).sign(new TextEncoder().encode(config.JWT_SECRET));
   await expect(readClaimToken(expired)).rejects.toMatchObject({ statusCode: 401 });

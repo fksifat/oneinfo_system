@@ -1,6 +1,6 @@
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "../db/client.js";
-import { config } from "../config.js";
+import { managedCardBases } from "./card-urls.js";
 import { auditLogs, cardBatches, cardEvents, cards, orderCardAllocations, storeOrders } from "../db/schema.js";
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -16,7 +16,7 @@ export async function lockPrintedStock(tx: Transaction) {
 
 export function printedStockAvailable() {
   return and(isNotNull(cardBatches.printConfirmedAt), eq(cards.qrStatus, "GENERATED"), isNull(cards.profileId), isNull(cards.companyId),
-    sql`${cards.canonicalUrl} = ${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")} || '/' || ${cards.publicSlug}`,
+    sql`${cards.canonicalUrl} in (${sql.join(managedCardBases().map(base => sql`${base} || '/' || ${cards.publicSlug}`), sql`, `)})`,
     inArray(cards.inventoryStatus, ["NOT_READY", "SALEABLE"]), inArray(cards.lifecycleStatus, ["IN_PRODUCTION", "QC_PASSED"]),
     inArray(cards.qcStatus, ["PENDING", "PASSED"]),
     sql`not exists (select 1 from ${orderCardAllocations} a where a.card_id = ${cards.id})`);

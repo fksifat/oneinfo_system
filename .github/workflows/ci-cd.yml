@@ -16,7 +16,7 @@ concurrency:
 jobs:
   web:
     name: Web checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -44,6 +44,7 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=moderate
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:printed-stock
@@ -85,7 +86,7 @@ jobs:
 
   android:
     name: Android checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -113,7 +114,7 @@ jobs:
     name: Deploy Oneinfo VPS
     needs: [web, android]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     environment: production
     steps:

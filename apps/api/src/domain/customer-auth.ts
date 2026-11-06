@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { customerAccounts } from "../db/schema.js";
+import { z } from "zod";
 
 const derive = promisify(scrypt);
 const key = new TextEncoder().encode(config.JWT_SECRET);
@@ -40,8 +41,7 @@ export function issueClaimToken(cardId: string, version: string) {
 export async function readClaimToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, key, { issuer, audience: "oneinfo-card-claim", algorithms: ["HS256"] });
-    if (!payload.sub || typeof payload.version !== "string") throw new Error("Invalid claim");
-    return { cardId: payload.sub, version: payload.version };
+    return { cardId: z.uuid().parse(payload.sub), version: z.uuid().parse(payload.version) };
   } catch {
     throw Object.assign(new Error("Activation expired. Scan your card and enter its secret code again."), { statusCode: 401 });
   }
@@ -53,14 +53,16 @@ export function issueCustomerToken(customerId: string) {
 }
 
 export async function requireCustomer(request: FastifyRequest) {
+  let accountId: string;
   try {
     const token = request.headers.authorization?.replace(/^Bearer /, "");
     if (!token) throw new Error("Missing token");
     const { payload } = await jwtVerify(token, key, { issuer, audience: "oneinfo-customer", algorithms: ["HS256"] });
-    const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.id, payload.sub ?? "")).limit(1);
-    if (!account?.active) throw new Error("Inactive customer");
-    return account;
+    accountId = z.uuid().parse(payload.sub);
   } catch {
     throw Object.assign(new Error("Please sign in to your customer account."), { statusCode: 401 });
   }
+  const [account] = await db.select().from(customerAccounts).where(eq(customerAccounts.id, accountId)).limit(1);
+  if (!account?.active) throw Object.assign(new Error("Please sign in to your customer account."), { statusCode: 401 });
+  return account;
 }

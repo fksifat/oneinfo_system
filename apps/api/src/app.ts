@@ -33,6 +33,10 @@ export function buildApp(https?: ServerOptions) {
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["content-type", "authorization", "x-station-key", "x-request-id", "x-oneinfo-device-token"],
   });
+  app.addHook("onSend", async (_request, reply, payload) => {
+    if (!reply.hasHeader("Cache-Control")) reply.header("Cache-Control", "no-store");
+    return payload;
+  });
   app.get("/health", async () => ({ status: "ok", service: "oneinfo-production-api" }));
   app.register(devRoutes, { prefix: "/api/v1/dev" });
   app.register(operatorAuthRoutes, { prefix: "/api/v1/auth" });
@@ -57,7 +61,7 @@ export function buildApp(https?: ServerOptions) {
     const dbCode = normalized.cause?.code ?? normalized.code;
     const statusCode = normalized.statusCode ?? (dbCode === "23505" ? 409 : dbCode === "22P02" ? 400 : 500);
     const details = normalized.details;
-    request.log.error({ error, statusCode }, "request failed");
+    request.log.error({ name: normalized.name, code: dbCode, statusCode }, "request failed");
     return reply.code(statusCode).send({
       error: statusCode >= 500 ? "InternalServerError" : normalized.name,
       message: dbCode === "23505" ? "This identifier already exists" : dbCode === "22P02" ? "Invalid identifier" : statusCode >= 500 ? "An unexpected error occurred" : normalized.message,

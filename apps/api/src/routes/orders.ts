@@ -17,6 +17,7 @@ import { orderTracking, trackingOrderId, trackingPath } from "../domain/order-tr
 import { attemptOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
 import { usesBrevoSmtp } from "../domain/transactional-email.js";
 import { parseBody, sendCreated } from "../http.js";
+import { allowAuthAttempt } from "../domain/auth-attempts.js";
 
 const shippingSettingsId = "default";
 
@@ -231,6 +232,10 @@ export const orderRoutes: FastifyPluginAsync = async app => {
   app.post("/", { bodyLimit: 32 * 1024 }, async (request, reply) => {
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
     const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
+    const [replay] = await db.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.requestId, requestId)).limit(1);
+    if (!replay && !await allowAuthAttempt(`checkout:${request.ip}`, 20, 15 * 60_000)) {
+      return reply.code(429).header("Retry-After", "900").send({ message: "Too many checkout attempts. Please wait fifteen minutes and try again." });
+    }
     const { order, created } = await db.transaction(async tx => {
       // Serialize retries before checking prices so a committed request always returns its receipt.
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${requestId}, 0))`);

@@ -2,6 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
 
 const baseUrl = process.env.API_URL ?? "http://localhost:3001";
+if (!process.env.ONEINFO_SMOKE_NONCE || !["127.0.0.1", "localhost"].includes(new URL(baseUrl).hostname)) throw new Error("Run npm run smoke; direct smoke requests against a live API are disabled.");
+const guard = await fetch(`${baseUrl}/__smoke-test-guard`).then(response => response.json());
+assert.equal(guard.nonce, process.env.ONEINFO_SMOKE_NONCE, "Disposable smoke API required");
 
 async function request(path, options = {}, credentials = {}) {
   const headers = new Headers(options.headers);
@@ -71,6 +74,8 @@ await request(
 );
 
 const nfc = await claim("NFC_ENCODING");
+await request(`/api/v1/production/batches/${batch.id}/generate-qr`, { method: "POST", body: "{}" }, credentials);
+await request(`/api/v1/production/batches/${batch.id}/confirm-print`, { method: "POST", body: JSON.stringify({ confirmed: true }) }, credentials);
 const resumedNfc = await request(`/api/v1/production/jobs/${nfc.job.id}/claim`, {
   method: "POST", body: JSON.stringify({ idempotencyKey: randomUUID() }),
 }, credentials);
@@ -182,7 +187,7 @@ await request(
 const publicProfile = await request(`/api/v1/profiles/public/${profile.publicSlug}`);
 const cardProfile = await request(`/api/v1/profiles/card/${card.publicSlug}`);
 const history = await request(`/api/v1/production/cards/${card.id}/history`, {}, credentials);
-if (history.card.inventoryStatus !== "SALEABLE") throw new Error("QC-passed card was not released to saleable inventory");
+if (history.card.inventoryStatus !== "RESERVED") throw new Error("Assigned card must not remain in saleable inventory");
 if (history.card.lifecycleStatus !== "ACTIVATED") throw new Error("Assigned card was not activated");
 if (history.events.length < 5) throw new Error("Card traceability history is incomplete");
 if (publicProfile.profile.id !== profile.id || cardProfile.profile.id !== profile.id) throw new Error("Public profile resolution failed");
