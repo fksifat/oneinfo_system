@@ -20,7 +20,7 @@ import {
   type NfcBridgeResultInput,
   type NfcReadResultInput,
 } from "@oneinfo/contracts";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { hashCredential, requireOperator, requireStation } from "../auth.js";
 import { db } from "../db/client.js";
 import { cards, cardBatches, productionJobs, productionStations, cardVerifications, cardEvents, operators } from "../db/schema.js";
@@ -248,6 +248,17 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     const input = parseBody(CreateVerificationSchema, request.body);
     const session = await createVerification(device.stationId, input, device.id);
     return sendCreated(reply, { ...session, sessionId: session.id });
+  });
+
+  app.get("/latest-qr-scan", async (request) => {
+    await requireOperator(request);
+    const station = await requireStation(request);
+    const [scan] = await db.select({ id: cardEvents.id, cardId: cards.id, batchId: cards.batchId,
+      publicSlug: cards.publicSlug, scannedAt: cardEvents.createdAt }).from(cardEvents)
+      .innerJoin(cards, eq(cards.id, cardEvents.cardId))
+      .where(and(eq(cardEvents.stationId, station.stationId), inArray(cardEvents.eventType, ["PRINT_QR_CHECKED", "QR_CAMERA_MATCHED"])))
+      .orderBy(desc(cardEvents.createdAt), desc(cardEvents.id)).limit(1);
+    return { scan: scan ?? null };
   });
 
   app.post("/device/resolve-qr", async (request) => {

@@ -62,6 +62,24 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     return created;
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
+  it("reports only this workstation's latest recognized phone QR", async () => {
+    expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toBeNull();
+    const first = await batch(1), second = await batch(1);
+    const pairing = await request("/api/v1/local-nfc/pairings", {});
+    const paired = (await app.inject({ method: "POST", url: "/api/v1/local-nfc/devices/pair", payload: { pairingCode: pairing.pairingCode, deviceName: "Scan selection test" } })).json();
+    const deviceHeaders = { "x-oneinfo-device-token": paired.deviceToken };
+    for (const created of [first, second]) {
+      const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+      const scanId = randomUUID();
+      const result = await app.inject({ method: "POST", url: "/api/v1/local-nfc/device/resolve-qr", headers: deviceHeaders, payload: { scanId, scannedValue: card!.canonicalUrl } });
+      expect(result.statusCode).toBe(200);
+      expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toMatchObject({ id: scanId, cardId: card!.id, batchId: created.id });
+    }
+    const other = await request("/api/v1/production/stations/register", { stationCode: randomUUID(), name: "Other scan station" });
+    const isolated = await app.inject({ method: "GET", url: "/api/v1/local-nfc/latest-qr-scan", headers: { ...headers, "x-station-key": other.stationCredential } });
+    expect(isolated.json().scan).toBeNull();
+    expect((await app.inject({ method: "GET", url: "/api/v1/local-nfc/latest-qr-scan" })).statusCode).toBe(401);
+  });
   function orderPayload(quantity = 1) {
     return { requestId: randomUUID(), customer: { name: "Test buyer", email: "buyer@example.com", phone: "01712345678" },
       deliveryAddress: { district: "Dhaka", dhakaArea: "city", addressLine: "Test address" }, shippingMinor: 6000,
@@ -465,6 +483,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect((await send(`verification-tasks/${wrongScan}/approve`, {})).statusCode).toBe(409);
     const finalScan = randomUUID();
     expect((await send("verification-from-qr", { scanId: finalScan, scannedValue: card!.canonicalUrl })).statusCode).toBe(201);
+    expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toMatchObject({ cardId: card!.id, batchId: card!.batchId });
     expect((await send(`verification-tasks/${finalScan}/result`, { scannedValue: card!.canonicalUrl })).json().state).toBe("MATCHED");
     const approved = await send(`verification-tasks/${finalScan}/approve`, {});
     expect(approved.statusCode, approved.body).toBe(201);

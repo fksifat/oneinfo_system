@@ -144,6 +144,25 @@ try {
     await command('Page.navigate',{url:'http://127.0.0.1:5173/'});await until(`!!document.querySelector('.workspace-nav')`);await delay(250);
     await until(`!![...document.querySelectorAll('.batch-toolbar select option')].find(o=>o.value===${JSON.stringify(batch.id)})`);
     await set('.batch-toolbar select',batch.id);await until(`!!document.querySelector('.selected-production-card')`);
+    if(width===1440){
+      const scannedBatch=await api('/api/v1/production/batches',{batchCode:'PHONE-SCAN-QA',productVariantId:'ONEINFO-NFC-CARD',quantity:2},headers);
+      await api(`/api/v1/production/batches/${scannedBatch.id}/generate-qr`,{},headers);
+      const detail=await api(`/api/v1/production/batches/${scannedBatch.id}`,null,headers);
+      const target=detail.cards[1];
+      await set('.card-search input','no matching card');await set('.card-search select','passed');
+      await evaluate(`location.hash='tools'`);await until(`!!document.querySelector('.tool-editor')`);
+      await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:target.canonicalUrl},deviceHeaders);
+      await until(`location.hash==='#production'&&document.querySelector('.batch-toolbar select').value===${JSON.stringify(scannedBatch.id)}&&document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(target.publicSlug)})`);
+      assert.equal(await evaluate(`document.querySelector('.card-search input').value`),'');
+      assert.equal(await evaluate(`document.querySelector('.card-search select').value`),'all');
+      await evaluate(`document.querySelector('.production-card-list button').click()`);await delay(2500);
+      assert.equal(await evaluate(`document.querySelector('.selected-production-card').textContent.includes(${JSON.stringify(detail.cards[0].publicSlug)})`),true);
+      await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:target.canonicalUrl},deviceHeaders);
+      await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(target.publicSlug)})`);
+      for(const item of detail.cards)await connection.db.delete(schema.cardEvents).where(eq(schema.cardEvents.cardId,item.id));
+      await set('.batch-toolbar select',batch.id);await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+      console.log('Phone QR auto-selects batch/card, clears filters, opens Production, and preserves later manual selection PASS');
+    }
     for(const label of ['Production','NFC tools','Connection']){
       await evaluate(`(()=>{const b=[...document.querySelectorAll('.workspace-nav button')].find(b=>b.textContent.endsWith(${JSON.stringify(label)}));b.click();})()`);await inspect('production-'+label.replaceAll(' ','-')+'-'+width);
       if(label==='Production'&&width===1440){

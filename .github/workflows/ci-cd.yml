@@ -1,0 +1,138 @@
+name: Oneinfo CI/CD
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oneinfo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  web:
+    name: Web checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: oneinfo
+          POSTGRES_PASSWORD: oneinfo
+          POSTGRES_DB: oneinfo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U oneinfo -d oneinfo"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      DATABASE_URL: postgresql://oneinfo:oneinfo@127.0.0.1:5432/oneinfo
+      TEST_DATABASE_URL: postgresql://oneinfo:oneinfo@127.0.0.1:5432/oneinfo
+      JWT_SECRET: isolated-ci-test-signing-key-at-least-32-characters
+      NODE_ENV: development
+      VITE_API_URL: http://127.0.0.1:3001
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:printed-stock
+      - run: node --test scripts/ci-deploy.test.mjs
+      - run: npm run build
+      - name: Responsive browser regression checks
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          npm run db:migrate
+          node apps/api/dist/server.js > /tmp/oneinfo-api.log 2>&1 &
+          npm exec --workspace @oneinfo/production-console -- vite preview --host 127.0.0.1 --port 5173 --strictPort > /tmp/oneinfo-console.log 2>&1 &
+          npm exec --workspace @oneinfo/control-center -- vite preview --host 127.0.0.1 --port 5174 --strictPort > /tmp/oneinfo-admin.log 2>&1 &
+          npm exec -- vite preview sites/storefront --host 127.0.0.1 --port 5175 --strictPort > /tmp/oneinfo-storefront.log 2>&1 &
+          for port in 3001 5173 5174 5175; do
+            ready=false
+            for attempt in $(seq 1 60); do
+              if curl --fail --silent "http://127.0.0.1:$port" > /dev/null; then ready=true; break; fi
+              if [ "$port" = 3001 ] && curl --fail --silent http://127.0.0.1:3001/health > /dev/null; then ready=true; break; fi
+              sleep 1
+            done
+            [ "$ready" = true ] || { cat /tmp/oneinfo-*.log; exit 1; }
+          done
+          node scripts/ui-check.mjs
+      - name: Vercel build
+        env:
+          VITE_API_URL: https://api.oneinfo.online
+          PUBLIC_SITE_URL: https://oneinfo.online
+        run: npm run build:cloud
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: web-check-diagnostics
+          path: |
+            /tmp/oneinfo-*.log
+            .oneinfo/qa/*.png
+          include-hidden-files: true
+          retention-days: 7
+
+  android:
+    name: Android checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          gradle-version: '8.9'
+      - run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - run: gradle -p apps/android-nfc-bridge testDebugUnitTest assembleDebug --no-daemon
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: oneinfo-android-debug
+          path: apps/android-nfc-bridge/app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+  deploy:
+    name: Deploy Oneinfo VPS
+    needs: [web, android]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - name: Configure restricted SSH identity
+        env:
+          DEPLOY_KEY: ${{ secrets.ONEINFO_DEPLOY_KEY }}
+          KNOWN_HOSTS: ${{ secrets.ONEINFO_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_KEY" && test -n "$KNOWN_HOSTS"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Upload and deploy the tested commit
+        env:
+          DEPLOY_HOST: ${{ vars.ONEINFO_DEPLOY_HOST }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          git archive --format=tar.gz HEAD Dockerfile.api .dockerignore package.json package-lock.json tsconfig.base.json apps/api packages/contracts compose.vps.yaml deploy > /tmp/oneinfo-release.tar.gz
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "$DEPLOY_HOST" "upload $GITHUB_SHA" < /tmp/oneinfo-release.tar.gz
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$DEPLOY_HOST" "deploy $GITHUB_SHA"
