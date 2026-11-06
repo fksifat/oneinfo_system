@@ -68,8 +68,12 @@ try {
   const device=await api('/api/v1/local-nfc/devices/pair',{pairingCode:pairing.pairingCode,deviceName:'UI audit NFC device'},headers);
   const deviceHeaders={'x-oneinfo-device-token':device.deviceToken};
   globalThis.uiHeartbeat=setInterval(()=>void app.inject({method:'GET',url:'/api/v1/local-nfc/device/status',headers:deviceHeaders}),5000);
-  chrome = spawn(chromePath, ['--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${chromeProfile}`, 'about:blank'], { stdio: 'ignore' });
-  for (let i = 0; i < 100 && !existsSync(join(chromeProfile, 'DevToolsActivePort')); i++) await delay(100);
+  chrome = spawn(chromePath, ['--headless=new', '--no-sandbox', '--disable-dev-shm-usage', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--remote-debugging-port=0', `--user-data-dir=${chromeProfile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+  let chromeError = '';
+  chrome.stderr.on('data', data => { chromeError = (chromeError + data).slice(-8000); });
+  chrome.on('error', error => { chromeError = error.message; });
+  for (let i = 0; i < 300 && !existsSync(join(chromeProfile, 'DevToolsActivePort')) && chrome.exitCode === null && chrome.signalCode === null; i++) await delay(100);
+  assert.ok(existsSync(join(chromeProfile, 'DevToolsActivePort')), `Chrome did not start (exit ${chrome.exitCode}, signal ${chrome.signalCode}): ${chromeError}`);
   const port = readFileSync(join(chromeProfile, 'DevToolsActivePort'), 'utf8').split('\n')[0];
   const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json());
   socket = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
