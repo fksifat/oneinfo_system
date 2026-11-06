@@ -7,9 +7,9 @@ interface ProductionCard {
   imageData: string | null; printChecked: boolean; verification: { camera: boolean; nfc: boolean; cameraResult?: string; nfcResult?: string }; jobs: Job[];
 }
 interface Batch { id: string; batchCode: string; plannedQuantity: number; printConfirmedAt: string | null; cards: ProductionCard[] }
-interface Props { visible: boolean; credentials: Credentials; busy: boolean; onBusy: (value: boolean) => void; onMessage: (value: string) => void; onChanged: () => Promise<void> }
+interface Props { visible: boolean; credentials: Credentials; busy: boolean; onBusy: (value: boolean) => void; onMessage: (value: string) => void; onChanged: () => Promise<void>; onPhoneScan: () => void }
 
-export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, onChanged }: Props) {
+export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, onChanged, onPhoneScan }: Props) {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [batchId, setBatchId] = useState(() => new URLSearchParams(window.location.search).get("batch") ?? localStorage.getItem("oneinfo.production.batch") ?? "");
   const currentBatchId = useRef(batchId);
@@ -30,6 +30,32 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   const [search, setSearch] = useState("");
   const [cardFilter, setCardFilter] = useState("all");
   const [printingComplete, setPrintingComplete] = useState(false);
+  const lastPhoneScan = useRef("");
+  useEffect(() => {
+    let disposed = false;
+    let pending = false;
+    const sync = async () => {
+      if (pending || busy) return;
+      pending = true;
+      try {
+        const { scan } = await api<{ scan: { id: string; batchId: string; cardId: string; publicSlug: string } | null }>("/api/v1/local-nfc/latest-qr-scan", {}, credentials);
+        if (disposed || !scan || scan.id === lastPhoneScan.current) return;
+        const loaded = await api<Batch>(`/api/v1/production/batches/${scan.batchId}`, {}, credentials);
+        if (disposed) return;
+        currentBatchId.current = scan.batchId;
+        setBatches(items => items.some(item => item.id === loaded.id) ? items : [loaded, ...items]);
+        setBatchId(scan.batchId); setBatch(loaded); setSelectedId(scan.cardId);
+        setSearch(""); setCardFilter("all");
+        lastPhoneScan.current = scan.id;
+        onPhoneScan();
+        onMessage(`Phone scanned ${scan.publicSlug} · ${loaded.batchCode}. Card selected automatically.`);
+      } catch (error) { if (!disposed) setSyncError(error instanceof Error ? error.message : "Could not sync phone scan"); }
+      finally { pending = false; }
+    };
+    void sync();
+    const interval = window.setInterval(() => void sync(), 2000);
+    return () => { disposed = true; window.clearInterval(interval); };
+  }, [credentials, busy, onPhoneScan, onMessage]);
   useEffect(() => setPrintingComplete(false), [batchId]);
   useEffect(() => {
     const url = new URL(window.location.href);

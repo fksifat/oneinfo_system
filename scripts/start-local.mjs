@@ -5,6 +5,7 @@ import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { openConsole } from "./desktop.mjs";
+import { databaseTunnelSettings, databasePortOpen } from "./ssh-database.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -154,7 +155,17 @@ export async function main() {
     };
     if (apiState !== "ready" || consoleState !== "ready") {
       if (dependenciesNeedInstall()) { console.log("Installing updated project dependencies…"); await npm(["ci", "--include=dev"]); }
-      if (usesLocalDatabase()) {
+      const tunnel = databaseTunnelSettings(env);
+      if (tunnel && apiState !== "ready") {
+        if (await databasePortOpen(tunnel.port)) throw new Error(`Database tunnel port ${tunnel.port} is already in use. Stop its previous tunnel and retry.`);
+        const child = startService("database-tunnel", [join(root, "scripts/ssh-database.mjs")]);
+        const deadline = Date.now() + 30_000;
+        while (!await databasePortOpen(tunnel.port)) {
+          if (Date.now() > deadline || child.exitCode !== null || child.signalCode !== null) throw new Error("Database SSH tunnel did not start. Check SSH access and .oneinfo/logs/database-tunnel.log.");
+          await delay(200);
+        }
+        console.log("Private VPS database connection ready; PostgreSQL remains unpublished.");
+      } else if (!tunnel && usesLocalDatabase()) {
         console.log("Starting local database. Docker must be installed and running…");
         await command("docker", ["compose", "up", "-d", "--wait", "postgres"], { env, signal: abort.signal });
       } else console.log("Using configured cloud PostgreSQL database.");

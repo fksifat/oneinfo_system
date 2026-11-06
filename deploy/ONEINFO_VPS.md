@@ -118,6 +118,23 @@ This is a new database. All 11 migrations applied. It starts with the two catalo
 products seeded by migrations, one configured Admin account after login, and no
 customer profiles, cards or orders. Existing Neon/workstation data was not copied.
 
+**Update, 6 November 2026:** the VPS is now the primary database and has all 16
+migrations. The user's authorized consolidation imported the Neon workstation's
+12 cards, two batches, one order, existing activation secret/allocation and
+production history, preserving IDs and printed URLs. Existing VPS orders,
+profile, reviews and catalog configuration were retained. The pre-merge archive
+is `/opt/oneinfo/backups/before-neon-merge-20261106.dump`; its archive listing was
+validated. The old Neon database remains intact as a fallback snapshot and is no
+longer the workstation's configured database. The local private backup and merge
+audit are under ignored `.oneinfo/backups`.
+
+The workstation launcher uses an authorized SSH key and an unpublished database
+connection, configured by `ONEINFO_DATABASE_SSH`, `ONEINFO_DATABASE_CONTAINER`
+and a loopback `DATABASE_URL` port. It reconnects the tunnel automatically. Keep
+its signing secret and new-card base URL consistent with the VPS. Retain the
+existing Vercel `/c/*` routes for previously printed URLs. The hosted frontend
+continues on Vercel with `VITE_API_URL=https://api.oneinfo.online`.
+
 An initial PostgreSQL custom-format dump is saved at:
 
 `/opt/oneinfo/backups/initial-20261105.dump`

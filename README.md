@@ -3,6 +3,7 @@
 See [REVIEW.md](REVIEW.md) for the latest review, fixes, verification, and remaining implementation limits.
 
 For a separate VPS API and PostgreSQL Docker deployment, see [deploy/VPS.md](deploy/VPS.md).
+Automated checks, protected-branch releases and the Oneinfo-only deployment/rollback flow are documented in [deploy/CI_CD.md](deploy/CI_CD.md).
 The deployed `api.oneinfo.online` server and its maintenance commands are recorded in [deploy/ONEINFO_VPS.md](deploy/ONEINFO_VPS.md).
 
 This repository implements an end-to-end QR/NFC card platform from the technical specification. It includes a PostgreSQL-backed API, a production workstation, an administrative control center, and public client profiles linked to physical cards.
@@ -61,6 +62,8 @@ The launcher installs dependencies on first run or after a dependency lockfile u
 Keep the launcher terminal open. **Ctrl+C** stops only the API/console processes it started; existing services and the PostgreSQL container/data are retained. Closing the browser does not stop the workstation. Startup messages stay in the terminal; service logs are in `.oneinfo/logs/`. Docker must already be running; the launcher does not install Node/Docker or change system privileges.
 
 The default phone connection uses the console's Wi-Fi pairing QR. ADB is an optional development fallback: use `npm run android:usb`, or launch with `npm run start:local -- --adb`. Install Android Platform Tools for that fallback, or set `ADB_PATH`; use `ANDROID_SERIAL` to select a phone. Saved pairing survives an API restart.
+
+For a private VPS database, set `ONEINFO_DATABASE_SSH=user@host`, `ONEINFO_DATABASE_CONTAINER=oneinfo-vps-postgres-1`, and a `DATABASE_URL` using `127.0.0.1` with a dedicated local port such as `55434`. Authorize this PC's SSH key and verify the server host key first. The launcher resolves that container's private address, opens a loopback-only SSH tunnel, and reconnects after temporary network failures; it skips local Docker startup. It stops its tunnel when closed. PostgreSQL stays unpublished on the VPS. The workstation needs the same `JWT_SECRET` and `PUBLIC_CARD_BASE_URL` as the hosted API. Each PC needs its own authorized key and private `.env`; credentials must not be committed. Windows/macOS require an OpenSSH client available as `ssh`.
 
 Without a Desktop shortcut, you can use the supplied project launcher (`Start Oneinfo.cmd` on Windows, `Start Oneinfo.command` on macOS, or `Start Oneinfo.sh` in a Linux terminal), the VS Code **Oneinfo: One-click production console** task, or:
 
@@ -140,6 +143,8 @@ Keep `HOST=127.0.0.1` for the desktop HTTP API. A second HTTPS listener on port 
 3. In PC **Connection**, select **Create connection QR**.
 4. In phone **Connect**, select **Scan workstation connection QR**, then scan the PC's QR. Its five-minute expiry applies only to new pairing; already paired phones remain paired.
 5. Keep the app open while scanning cards. The phone remembers the workstation, retries temporary connection failures and uses network service discovery to find the same PC after address changes. If discovery is blocked, scan a fresh QR to update its address.
+
+Scanning a registered production QR on the paired phone automatically opens Production on that workstation's console, selects its batch/card and clears filters that would hide it. Updates arrive within the next two-second poll after the scan is saved; an active console operation finishes first. Manual selections remain until another phone scan arrives. Print checks and final QC QR scans both select the card; an unknown QR does not change the selection.
 
 The QR carries the PC's HTTPS certificate fingerprint and a one-use pairing secret. The phone verifies that certificate before sending credentials; no system-wide certificate trust change is required. Guest Wi-Fi with client isolation cannot connect phone to PC. Allow the configured HTTPS port (default TCP 3443) through the PC's private-network firewall; UDP 5353 supports automatic discovery.
 

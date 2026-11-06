@@ -179,6 +179,8 @@ export function App() {
     [jobs],
   );
 
+  const showPhoneScan = useCallback(() => { setActiveTab("production"); window.location.hash = "production"; }, []);
+
   return (
     <div className="app-shell">
       <header>
@@ -205,7 +207,7 @@ export function App() {
           </section>
         ) : (
           <>
-            <ProductionDesk visible={activeTab === "production"} credentials={credentials} busy={busy} onBusy={setBusy} onMessage={setMessage} onChanged={refreshJobs} />
+            <ProductionDesk visible={activeTab === "production"} credentials={credentials} busy={busy} onBusy={setBusy} onMessage={setMessage} onChanged={refreshJobs} onPhoneScan={showPhoneScan} />
 
             <div hidden={activeTab !== "tools"}><NfcTools credentials={credentials} connected={devices.some(device => device.online)} onMessage={setMessage} /></div>
             <section hidden={activeTab !== "connection"} className="panel desktop-nfc-panel lan-connection-panel">

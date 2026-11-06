@@ -9,6 +9,17 @@ import { spawn, spawnSync } from "node:child_process";
 import { probeService, waitForService, npmCommand, usesLocalDatabase, dependenciesNeedInstall } from "./start-local.mjs";
 import { shortcut, desktopQuote, installShortcut } from "./setup-desktop.mjs";
 import { browserCommands } from "./desktop.mjs";
+import { databaseTunnelSettings, databasePortOpen, runDatabaseTunnel } from "./ssh-database.mjs";
+
+test("VPS tunnels require an explicit loopback database port and safe SSH/container values", async () => {
+  assert.equal(databaseTunnelSettings({}), null);
+  const env = { ONEINFO_DATABASE_SSH: "root@192.168.1.10", ONEINFO_DATABASE_CONTAINER: "oneinfo-vps-postgres-1", DATABASE_URL: "postgresql://user:password@127.0.0.1:55434/oneinfo" };
+  assert.deepEqual(databaseTunnelSettings(env), { host: "root@192.168.1.10", container: "oneinfo-vps-postgres-1", port: 55434 });
+  for (const patch of [{ ONEINFO_DATABASE_SSH: "-oProxyCommand=oops" }, { ONEINFO_DATABASE_CONTAINER: "postgres;whoami" }, { DATABASE_URL: "postgresql://u:p@0.0.0.0:55434/db" }, { DATABASE_URL: "postgresql://u:p@127.0.0.1/db" }]) assert.throws(() => databaseTunnelSettings({ ...env, ...patch }));
+  const server = createServer(); server.listen(0,"127.0.0.1"); await once(server,"listening"); const port = server.address().port;
+  assert.equal(await databasePortOpen(port),true); await new Promise(resolve=>server.close(resolve)); assert.equal(await databasePortOpen(port),false);
+  await runDatabaseTunnel(databaseTunnelSettings(env),AbortSignal.abort());
+});
 
 test("a pulled dependency lockfile triggers installation only until packages are refreshed", () => {
   const directory = mkdtempSync(join(tmpdir(), "oneinfo-dependencies-"));
