@@ -4,7 +4,7 @@ import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import { CreateProfileSchema } from "@oneinfo/contracts";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
-import { config } from "../config.js";
+import { isManagedCardUrl } from "../domain/card-urls.js";
 import { db } from "../db/client.js";
 import { cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
 import { requireCustomer } from "../domain/customer-auth.js";
@@ -70,7 +70,7 @@ export const companyRoutes: FastifyPluginAsync = async app => {
       const current = card.cards;
       if (current.companyId === companyId) return { assigned: true };
       if (current.companyId || current.profileId || current.customerAccountId || current.qcStatus !== "PASSED" || current.lifecycleStatus !== "QC_PASSED" ||
-        current.inventoryStatus !== "SALEABLE" || current.canonicalUrl !== `${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")}/${cardSlug}`) fail("This card is not available for a company.");
+        current.inventoryStatus !== "SALEABLE" || !isManagedCardUrl(current.canonicalUrl, cardSlug)) fail("This card is not available for a company.");
       const [issued] = await tx.select({ id: cardActivationSecrets.cardId }).from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, current.id));
       const [allocated] = await tx.select({ id: orderCardAllocations.id }).from(orderCardAllocations).where(eq(orderCardAllocations.cardId, current.id));
       if (issued || allocated) fail("This card already has an activation code or order allocation.");

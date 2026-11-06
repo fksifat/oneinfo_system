@@ -6,6 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "./db/client.js";
 import { operators, productionStations } from "./db/schema.js";
 import { config } from "./config.js";
+import { z } from "zod";
 
 const jwtKey = new TextEncoder().encode(config.JWT_SECRET);
 
@@ -48,28 +49,27 @@ export async function requireOperator(
     throw Object.assign(new Error("Missing operator bearer token"), { statusCode: 401 });
   }
 
+  let identity: OperatorIdentity;
   try {
     const { payload } = await jwtVerify(authorization.slice(7), jwtKey, {
       issuer: "oneinfo-production-api",
       audience: "oneinfo-production-console",
+      algorithms: ["HS256"],
     });
     const role = OperatorRoleSchema.parse(payload.role);
-    const identity = {
+    identity = {
       operatorId: payload.sub ?? "",
       email: String(payload.email ?? ""),
       role,
     };
-    if (!identity.operatorId || !identity.email || !role) throw new Error("Invalid claims");
-    const [operator] = await db.select().from(operators).where(and(eq(operators.id, identity.operatorId), eq(operators.active, true))).limit(1);
-    if (!operator || operator.role !== role) throw new Error("Inactive operator or outdated role");
-    if (allowedRoles && !allowedRoles.includes(role)) {
-      throw Object.assign(new Error("Operator role is not permitted"), { statusCode: 403 });
-    }
-    return identity;
-  } catch (error) {
-    if ((error as { statusCode?: number }).statusCode === 403) throw error;
+    if (!z.uuid().safeParse(identity.operatorId).success || !identity.email) throw new Error("Invalid claims");
+  } catch {
     throw Object.assign(new Error("Invalid or expired operator token"), { statusCode: 401 });
   }
+  const [operator] = await db.select().from(operators).where(and(eq(operators.id, identity.operatorId), eq(operators.active, true))).limit(1);
+  if (!operator || operator.role !== identity.role) throw Object.assign(new Error("Invalid or expired operator token"), { statusCode: 401 });
+  if (allowedRoles && !allowedRoles.includes(identity.role)) throw Object.assign(new Error("Operator role is not permitted"), { statusCode: 403 });
+  return identity;
 }
 
 export async function requireStation(request: FastifyRequest): Promise<StationIdentity> {
@@ -77,8 +77,8 @@ export async function requireStation(request: FastifyRequest): Promise<StationId
   if (typeof rawCredential !== "string") {
     throw Object.assign(new Error("Missing station credential"), { statusCode: 401 });
   }
-  const stationId = rawCredential.split(".", 1)[0];
-  if (!stationId || !/^[a-f0-9-]{36}$/i.test(stationId)) throw Object.assign(new Error("Invalid station credential"), { statusCode: 401 });
+  const stationId = rawCredential.split(".", 1)[0] ?? "";
+  if (!z.uuid().safeParse(stationId).success) throw Object.assign(new Error("Invalid station credential"), { statusCode: 401 });
 
   const [station] = await db
     .select({ id: productionStations.id, code: productionStations.stationCode })

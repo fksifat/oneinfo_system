@@ -30,14 +30,25 @@ import sys, tarfile
 from pathlib import PurePosixPath
 allowed={'Dockerfile.api','.dockerignore','package.json','package-lock.json','tsconfig.base.json','apps','packages','compose.vps.yaml','deploy'}
 with tarfile.open(sys.argv[1],'r:gz') as archive:
-    for member in archive.getmembers():
+    members=[]
+    total=0
+    for member in archive:
+        total+=member.size
+        if len(members)>=10000 or total>200*1024*1024:
+            raise SystemExit('Expanded release archive too large')
         path=PurePosixPath(member.name)
         if path.is_absolute() or '..' in path.parts or not path.parts or path.parts[0] not in allowed or not (member.isfile() or member.isdir()):
             raise SystemExit('Unsafe release archive member')
-    archive.extractall(sys.argv[2], filter='data')
+        members.append(member)
+    archive.extractall(sys.argv[2], members=members, filter='data')
 PY
 [[ -f "$release/Dockerfile.api" && -f "$release/compose.vps.yaml" ]] || exit 2
 previous=$(docker inspect --format '{{.Image}}' oneinfo-vps-api-1)
+previous_compose="$root/compose.vps.yaml"
+previous_revision=$(cat "$root/current-release" 2>/dev/null || true)
+if [[ "$previous_revision" =~ ^[a-f0-9]{40}$ && -f "$root/releases/$previous_revision/compose.vps.yaml" ]]; then
+  previous_compose="$root/releases/$previous_revision/compose.vps.yaml"
+fi
 docker tag "$previous" "oneinfo-vps-api:rollback-$revision"
 docker build --label "org.opencontainers.image.revision=$revision" --target runtime -t "oneinfo-vps-api:$revision" -f "$release/Dockerfile.api" "$release"
 docker build --target build -t "oneinfo-vps-migrate:$revision" -f "$release/Dockerfile.api" "$release"
@@ -74,7 +85,7 @@ services:
   api:
     image: oneinfo-vps-api:rollback-$revision
 EOF
-    docker compose --project-directory "$root" --env-file "$root/.env.vps" -p oneinfo-vps -f "$root/compose.vps.yaml" -f "$root/deploy/compose.docker-proxy.yaml" -f "$release/rollback.yaml" up -d --no-deps --no-build --wait --wait-timeout 120 api || echo 'ROLLBACK NEEDS OPERATOR ATTENTION' >&2
+    docker compose --project-directory "$root" --env-file "$root/.env.vps" -p oneinfo-vps -f "$previous_compose" -f "$root/deploy/compose.docker-proxy.yaml" -f "$release/rollback.yaml" up -d --no-deps --no-build --wait --wait-timeout 120 api || echo 'ROLLBACK NEEDS OPERATOR ATTENTION' >&2
   fi
   exit "${code:-1}"
 }

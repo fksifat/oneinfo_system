@@ -62,6 +62,44 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     return created;
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
+
+  it("allocates unchanged legacy QR links only when their previous domain is explicitly configured", async () => {
+    const { config } = await import("../src/config.js");
+    const original = config.PUBLIC_CARD_BASE_URL_ALIASES;
+    try {
+      config.PUBLIC_CARD_BASE_URL_ALIASES = ["https://legacy.example/c"];
+      const created = await batch(1, false);
+      const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+      const link = `https://legacy.example/c/${card!.publicSlug}`;
+      await client.db.update(schema.cards).set({ canonicalUrl: link }).where(eq(schema.cards.id, card!.id));
+      await request(`/api/v1/production/batches/${created.id}/generate-qr`, {});
+      await confirm(created.id);await order();
+      const [allocated] = await client.db.select().from(schema.orderCardAllocations);
+      expect(allocated?.cardId).toBe(card!.id);
+      expect((await client.db.select().from(schema.cards))[0]?.canonicalUrl).toBe(link);
+    } finally { config.PUBLIC_CARD_BASE_URL_ALIASES = original; }
+  });
+
+  it("prevents legacy assignment from bypassing an order's secret-code activation", async () => {
+    const card = await readyForClaim();await order();
+    const profile = await request("/api/v1/profiles", { publicSlug: "assignment-guard", displayName: "Assignment Guard" });
+    const result = await app.inject({ method: "POST", url: `/api/v1/profiles/${profile.id}/assign-card`, headers, payload: { cardId: card.id } });
+    expect(result.statusCode).toBe(409);
+    expect((await client.db.select().from(schema.cards))[0]?.profileId).toBeNull();
+  });
+
+  it("requires confirmed stock for manual assignment and reserves it idempotently", async () => {
+    const created = await batch(1);
+    const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+    await client.db.update(schema.cards).set({ qcStatus: "PASSED", lifecycleStatus: "QC_PASSED", inventoryStatus: "SALEABLE" }).where(eq(schema.cards.id, card!.id));
+    const profile = await request("/api/v1/profiles", { publicSlug: "manual-assignment", displayName: "Manual Assignment" });
+    const path = `/api/v1/profiles/${profile.id}/assign-card`;
+    expect((await app.inject({ method: "POST", url: path, headers, payload: { cardId: card!.id } })).statusCode).toBe(409);
+    await confirm(created.id);await request(path, { cardId: card!.id });await request(path, { cardId: card!.id });
+    expect((await client.db.select().from(schema.cards))[0]).toMatchObject({ inventoryStatus: "RESERVED", profileId: profile.id });
+    const events = await client.db.select().from(schema.cardEvents).where(eq(schema.cardEvents.eventType, "PROFILE_ASSIGNED"));
+    expect(events).toHaveLength(1);
+  });
   it("reports only this workstation's latest recognized phone QR", async () => {
     expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toBeNull();
     const first = await batch(1), second = await batch(1);
@@ -86,6 +124,15 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       items: [{ productId, variantId, quantity, unitPriceMinor: 50000 }] };
   }
   const order = (quantity = 1) => request("/api/v1/orders", orderPayload(quantity));
+
+  it("limits checkout spam without blocking a saved order's retry receipt", async () => {
+    const payload = orderPayload();await request("/api/v1/orders", payload);
+    const { allowAuthAttempt } = await import("../src/domain/auth-attempts.js");
+    for (let index = 1; index < 20; index++) expect(await allowAuthAttempt("checkout:127.0.0.1", 20, 15 * 60_000)).toBe(true);
+    expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload: orderPayload() })).statusCode).toBe(429);
+    expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload })).statusCode).toBe(200);
+    expect(await client.db.select().from(schema.storeOrders)).toHaveLength(1);
+  });
 
   const publicDetails = { displayName: "Card Owner", headline: "Designer", company: "Oneinfo", phone: "+8801712345678",
     website: "https://example.com", links: [{ label: "Portfolio", url: "https://example.com/work" }] };

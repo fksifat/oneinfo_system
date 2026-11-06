@@ -34,7 +34,8 @@ reinstall it, rather than allowing an uploaded archive to replace its own guard.
 
 The entry point serializes deployments with `/opt/oneinfo/.deploy.lock` and:
 
-1. Validates the commit ID and release archive, rejecting links and traversal.
+1. Validates the commit ID and release archive, rejecting links, traversal and
+   expansion beyond 200 MB/10,000 entries.
 2. Builds revision-tagged API and migration images; records the revision in the
    API image's OCI labels and pins the previous image for rollback.
 3. Backs up the Oneinfo PostgreSQL database and media volume, validating archive
@@ -43,7 +44,8 @@ The entry point serializes deployments with `/opt/oneinfo/.deploy.lock` and:
    old API running and fails the workflow.
 5. Recreates **only** the `oneinfo-vps` API with `--no-deps --no-build --wait`.
 6. Checks the database-backed catalog through the local API and public HTTPS
-   health endpoint. A failed cutover restores the previous API image.
+   health endpoint. A failed cutover restores the previous API image using its
+   last successful release's Compose configuration.
 7. Updates `/opt/oneinfo/current-release` and the normal API image tag only after
    successful checks.
 

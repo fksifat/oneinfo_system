@@ -87,6 +87,7 @@ try {
       const paused = msg.params;
       try {
         const url = new URL(paused.request.url);
+        if(url.pathname==='/api/v1/company/public/127.0.0.1')url.pathname='/api/v1/company/public/team-ui.example';
         const contactShare=paused.request.method==='POST'&&url.pathname.endsWith('/contact-leads');
         if(contactShare)contactAttempts.push(JSON.parse(paused.request.postData));
         const failed=(contactShare&&contactFailure==='before-save')||(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
@@ -96,7 +97,13 @@ try {
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
           responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: Buffer.from(result.body).toString('base64') });
-      } catch (error) { browserErrors.push(error.message); await command('Fetch.failRequest', { requestId: paused.requestId, errorReason: 'Failed' }); }
+      } catch (error) {
+        if(closing||/Invalid InterceptionId/i.test(error.message))return;
+        browserErrors.push(error.message);
+        await command('Fetch.failRequest', { requestId: paused.requestId, errorReason: 'Failed' }).catch(failure=>{
+          if(!closing&&!/Invalid InterceptionId/i.test(failure.message))browserErrors.push(failure.message);
+        });
+      }
     }
   };
   await command('Page.enable'); await command('Runtime.enable');
@@ -121,14 +128,14 @@ try {
   async function inspect(name){
     await delay(200);
     const data=await evaluate(`(()=>{const visible=e=>e.getClientRects().length&&getComputedStyle(e).visibility!=='hidden';return {width:innerWidth,documentWidth:document.documentElement.scrollWidth,hiddenVisible:[...document.querySelectorAll('[hidden]')].filter(visible).map(e=>e.className),unlabelled:[...document.querySelectorAll('input:not([type=hidden]),select,textarea')].filter(visible).filter(e=>!e.closest('label')&&!e.getAttribute('aria-label')&&!e.getAttribute('aria-labelledby')&&![...document.querySelectorAll('label[for]')].some(l=>l.htmlFor===e.id)).map(e=>e.placeholder||e.id||e.type),buttons:[...document.querySelectorAll('button')].filter(visible).filter(e=>!e.textContent.trim()&&!e.getAttribute('aria-label')).length}})()`);
-    console.log(name,JSON.stringify(data));assert.ok(data.documentWidth<=requestedWidth+2,name+' overflows the requested viewport');assert.equal(data.hiddenVisible.length,0,name+' shows hidden panels');assert.equal(data.unlabelled.length,0,name+' has unlabelled fields');await screenshot('audit-'+name);
+    console.log(name,JSON.stringify(data));assert.ok(data.documentWidth<=requestedWidth+2,name+' overflows the requested viewport');assert.equal(data.hiddenVisible.length,0,name+' shows hidden panels');assert.equal(data.unlabelled.length,0,name+' has unlabelled fields');assert.equal(data.buttons,0,name+' has unlabelled buttons');await screenshot('audit-'+name);
   }
   for(const width of [1440,768,390,320]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     await command('Page.navigate',{url:'http://127.0.0.1:5174/'});await until(`!!document.querySelector('.sidebar')`);await delay(250);
-    for(const label of ['Overview','Orders','Reviews','Products','Client profiles','Cards & inventory','Production batches','Stations','Audit history','NFC & QR operations']){
+    for(const label of ['Overview','Orders','Reviews','Products','Client profiles','Companies','Cards & inventory','Production batches','Stations','Audit history','NFC & QR operations']){
       const found=await evaluate(`(()=>{const b=[...document.querySelectorAll('.sidebar nav button')].find(b=>b.textContent.trim().endsWith(${JSON.stringify(label)}));if(!b)return false;b.click();return true})()`);
-      if(!found){console.log('MISSING NAV',label);continue;}
+      assert.equal(found,true,'Missing Admin navigation: '+label);
       await delay(350);await inspect('admin-'+label.replace(/[^a-z]/gi,'-')+'-'+width);
       if(label==='NFC & QR operations')assert.equal(await evaluate(`!!document.querySelector('.production-frame')`),true);
       if(label==='Client profiles'){
@@ -260,6 +267,24 @@ try {
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
   console.log('PASS: real browser activation → signup → public scan → owner edit → fresh visitor scan; private account email hidden.');
+  await api('/api/v1/company/admin',{name:'Browser Team',ownerEmail:'browser-owner@example.com',domain:'team-ui.example'},headers);
+  await command('Page.navigate',{url:'http://127.0.0.1:5174/team?manage=1'});await until(`!!document.querySelector('input[name=email]')`);
+  await fill('Account email','browser-owner@example.com');await fill('Password','a secure browser test password');await click('Sign in');
+  await until(`document.body.innerText.includes('Branding and profile defaults')`);
+  await fill('CSV contents','name,email,headline\nBrowser Employee,employee@example.com,Designer');await click('Import employees');
+  await until(`document.querySelector('.team-list')?.textContent.includes('Browser Employee')`);
+  await evaluate(`document.querySelector('.team-check input').click()`);await click('Save settings');await until(`document.body.innerText.includes('Company settings saved.')`);
+  for(const width of [320,390,1440]){await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});await inspect('company-workspace-'+width);}
+  await click('Create edit link');await until(`!!document.querySelector('input[readonly]')`);
+  const employeeLink=await evaluate(`document.querySelector('input[readonly]').value`);
+  await command('Page.navigate',{url:employeeLink});await until(`!!document.querySelector('input[name=displayName]')`);
+  await fill('Name','Updated Employee');await click('Save public profile');await until(`document.body.innerText.includes('Public profile saved.')`);await inspect('company-employee-editor');
+  await command('Page.navigate',{url:'http://127.0.0.1:5174/team'});await until(`document.querySelector('h1')?.textContent==='Browser Team'`);
+  assert.equal(await evaluate(`document.body.innerText.includes('employee@example.com')`),false);
+  await evaluate(`[...document.querySelectorAll('a')].find(a=>a.textContent==='Updated Employee').click()`);await until(`document.querySelector('h1')?.textContent==='Updated Employee'`);
+  await command('Emulation.setDeviceMetricsOverride',{width:320,height:844,deviceScaleFactor:1,mobile:true});await inspect('company-public-profile-320');
+  assert.equal(browserErrors.length,0,browserErrors.join('\n'));
+  console.log('PASS: company Admin, owner login, CSV import, settings, private employee editor and public directory/profile.');
 } catch(error) { console.log('UI AUDIT FAILED:',error.message); process.exitCode=1; } finally {
   closing=true;
   clearInterval(globalThis.uiHeartbeat);
