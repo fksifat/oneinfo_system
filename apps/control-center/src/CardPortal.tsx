@@ -181,7 +181,7 @@ export function CardPortal({ slug }: { slug: string }) {
         <p><a href="/team?manage=1">Company workspace</a></p></>}
     </>}
     {error && <p className="portal-error" role="alert">{error}</p>}
-    <small className="profile-footer">Powered by Oneinfo · NFC + QR</small>
+    <small className="profile-footer">Powered by Arise Studio</small>
   </section></main>;
 }
 
