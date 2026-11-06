@@ -74,6 +74,7 @@ try {
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let seq = 0, requestedWidth = 390; const waiting = new Map(); const browserErrors = [];
   let failProfileSave=false,failOverview=false,expirePairingSoon=false;
+  let contactFailure='none';const contactAttempts=[];
   function command(method, params = {}) {
     if(method==='Emulation.setDeviceMetricsOverride')requestedWidth=params.width;
     return new Promise((resolve, reject) => { const id = ++seq; waiting.set(id, { resolve, reject }); socket.send(JSON.stringify({ id, method, params })); });
@@ -86,9 +87,12 @@ try {
       const paused = msg.params;
       try {
         const url = new URL(paused.request.url);
-        const failed=(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
+        const contactShare=paused.request.method==='POST'&&url.pathname.endsWith('/contact-leads');
+        if(contactShare)contactAttempts.push(JSON.parse(paused.request.postData));
+        const failed=(contactShare&&contactFailure==='before-save')||(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
         const result = failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
           ...(paused.request.postData && { payload: paused.request.postData }) });
+        if(contactShare&&contactFailure==='after-save'){result.statusCode=503;result.body=JSON.stringify({message:'Saved response interrupted; retry your contact.'});result.headers['content-length']=String(Buffer.byteLength(result.body));}
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
           responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: Buffer.from(result.body).toString('base64') });
@@ -223,12 +227,35 @@ try {
   await until(`document.querySelector('h1')?.textContent === 'Browser Test Owner'`);
   assert.equal(await evaluate(`document.body.innerText.includes('browser-owner@example.com')`), false);
   await screenshot('customer-public-profile');
+  await evaluate(`document.querySelector('.share-contact').open=true`);
+  for(const width of [320,390,1440]){
+    await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+    assert.equal(await evaluate(`document.querySelector('.share-consent input').getBoundingClientRect().width`),20);
+    await inspect('customer-share-contact-'+width);
+  }
+  await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  await fill('Your name','Browser Visitor');await click('Send my contact');
+  assert.equal(await evaluate(`document.querySelector('input[name=consent]').validity.valueMissing`),true);assert.equal(contactAttempts.length,0);
+  await evaluate(`document.querySelector('.share-consent').click()`);await click('Send my contact');
+  await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
+  await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
+  await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
+  await until(`!!document.querySelector('.share-contact [role=alert]')`);assert.equal(contactAttempts.length,2);assert.equal(contactAttempts[0].requestId,contactAttempts[1].requestId);
+  await fill('Phone','+8801712345678');contactFailure='after-save';await click('Send my contact');
+  await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('interrupted')`);assert.notEqual(contactAttempts[1].requestId,contactAttempts[2].requestId);
+  contactFailure='none';await click('Send my contact');await until(`document.querySelector('.share-contact [role=status]')?.textContent.includes('private inbox')`);
+  assert.equal(contactAttempts[2].requestId,contactAttempts[3].requestId);
+  const savedContacts=await connection.db.select().from(schema.customerContactLeads);assert.equal(savedContacts.length,1);assert.equal(savedContacts[0].phone,'+8801712345678');
   await click('Manage this card');
   await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
+  await click('Open inbox');await until(`document.querySelector('.lead-inbox')?.textContent.includes('Browser Visitor')`);
+  assert.equal(await evaluate(`document.querySelector('.lead-inbox').textContent.includes('visitor@example.com')`),true);
+  console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
   await reload();await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
   assert.equal(await evaluate(`document.querySelector('input[autocomplete=name]').value`),'Browser Test Owner');
   await fill('Full name', 'Updated Browser Owner'); await click('Save profile');
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
+  assert.equal(await evaluate(`document.body.innerText.includes('visitor@example.com')`),false);
   await evaluate('sessionStorage.clear()'); await command('Page.navigate', { url });
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
