@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { AssignCardSchema, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
+import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
@@ -26,6 +26,15 @@ async function profileWithLinks(profileId: string) {
 }
 
 export const profileRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/public/:slug/contact.vcf", async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const [profile] = await db.select(publicProfileFields).from(customerProfiles)
+      .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true))).limit(1);
+    if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
+    return reply.header("Cache-Control", "no-store").header("Content-Disposition", "inline; filename=contact.vcf")
+      .type("text/vcard; charset=utf-8").send(contactVcard(profile));
+  });
+
   app.get("/public/:slug", async (request) => {
     const { slug } = request.params as { slug: string };
     const [profile] = await db

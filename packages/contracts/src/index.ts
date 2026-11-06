@@ -149,6 +149,7 @@ export const AssignCardSchema = z.object({
 });
 
 export const profileModes = ["BUSINESS", "EVENT", "PORTFOLIO"] as const;
+export { contactVcard } from "./contact.js";
 export const profileSources = ["NFC", "QR", "DIRECT"] as const;
 export const ProfileModeContentSchema = z.object({ title: z.string().trim().max(120), description: z.string().trim().max(600) });
 export const ProfileModesSchema = z.object({ EVENT: ProfileModeContentSchema.optional(), PORTFOLIO: ProfileModeContentSchema.optional() });

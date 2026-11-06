@@ -1,4 +1,3 @@
-import { contactVcard } from "./contact.js";
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ShareContactSchema } from "@oneinfo/contracts";
 import type { z } from "zod";
@@ -34,12 +33,8 @@ export function ProfileView({ data, contactAction, onActivity }: { data: PublicP
       {profile.website && <a href={profile.website} target="_blank" rel="noreferrer" onClick={() => onActivity?.("LINK")}><span>Website</span><b>↗</b></a>}
       {links.map(link => <a key={link.id ?? link.url} href={link.url} target="_blank" rel="noreferrer" onClick={() => onActivity?.("LINK", link.id)}><span>{link.label}</span><b>↗</b></a>)}
     </div>
-    <button className="save-contact" type="button" onClick={() => {
-      const url = URL.createObjectURL(new Blob([contactVcard(profile)], { type: "text/vcard;charset=utf-8" }));
-      const link = document.createElement("a"); link.href = url; link.download = `${profile.publicSlug}.vcf`; link.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-      onActivity?.("SAVE");
-    }}>Save to Contacts</button>
+    <a className="save-contact" href={`${import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001"}/api/v1/profiles/public/${encodeURIComponent(profile.publicSlug)}/contact.vcf`}
+      onClick={() => onActivity?.("SAVE")}>Save to Contacts</a>
     {contactAction}
     <small className="profile-footer">Powered by Oneinfo · NFC + QR</small>
   </main></div>;

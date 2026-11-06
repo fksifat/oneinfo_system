@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { contactVcard } from "../../control-center/src/contact.js";
+import { contactVcard } from "@oneinfo/contracts";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
 
