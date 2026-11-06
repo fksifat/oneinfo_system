@@ -140,6 +140,7 @@ export function CardPortal({ slug }: { slug: string }) {
       {claimToken && <button className="quiet" disabled={busy} onClick={() => navigate("signup")}>Create a new account</button>}
     </> : <>
       <h1>{mode === "signup" ? "Create your account" : claimToken ? "Set up your card" : "Edit your public profile"}</h1>
+      {mode === "details" && !claimToken && <LeadInbox key={token} token={token} />}
       <p className="portal-privacy">The profile details below will be visible to anyone who scans your QR or NFC. Your password and account email stay private; use Public email only if you want to share it.</p>
       <form onSubmit={save}>
         {mode === "signup" && <fieldset><legend>Private account</legend>
@@ -174,7 +175,7 @@ export function CardPortal({ slug }: { slug: string }) {
         </div>)}<button type="button" className="quiet" disabled={profile.links.length >= 12} onClick={() => update("links", [...profile.links, { label: "", url: "", sortOrder: profile.links.length, active: true }])}>Add link</button></fieldset>
         <button disabled={busy}>{busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
       </form>{mode === "signup" && <button className="quiet" disabled={busy} onClick={() => navigate("login")}>Already have an account? Sign in</button>}
-      {mode === "details" && !claimToken && <><LeadInbox key={token} token={token} /><ProfileAnalytics token={token} base={base} />
+      {mode === "details" && !claimToken && <><ProfileAnalytics token={token} base={base} />
         <p><a href="/team?manage=1">Company workspace</a></p></>}
     </>}
     {error && <p className="portal-error" role="alert">{error}</p>}
@@ -239,7 +240,7 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
   }
 
   return <section className="lead-inbox" aria-labelledby="lead-inbox-heading">
-    <h2 id="lead-inbox-heading">Lead Inbox</h2>
+    <h2 id="lead-inbox-heading">Shared contacts</h2>
     <p>Contacts that visitors chose to share with you.</p>
     <button type="button" className="quiet" disabled={loading} onClick={() => void load()}>
       {loading ? "Loading…" : items ? "Refresh inbox" : "Open inbox"}

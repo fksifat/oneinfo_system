@@ -44,31 +44,35 @@ export function ShareContact({ send, crmEnabled }: { send: (input: z.infer<typeo
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
-  const requestId = useRef<string>(undefined);
+  const request = useRef<{ id: string; details: string }>(undefined);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
     const fields = new FormData(event.currentTarget);
     const result = ShareContactSchema.safeParse({ ...Object.fromEntries(fields), consent: fields.has("consent"), crmAllowed: fields.has("crmAllowed"),
-      requestId: requestId.current ??= crypto.randomUUID() });
+      requestId: crypto.randomUUID() });
     if (!result.success) { setError(result.error.issues[0]?.message ?? "Check your contact details."); return; }
+    const { requestId, ...contact } = result.data;
+    const details = JSON.stringify(contact);
+    if (request.current?.details !== details) request.current = { id: requestId, details };
     setBusy(true); setError("");
-    try { await send(result.data); setSent(true); }
+    try { await send({ ...contact, requestId: request.current.id }); setSent(true); }
     catch (error) { setError(error instanceof Error ? error.message : "Could not share your contact. Please try again."); }
     finally { setBusy(false); }
   }
 
   return <details className="share-contact">
     <summary>Share my contact</summary>
-    {sent ? <p role="status">Your contact details were sent to the card owner.</p> : <form onSubmit={submit}>
+    {sent ? <p role="status">Contact shared. Your details are saved in the card owner’s private inbox.</p> : <form onSubmit={submit}>
+      <p>Your details will appear in the card owner’s private inbox.</p>
       <label>Your name<input name="name" autoComplete="name" required minLength={2} maxLength={120} /></label>
       <p>Add your email or phone so the card owner can reply.</p>
       <label>Email<input name="email" type="email" autoComplete="email" maxLength={254} /></label>
       <label>Phone<input name="phone" type="tel" autoComplete="tel" maxLength={40} /></label>
       <label>Message (optional)<textarea name="message" rows={3} maxLength={600} /></label>
-      <label className="share-consent"><input name="consent" type="checkbox" required /> Share these details with the card owner so they can follow up.</label>
-      {crmEnabled && <label className="share-consent"><input name="crmAllowed" type="checkbox" /> Also allow the card owner to save these details in their CRM.</label>}
+      <label className="share-consent"><input name="consent" type="checkbox" required /><span>Share these details with the card owner so they can follow up.</span></label>
+      {crmEnabled && <label className="share-consent"><input name="crmAllowed" type="checkbox" /><span>Also allow the card owner to save these details in their CRM.</span></label>}
       {error && <p role="alert">{error}</p>}
       <button type="submit" disabled={busy}>{busy ? "Sending…" : "Send my contact"}</button>
     </form>}

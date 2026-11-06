@@ -215,6 +215,12 @@ Fast-forwarded the workstation to upstream main while retaining pending QR auto-
 
 The merged responsive browser regression suite also passed, including phone QR auto-selection, print flows and disposable customer activation/signup/edit/visitor checks. Shared local/VPS operator authentication and all three local UI endpoints were checked after the switch. The production tunnel stayed active while the separate reconnect test ran.
 
+## Contact sharing form and private inbox — 2026-11-06
+
+The reported live contact submission had returned 201 and one saved inbox entry; no production test contact was sent. Reproduced the checkbox stretching to about 85px on mobile because the generic input rule applied 100% width. Fixed consent checkbox dimensions/alignment at mobile and desktop sizes. Form introduction and success feedback now explicitly describe the owner's private inbox. Moved that inbox above profile editing fields and labeled it Shared contacts so owners can find received submissions.
+
+Retry IDs are now tied to validated contact details: unchanged retries retain their ID, while corrected details after failure use a new ID. The disposable real Chrome flow checks required consent/contact information, network errors, edited retries, interrupted success responses, one persisted record, owner inbox retrieval and absence from public profiles. The new layout assertion failed before the fix and passed afterward; local typechecks, builds and the responsive browser suite passed. Production contact records and user authentication were not changed by these tests.
+
 ## Local media environment alignment — 2026-11-06
 
 Removed the obsolete Blob token from the private local `.env`; local Admin/storefront now use api.oneinfo.online with password login and the public storefront origin. Their Vite configurations load the root environment so ordinary future dev starts retain those settings. Production Console still receives the local API URL from its launcher and keeps its LAN/NFC connection. Restarted local services and verified the API process no longer inherits a Blob token; no private token appears in Vite client configuration.
