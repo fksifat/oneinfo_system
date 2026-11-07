@@ -7,6 +7,7 @@ import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import QRCode from "qrcode";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import { z } from "zod";
 import {
   CreateNfcBridgeSessionSchema,
   NfcBridgeResultSchema,
@@ -31,9 +32,23 @@ import { parseBody, sendCreated } from "../http.js";
 const stateFile = process.env.NFC_STATE_FILE ?? fileURLToPath(new URL("../../../../.oneinfo/nfc-state.bin", import.meta.url));
 const store = openNfcState(config.NODE_ENV === "test" ? null : stateFile);
 const { pairings, devices, sessions, readSessions, verificationSessions, qrScans } = store.state;
+// shortcut: the lock is local to the workstation API, just like a pending phone operation.
+const expectedCards = new Map<string, { cardId: string; slug: string; expiresAt: number }>();
+
+function expectedCard(stationId: string) {
+  const target = expectedCards.get(stationId);
+  if (target && target.expiresAt <= Date.now()) { expectedCards.delete(stationId); return undefined; }
+  return target;
+}
+
+function checkExpectedCard(stationId: string, cardId: string) {
+  const target = expectedCard(stationId);
+  if (target && target.cardId !== cardId) throw Object.assign(new Error(`Wrong card. Scan the printed QR for ${target.slug}.`), { statusCode: 409 });
+}
 
 function prune() {
   const now = Date.now();
+  for (const [id, target] of expectedCards) if (target.expiresAt <= now) expectedCards.delete(id);
   for (const [code, pairing] of pairings) if (pairing.expiresAt.getTime() < now) pairings.delete(code);
   for (const [id, session] of sessions) if (session.expiresAt.getTime() < now) sessions.delete(id);
   for (const [id, session] of readSessions) {
@@ -63,7 +78,10 @@ async function deviceFromToken(token: unknown): Promise<NfcDevice> {
     throw Object.assign(new Error("NFC station has been revoked"), { statusCode: 401 });
   }
   await deviceOperator(device);
-  if (Date.now() - device.lastSeenAt.getTime() >= 5000) device.lastSeenAt = new Date();
+  if (Date.now() - device.lastSeenAt.getTime() >= 5000) {
+    device.lastSeenAt = new Date();
+    await db.update(productionStations).set({ lastSeenAt: device.lastSeenAt }).where(eq(productionStations.id, station.id));
+  }
   return device;
 }
 
@@ -88,11 +106,13 @@ function createUtility(stationId: string, utility: NfcUtilityInput, deviceId?: s
 }
 
 async function createVerification(stationId: string, input: { cardId: string; method: "QR_CAMERA" | "NFC_READ" }, deviceId?: string, id: string = randomUUID()) {
+  checkExpectedCard(stationId, input.cardId);
   const [card] = await db.select().from(cards).where(eq(cards.id, input.cardId)).limit(1);
   if (!card || card.qrStatus !== "GENERATED" || card.nfcStatus !== "WRITTEN") {
     throw Object.assign(new Error("Generate the QR and write the NFC tag before phone verification"), { statusCode: 409 });
   }
   assertStationIdle(stationId);
+  checkExpectedCard(stationId, card.id);
   const session: VerificationSession = { id, cardId: card.id, stationId,
     method: input.method, expectedUrl: input.method === "QR_CAMERA" ? qrUrl(card.canonicalUrl) : card.canonicalUrl, state: deviceId ? "SCANNING" : "PENDING",
     ...(deviceId ? { deviceId } : {}), expiresAt: new Date(Date.now() + 2 * 60_000) };
@@ -259,7 +279,21 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
       .innerJoin(cards, eq(cards.id, cardEvents.cardId))
       .where(and(eq(cardEvents.stationId, station.stationId), inArray(cardEvents.eventType, ["PRINT_QR_CHECKED", "QR_CAMERA_MATCHED"])))
       .orderBy(desc(cardEvents.createdAt), desc(cardEvents.id)).limit(1);
-    return { scan: scan ?? null };
+    return { scan: scan ?? null, expected: expectedCard(station.stationId) ?? null };
+  });
+
+  app.post("/expected-card", async request => {
+    await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR", "QUALITY_INSPECTOR"]);
+    const station = await requireStation(request);
+    const { cardId } = parseBody(z.object({ cardId: z.uuid().nullable() }), request.body);
+    assertStationIdle(station.stationId);
+    if (!cardId) { expectedCards.delete(station.stationId); return { expected: null }; }
+    const [card] = await db.select({ slug: cards.publicSlug }).from(cards).where(eq(cards.id, cardId));
+    if (!card) throw Object.assign(new Error("Card not found"), { statusCode: 404 });
+    assertStationIdle(station.stationId);
+    const target = { cardId, slug: card.slug, expiresAt: Date.now() + 10 * 60_000 };
+    expectedCards.set(station.stationId, target);
+    return { expected: target };
   });
 
   app.post("/device/resolve-qr", async (request) => {
@@ -273,6 +307,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     const [row] = await db.select({ card: cards, batchCode: cardBatches.batchCode }).from(cards)
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.canonicalUrl, nfcUrlFromQr(input.scannedValue))).limit(1);
     if (!row || qrUrl(row.card.canonicalUrl) !== input.scannedValue) throw Object.assign(new Error("This QR link is not registered in production"), { statusCode: 404 });
+    checkExpectedCard(device.stationId, row.card.id);
     if (row.card.qrStatus !== "GENERATED") throw Object.assign(new Error("Generate this card's QR before checking the print"), { statusCode: 409 });
     qrScans.set(input.scanId, { id: input.scanId, cardId: row.card.id, deviceId: device.id, expectedUrl: input.scannedValue,
       expiresAt: new Date(Date.now() + 10 * 60_000) });
@@ -289,6 +324,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     prune();
     const scan = qrScans.get(scanId);
     if (!scan || scan.deviceId !== device.id) throw Object.assign(new Error("Scan the printed QR again before loading NFC"), { statusCode: 404 });
+    checkExpectedCard(device.stationId, scan.cardId);
     const existing = sessions.get(scanId);
     if (existing) {
       if (existing.deviceId !== device.id) throw Object.assign(new Error("Write belongs to another device"), { statusCode: 409 });
@@ -318,6 +354,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!session || session.deviceId !== device.id || session.method !== "NFC_READ" || session.state !== "MATCHED") {
       throw Object.assign(new Error("Scan the QR and NFC again and match both links before approving QC"), { statusCode: 409 });
     }
+    checkExpectedCard(device.stationId, session.cardId);
     const [job] = await db.select().from(productionJobs).where(and(eq(productionJobs.cardId, session.cardId), eq(productionJobs.type, "QUALITY_CONTROL"))).limit(1);
     if (!job) throw Object.assign(new Error("QC production job not found"), { statusCode: 404 });
     if (job.status !== "COMPLETED") await claimProductionJob(job.id, { idempotencyKey: sessionId }, operator, device);
@@ -333,6 +370,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     const existing = verificationSessions.get(input.scanId);
     if (existing) {
       if (existing.deviceId !== device.id || existing.expectedUrl !== nfcUrlFromQr(input.scannedValue)) throw Object.assign(new Error("Scan ID belongs to another operation"), { statusCode: 409 });
+      checkExpectedCard(device.stationId, existing.cardId);
       return { ...existing, sessionId: existing.id };
     }
     const [card] = await db.select().from(cards).where(eq(cards.canonicalUrl, nfcUrlFromQr(input.scannedValue))).limit(1);
@@ -412,6 +450,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!row || row.job.type !== "NFC_ENCODING" || row.job.status !== "CLAIMED") {
       throw Object.assign(new Error("A claimed NFC job assigned to this station is required"), { statusCode: 409 });
     }
+    checkExpectedCard(station.stationId, row.card.id);
     if (row.card.canonicalUrl !== input.expectedUrl) {
       throw Object.assign(new Error("NFC URL does not match the card canonical URL"), { statusCode: 409 });
     }

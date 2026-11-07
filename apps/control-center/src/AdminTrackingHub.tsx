@@ -1,3 +1,4 @@
+import { orderLink } from "./admin-links.js";
 import { useEffect, useState, useDeferredValue } from "react";
 import type { StoreOrder, OrderReceipt } from "@oneinfo/contracts";
 import { api } from "./api.js";
@@ -159,19 +160,7 @@ export function AdminTrackingHub({ token }: { token: string }) {
                         Start processing
                       </button>
                     )}
-                    {active.status === "PROCESSING" && (
-                      <button
-                        className="button"
-                        type="button"
-                        disabled={Boolean(delivering)}
-                        onClick={() => {
-                          const id = prompt("Enter courier tracking ID:");
-                          if (id) void updateFulfillment(active, "SHIPPED", id);
-                        }}
-                      >
-                        Ship with tracking ID
-                      </button>
-                    )}
+                    {active.status === "PROCESSING" && <a href={orderLink(active.id, "packing")}>Open packing checklist</a>}
                     {active.status === "SHIPPED" && (
                       <button
                         className="button"

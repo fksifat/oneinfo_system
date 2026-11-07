@@ -312,6 +312,9 @@ export const ProductVariantSchema = z.object({
   path: ["salePriceMinor"], message: "Sale price must be lower than the regular price",
 });
 export type ProductVariant = z.infer<typeof ProductVariantSchema>;
+export function printFinish(slug: string, appearance?: string) {
+  return slug === "oneinfo-essential" && (appearance === "light" || appearance === "dark") ? appearance : null;
+}
 // Existing records are read as an ordinary image gallery until an admin saves it.
 export function productMedia(v: Pick<ProductVariant, "media" | "imageUrl" | "backImageUrl">): ProductMedia[] {
   return v.media ?? [v.imageUrl, v.backImageUrl].filter(Boolean).map((url, i) => ({id:`legacy-${i}`,type:"image" as const,url,label:`Image ${i+1}`}));
@@ -490,4 +493,4 @@ export type OrderReceipt = OrderTracking & {
 export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null;
   codCollectedMinor?: number | null; codSettledMinor?: number | null;
   profileId?: string | null; assignedCards?: { id: string; publicSlug: string; canonicalUrl: string; qcStatus: string;
-    lineIndex?: number; unitIndex?: number; printConfirmedAt?: string | null }[] };
+    lineIndex?: number; unitIndex?: number; printConfirmedAt?: string | null; nfcStatus?: string; inventoryStatus?: string }[] };

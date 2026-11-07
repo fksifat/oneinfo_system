@@ -7,6 +7,7 @@ interface ProductionCard {
   imageData: string | null; printChecked: boolean; verification: { camera: boolean; nfc: boolean; cameraResult?: string; nfcResult?: string }; jobs: Job[];
 }
 interface Batch { id: string; batchCode: string; plannedQuantity: number; printConfirmedAt: string | null; cards: ProductionCard[] }
+type ExpectedCard = { cardId: string; slug: string; expiresAt: number };
 interface Props { visible: boolean; credentials: Credentials; busy: boolean; onBusy: (value: boolean) => void; onMessage: (value: string) => void; onChanged: () => Promise<void>; onPhoneScan: () => void }
 
 export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, onChanged, onPhoneScan }: Props) {
@@ -15,7 +16,11 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   const currentBatchId = useRef(batchId);
   currentBatchId.current = batchId;
   const [batch, setBatch] = useState<Batch | null>(null);
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(() => new URLSearchParams(location.search).get("card") ?? "");
+  const deepLinked = useRef(Boolean(selectedId));
+  const [expected, setExpected] = useState<ExpectedCard | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState("");
   const [batchCode, setBatchCode] = useState(`BATCH-${new Date().toLocaleDateString("en-CA").replaceAll("-", "")}-${Date.now().toString(36).slice(-4)}`);
   const [quantity, setQuantity] = useState(10);
   const [links, setLinks] = useState("");
@@ -38,8 +43,15 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
       if (pending || busy) return;
       pending = true;
       try {
-        const { scan } = await api<{ scan: { id: string; batchId: string; cardId: string; publicSlug: string } | null }>("/api/v1/local-nfc/latest-qr-scan", {}, credentials);
-        if (disposed || !scan || scan.id === lastPhoneScan.current) return;
+        const { scan, expected } = await api<{ scan: { id: string; batchId: string; cardId: string; publicSlug: string; scannedAt: string } | null; expected?: ExpectedCard | null }>("/api/v1/local-nfc/latest-qr-scan", {}, credentials);
+        if (disposed) return;
+        setExpected(expected ?? null);
+        if (!scan || scan.id === lastPhoneScan.current) return;
+        if (deepLinked.current) {
+          deepLinked.current = false;
+          if (Date.parse(scan.scannedAt) < performance.timeOrigin) { lastPhoneScan.current = scan.id; return; }
+        }
+        if (expected && expected.cardId !== scan.cardId) return;
         const loaded = await api<Batch>(`/api/v1/production/batches/${scan.batchId}`, {}, credentials);
         if (disposed) return;
         currentBatchId.current = scan.batchId;
@@ -66,6 +78,17 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   const visibleCards = batch?.cards.filter((card) => `${card.publicSlug} ${card.canonicalUrl}`.toLowerCase().includes(search.toLowerCase()) &&
     (cardFilter === "all" || (cardFilter === "pending" && card.nfcStatus !== "WRITTEN") || (cardFilter === "qc" && card.nfcStatus === "WRITTEN" && card.qcStatus !== "PASSED") || (cardFilter === "passed" && card.qcStatus === "PASSED"))) ?? [];
   const selected = visibleCards.find((card) => card.id === selectedId) ?? visibleCards[0];
+  async function setCardCheck(cardId: string | null) {
+    if (checking) return;
+    setChecking(true); setCheckError("");
+    try {
+      const result = await api<{ expected: ExpectedCard | null }>("/api/v1/local-nfc/expected-card", {
+        method: "POST", body: JSON.stringify({ cardId }),
+      }, credentials);
+      setExpected(result.expected);
+    } catch (e) { setCheckError(e instanceof Error ? e.message : "Could not change the card check."); }
+    finally { setChecking(false); }
+  }
   const rowsPerPage = Math.max(1, Math.floor((297 - margin * 2 + gap) / (labelHeight + gap)));
   const perPage = Math.max(1, Math.min(1000, rowsPerPage * Math.max(1, columns)));
   const layoutValid = labelWidth >= 25 && labelHeight >= 30 && Number.isInteger(columns) && columns >= 1 && columns <= 6 && gap >= 0 && margin >= 0 &&
@@ -203,6 +226,13 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         <div className="production-layout"><div className="production-card-list" role="group" aria-label="Batch cards">{!visibleCards.length ? <p className="empty">No cards match this search.</p> : null}{visibleCards.map((card) => <button aria-pressed={selected?.id === card.id} className={selected?.id === card.id ? "selected" : ""} key={card.id} disabled={busy} onClick={() => setSelectedId(card.id)}><strong>{String(batch.cards.indexOf(card) + 1).padStart(3, "0")} · {card.publicSlug}</strong><small>QR {card.imageData ? "ready" : "pending"} · NFC {card.nfcStatus === "WRITTEN" ? "written" : "pending"} · QC {card.qcStatus.toLowerCase()}</small><span>{card.verification.camera ? "Camera ✓" : "Camera —"} · {card.verification.nfc ? "NFC ✓" : "NFC —"}</span></button>)}</div>
           {selected ? <article className="selected-production-card"><div className="selected-qr">{selected.imageData ? <img src={selected.imageData} alt={`QR for ${selected.publicSlug}`} /> : <span>Generate this QR first</span>}</div><p className="section-label">SELECTED CARD · {selected.publicSlug}</p><p className="canonical-link">{selected.canonicalUrl}</p><small>This is the NFC write link. New Oneinfo QR images use source=qr; phone QC verifies each link separately.</small>
             <p role="status">Printed QR check: {selected.printChecked ? "CHECKED ON PHONE" : "AWAITING PHONE SCAN"}</p>
+            <div className="verification-controls"><strong>Wrong-card check</strong>
+              <p>{expected ? `Phone scans must match ${expected.slug}. The check expires after 10 minutes.` : "Lock this card before scanning on the paired phone. A different QR will be rejected before NFC writing or QC."}</p>
+              <button type="button" className="secondary" disabled={busy || checking} onClick={() => void setCardCheck(expected?.cardId === selected.id ? null : selected.id)}>
+                {checking ? "Saving…" : expected?.cardId === selected.id ? "Release card check" : "Check against this card"}
+              </button>
+              {checkError && <p role="alert">{checkError}</p>}
+            </div>
             <div className="actions"><button disabled={busy || Boolean(selected.imageData)} onClick={() => void generate(selected)}>Generate QR</button>{selected.imageData ? <a className="download-qr" href={selected.imageData} download={`${selected.publicSlug}.png`}>Download PNG</a> : null}</div>
             <div className="verification-controls"><p className="section-label">PHONE PRODUCTION · LIVE UPDATES</p><small>Phone: Scan printed QR → Load to NFC → scan QR again → tap NFC → Approve QC. Only the final scans after writing count toward QC.</small><div><span className={selected.nfcStatus === "WRITTEN" ? "check-pass" : ""}>{selected.nfcStatus === "WRITTEN" ? "✓" : "1"}</span><strong role="status">NFC encoding: {selected.nfcStatus}</strong></div><div><span className={selected.verification.camera ? "check-pass" : ""}>{selected.verification.camera ? "✓" : "2"}</span><strong role="status">Final QR check: {selected.verification.cameraResult ?? "PENDING"}</strong></div><div><span className={selected.verification.nfc ? "check-pass" : ""}>{selected.verification.nfc ? "✓" : "3"}</span><strong role="status">Final NFC check: {selected.verification.nfcResult ?? "PENDING"}</strong></div><strong role="status">QC approval: {selected.qcStatus}</strong><small>{syncError ? `Live updates paused: ${syncError}` : `Updated ${lastSynced || "just now"} · refreshes every 2 seconds`}</small></div>
           </article> : null}

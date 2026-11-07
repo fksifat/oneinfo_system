@@ -13,6 +13,10 @@ import { dispatchOrderEmail, reviewTokenHash } from "../domain/order-email-worke
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const tokenSchema = z.object({ token: z.string().min(40).max(100) });
+const reviewSeen = sql<boolean>`(${storeReviews.status} <> 'PENDING' or exists (
+  select 1 from ${auditLogs} a where a.target_type = 'store_review' and a.target_id = ${storeReviews.id}::text
+    and a.action = 'STORE_REVIEW_SEEN' and a.created_at >= ${storeReviews.updatedAt}
+))`;
 
 export const reviewRoutes: FastifyPluginAsync = async app => {
   app.get("/products/:slug", async (request, reply) => {
@@ -32,12 +36,27 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
   app.get("/admin", async request => {
     await requireOperator(request, ["SUPER_ADMIN"]);
     const { page, query } = adminPage(request.query);
+    const { inbox } = parseBody(z.object({ inbox: z.enum(["new", "low", "seen"]).optional() }), request.query);
     const items = await db.select({ id: storeReviews.id, orderId: storeReviews.orderId, productId: storeReviews.productId,
       productName: products.name, displayName: storeReviews.displayName, rating: storeReviews.rating, title: storeReviews.title,
-      body: storeReviews.body, status: storeReviews.status, createdAt: storeReviews.createdAt })
+      body: storeReviews.body, status: storeReviews.status, createdAt: storeReviews.createdAt, seen: reviewSeen })
       .from(storeReviews).innerJoin(products, eq(products.id, storeReviews.productId))
-      .where(sql`position(lower(${query}) in lower(${storeReviews.displayName} || ' ' || ${storeReviews.title} || ' ' || ${storeReviews.status} || ' ' || ${products.name} || ' ' || ${storeReviews.orderId}::text)) > 0`).orderBy(desc(storeReviews.createdAt), desc(storeReviews.id)).limit(101).offset((page - 1) * 100);
+      .where(and(sql`position(lower(${query}) in lower(${storeReviews.displayName} || ' ' || ${storeReviews.title} || ' ' || ${storeReviews.status} || ' ' || ${products.name} || ' ' || ${storeReviews.orderId}::text)) > 0`,
+        inbox === "new" ? sql`not ${reviewSeen}` : inbox === "seen" ? reviewSeen : inbox === "low" ? sql`${storeReviews.rating} <= 2` : undefined))
+      .orderBy(desc(storeReviews.createdAt), desc(storeReviews.id)).limit(101).offset((page - 1) * 100);
     return { items: items.slice(0, 100), hasMore: items.length > 100 };
+  });
+
+  app.post("/admin/:id/seen", async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    return db.transaction(async tx => {
+      const [review] = await tx.select({ seen: reviewSeen }).from(storeReviews).where(eq(storeReviews.id, id)).for("update");
+      if (!review) throw Object.assign(new Error("Review not found"), { statusCode: 404 });
+      if (!review.seen) await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_REVIEW_SEEN",
+        targetType: "store_review", targetId: id, requestId: request.id, createdAt: new Date() });
+      return { seen: true };
+    });
   });
 
   app.patch("/admin/:id", async request => {

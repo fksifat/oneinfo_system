@@ -7,6 +7,9 @@ import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { productionBatchSummary } from "../domain/workflow.js";
 import { printedStockAvailable } from "../domain/printed-stock.js";
+import { attentionCounts, attentionTasks, taskStages } from "../domain/admin-work.js";
+import { nfcUrlFromQr, qrUrl } from "../domain/card-urls.js";
+import { printFinish } from "@oneinfo/contracts";
 import {
   auditLogs,
   cardBatches,
@@ -14,10 +17,12 @@ import {
   cards,
   customerProfiles,
   nfcEncodingAttempts,
+  orderCardAllocations,
   productionJobs,
   productionStations,
   products,
   qrArtifacts,
+  storeOrders,
 } from "../db/schema.js";
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
@@ -26,6 +31,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/overview", async () => {
+    const attention = await attentionCounts();
     const [profileTotal, cardTotal, batchTotal, stationTotal, pendingJobs, qrTotal, nfcAttemptTotal] = await Promise.all([
       db.select({ value: count() }).from(customerProfiles),
       db.select({ value: count() }).from(cards).innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(isNotNull(cardBatches.printConfirmedAt)),
@@ -62,7 +68,42 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       nfcAttempts: nfcAttemptTotal[0]?.value ?? 0,
       inventory: Object.fromEntries(statusRows.map((row) => [row.status, row.value])),
       stockAlerts,
+      attention,
     };
+  });
+
+  app.get("/tasks", async request => {
+    const { stage, page } = parseBody(z.object({ stage: z.enum(taskStages).optional(), page: z.coerce.number().int().min(1).max(100000).default(1) }), request.query);
+    return attentionTasks(stage, page);
+  });
+
+  app.post("/cards/lookup", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { value } = parseBody(z.object({ value: z.string().trim().min(1).max(2048) }), request.body);
+    const slug = /^[A-Za-z0-9_-]{1,64}$/.test(value);
+    const [item] = await db.select({ id: cards.id, publicSlug: cards.publicSlug, canonicalUrl: cards.canonicalUrl,
+      inventoryStatus: cards.inventoryStatus, batchId: cards.batchId, batchCode: cardBatches.batchCode,
+      orderId: orderCardAllocations.orderId, printConfirmedAt: cardBatches.printConfirmedAt })
+      .from(cards).innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
+      .leftJoin(orderCardAllocations, eq(orderCardAllocations.cardId, cards.id))
+      .where(slug ? eq(cards.publicSlug, value) : eq(cards.canonicalUrl, nfcUrlFromQr(value))).limit(1);
+    if (!item || (!slug && value !== item.canonicalUrl && value !== qrUrl(item.canonicalUrl))) {
+      return reply.code(404).send({ message: "No card matches this QR link or card code." });
+    }
+    return item;
+  });
+
+  app.get("/activation-follow-up", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { page } = adminPage(request.query);
+    const rows = await db.select({ cardId: cards.id, publicSlug: cards.publicSlug, orderId: storeOrders.id,
+      customer: sql<string>`${storeOrders.customer}->>'name'`, deliveredAt: storeOrders.deliveredAt })
+      .from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
+      .innerJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId))
+      .where(and(isNotNull(storeOrders.deliveredAt), sql`${cards.profileId} is null and ${cards.customerAccountId} is null
+        and ${cards.companyId} is null and ${cards.lifecycleStatus} not in ('SUSPENDED','RETIRED')`))
+      .orderBy(desc(storeOrders.deliveredAt), desc(cards.id)).limit(51).offset((page - 1) * 50);
+    return { items: rows.slice(0, 50), hasMore: rows.length > 50 };
   });
 
   app.get("/cards", async (request) => {
@@ -90,10 +131,46 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { items: items.map((batch) => ({ ...batch, ...productionBatchSummary(batchCards.filter((card) => card.batchId === batch.id)) })), count: items.length, hasMore: rows.length > 100 };
   });
 
+  app.get("/batches/:batchId/reprint", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { batchId } = parseBody(z.object({ batchId: z.uuid() }), request.params);
+    const [batch] = await db.select({ code: cardBatches.batchCode, variant: cardBatches.productVariantId }).from(cardBatches)
+      .where(and(eq(cardBatches.id, batchId), isNotNull(cardBatches.printConfirmedAt)));
+    if (!batch) return reply.code(404).send({ message: "Only confirmed printed batches can be reprinted." });
+    const rows = await db.select({ id: cards.id, slug: cards.publicSlug,
+      imageData: sql<string | null>`(select image_data from ${qrArtifacts} where card_id = ${cards.id}
+        and image_data is not null order by generated_at desc, id desc limit 1)`,
+      line: orderCardAllocations.lineIndex, items: storeOrders.items })
+      .from(cards).leftJoin(orderCardAllocations, eq(orderCardAllocations.cardId, cards.id))
+      .leftJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId))
+      .where(eq(cards.batchId, batchId)).orderBy(cards.createdAt, cards.id);
+    const productIds = [...new Set(rows.flatMap(row => row.items?.[row.line ?? -1]?.productId ?? []))];
+    const catalog = await db.select({ id: products.id, slug: products.slug, variants: products.variants }).from(products).where(sql`
+      exists (select 1 from jsonb_array_elements(${products.variants}) v where v->>'id' = ${batch.variant})
+      ${productIds.length ? sql`or ${inArray(products.id, productIds)}` : sql``}`);
+    // Stock batches without a catalog variant were printed as QR labels.
+    const batchProduct = catalog.find(product => product.variants.some(variant => variant.id === batch.variant));
+    return { code: batch.code, items: rows.map(({ id, slug, imageData, line, items }) => {
+      const orderLine = batch.code.startsWith("ORDER-") ? items?.[line ?? -1] : undefined;
+      const product = orderLine ? catalog.find(item => item.id === orderLine.productId) : batchProduct;
+      const variant = product?.variants.find(item => item.id === (orderLine?.variantId ?? batch.variant));
+      const finish = printFinish(product?.slug ?? "", variant?.appearance);
+      return { id, slug, imageData, finish, labelOnly: !batchProduct && !batch.code.startsWith("ORDER-") };
+    }) };
+  });
+
   app.get("/stations", async () => {
-    const items = await db.select({ id: productionStations.id, stationCode: productionStations.stationCode, name: productionStations.name,
+    const stations = await db.select({ id: productionStations.id, stationCode: productionStations.stationCode, name: productionStations.name,
       status: productionStations.status, lastSeenAt: productionStations.lastSeenAt, createdAt: productionStations.createdAt })
       .from(productionStations).orderBy(desc(productionStations.createdAt)).limit(200);
+    const jobs = stations.length ? await db.select({ stationId: productionJobs.assignedStationId, type: productionJobs.type,
+      status: productionJobs.status, batchId: productionJobs.batchId, cardId: cards.id, publicSlug: cards.publicSlug })
+      .from(productionJobs).innerJoin(cards, eq(cards.id, productionJobs.cardId))
+      .where(and(inArray(productionJobs.assignedStationId, stations.map(station => station.id)),
+        inArray(productionJobs.status, ["CLAIMED", "RETRYABLE_FAILURE"]))).orderBy(desc(productionJobs.updatedAt)) : [];
+    const items = stations.map(station => ({ ...station, online: station.status === "ACTIVE" &&
+      Boolean(station.lastSeenAt && Date.now() - station.lastSeenAt.getTime() <= 30_000),
+      currentJob: jobs.find(job => job.stationId === station.id) ?? null }));
     return { items, count: items.length };
   });
 
