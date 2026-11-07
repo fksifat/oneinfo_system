@@ -4,7 +4,7 @@ import type { z } from "zod";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 
 export interface PublicProfileData {
-  profile: { publicSlug: string; displayName: string; headline: string; company: string; bio: string; phone: string; email: string;
+  profile: { handle?: string | null; publicSlug: string; displayName: string; headline: string; company: string; bio: string; phone: string; email: string;
     website: string; avatarUrl: string; theme: string; profileMode?: "BUSINESS" | "EVENT" | "PORTFOLIO";
     modeContent?: Partial<Record<"EVENT" | "PORTFOLIO", { title: string; description: string }>> };
   links: { id?: string; label: string; url: string }[];
@@ -38,7 +38,7 @@ export function ProfileView({ data, contactAction, onActivity }: { data: PublicP
     {content?.description && <p className="public-bio">{content.description}</p>}
     <div className="contact-actions">
       {profile.phone && <a href={`tel:${profile.phone}`}><ContactIcon kind="call" />Call</a>}{profile.email && <a href={`mailto:${profile.email}`}><ContactIcon kind="email" />Email</a>}
-      <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopyMessage("Copied"); } catch { setCopyMessage("Copy unavailable"); } }}><ContactIcon kind="link" />{copyMessage}</button>
+      <button type="button" onClick={async () => { try { await navigator.clipboard.writeText(profile.handle ? new URL(`/${profile.handle}`, location.origin).href : window.location.href); setCopyMessage("Copied"); } catch { setCopyMessage("Copy unavailable"); } }}><ContactIcon kind="link" />{copyMessage}</button>
     </div>
     <div className="public-links">
       {profile.website && <a href={profile.website} target="_blank" rel="noreferrer" onClick={() => onActivity?.("LINK")}><span>Website</span><b>↗</b></a>}

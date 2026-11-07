@@ -3,7 +3,7 @@ import { customerApi } from "./CardPortal.js";
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Could not complete the request. Try again.";
 
-export function AccountAccess({ secret }: { secret?: string }) {
+export function AccountAccess({ secret }: { secret?: string | undefined }) {
   const [link, setLink] = useState<{ purpose: string; email: string; companyName?: string }>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);

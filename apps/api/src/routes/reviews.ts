@@ -1,13 +1,15 @@
+import { adminPage } from "../domain/admin-page.js";
 import { createHash, randomBytes } from "node:crypto";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
-import { recordOrderEmail } from "../domain/order-email-history.js";
-import { sendReviewInvitation } from "../domain/review-invitation.js";
 import { db } from "../db/client.js";
 import { auditLogs, products, storeOrders, storeReviewInvites, storeReviews } from "../db/schema.js";
 import { parseBody } from "../http.js";
+import { sendReviewInvitation } from "../domain/review-invitation.js";
+import { queueOrderEmail } from "../domain/order-email-history.js";
+import { dispatchOrderEmail, reviewTokenHash } from "../domain/order-email-worker.js";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const tokenSchema = z.object({ token: z.string().min(40).max(100) });
@@ -29,10 +31,13 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
 
   app.get("/admin", async request => {
     await requireOperator(request, ["SUPER_ADMIN"]);
-    return { items: await db.select({ id: storeReviews.id, orderId: storeReviews.orderId, productId: storeReviews.productId,
+    const { page, query } = adminPage(request.query);
+    const items = await db.select({ id: storeReviews.id, orderId: storeReviews.orderId, productId: storeReviews.productId,
       productName: products.name, displayName: storeReviews.displayName, rating: storeReviews.rating, title: storeReviews.title,
       body: storeReviews.body, status: storeReviews.status, createdAt: storeReviews.createdAt })
-      .from(storeReviews).innerJoin(products, eq(products.id, storeReviews.productId)).orderBy(desc(storeReviews.createdAt)).limit(200) };
+      .from(storeReviews).innerJoin(products, eq(products.id, storeReviews.productId))
+      .where(sql`position(lower(${query}) in lower(${storeReviews.displayName} || ' ' || ${storeReviews.title} || ' ' || ${storeReviews.status} || ' ' || ${products.name} || ' ' || ${storeReviews.orderId}::text)) > 0`).orderBy(desc(storeReviews.createdAt), desc(storeReviews.id)).limit(101).offset((page - 1) * 100);
+    return { items: items.slice(0, 100), hasMore: items.length > 100 };
   });
 
   app.patch("/admin/:id", async request => {
@@ -50,25 +55,24 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
   app.post("/admin/orders/:id/deliver", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    return db.transaction(async tx => {
+    await db.transaction(async tx => {
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
       if (order.cancelledAt || order.awaitingPayment) throw Object.assign(new Error("Only an open order can be delivered"), { statusCode: 409 });
       if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) throw Object.assign(new Error("Verify the order payment before marking it delivered"), { statusCode: 409 });
       const [existing] = await tx.select().from(storeReviewInvites).where(eq(storeReviewInvites.orderId, id));
-      if (existing?.sentAt) return { delivered: true, invitation: "already-sent" };
-      const token = randomBytes(32).toString("base64url");
-      if (existing) await tx.update(storeReviewInvites).set({ tokenHash: tokenHash(token), createdAt: new Date() }).where(eq(storeReviewInvites.id, existing.id));
-      else await tx.insert(storeReviewInvites).values({ orderId: id, tokenHash: tokenHash(token) });
+      if (existing?.sentAt) return;
+      const tokenHash = reviewTokenHash(id);
+      if (existing) await tx.update(storeReviewInvites).set({ tokenHash }).where(eq(storeReviewInvites.id, existing.id));
+      else await tx.insert(storeReviewInvites).values({ orderId: id, tokenHash });
       if (!order.deliveredAt) {
         await tx.update(storeOrders).set({ deliveredAt: new Date() }).where(eq(storeOrders.id, id));
         await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_MARKED_DELIVERED", targetType: "store_order", targetId: id, requestId: request.id, metadata: {} });
       }
-      const sent = await sendReviewInvitation(order, token);
-      await recordOrderEmail(tx, id, "delivery", sent);
-      if (sent) await tx.update(storeReviewInvites).set({ sentAt: new Date() }).where(eq(storeReviewInvites.orderId, id));
-      return { delivered: true, invitation: sent ? "sent" : "pending" };
+      await queueOrderEmail(tx, id, "delivery");
     });
+    const sent = await dispatchOrderEmail(id, "delivery", true);
+    return { delivered: true, invitation: sent === "accepted" ? "sent" : "pending" };
   });
 
   app.post("/portal", { bodyLimit: 1024 }, async request => {

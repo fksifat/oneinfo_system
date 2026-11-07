@@ -1,3 +1,4 @@
+import { qrUrl } from "../domain/card-urls.js";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { ConfirmBatchPrintSchema, CreateBatchSchema, GenerateBatchQrSchema } from "@oneinfo/contracts";
@@ -49,7 +50,7 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
       for (let index = 0; index < input.quantity; index += 1) {
         const cardId = randomUUID();
         const publicSlug = makePublicSlug();
-        const canonicalUrl = input.links?.[index] ?? `${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")}/${publicSlug}`;
+        const canonicalUrl = input.links?.[index] ?? `${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")}/${publicSlug}?source=nfc`;
         await tx.insert(cards).values({ id: cardId, batchId, publicSlug, canonicalUrl });
         await tx.insert(productionJobs).values([
           { batchId, cardId, type: "QR_GENERATION" },
@@ -96,7 +97,7 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
     if (!batchCards.length) throw Object.assign(new Error("Batch or card not found"), { statusCode: 404 });
     let generated = 0;
     for (const card of batchCards) {
-      const imageData = await QRCode.toDataURL(card.canonicalUrl, { errorCorrectionLevel: "H", margin: 4, width: 512 });
+      const imageData = await QRCode.toDataURL(qrUrl(card.canonicalUrl), { errorCorrectionLevel: "H", margin: 4, width: 512 });
       const imageBytes = Buffer.from(imageData.split(",")[1]!, "base64");
       const checksum = createHash("sha256").update(imageBytes).digest("hex");
       await db.transaction(async (tx) => {

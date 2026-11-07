@@ -1,3 +1,4 @@
+import { ensureProfileHandle } from "../domain/profile-handles.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
@@ -96,7 +97,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
       await lockPrintedStock(tx);
       const card = await readyCard(tx, cardId);
       const target = new URL(card.canonicalUrl);
-      if (target.pathname !== `/c/${card.publicSlug}` || target.search || target.hash) fail("Client activation requires a generated Oneinfo /c/card-id link. Custom external QR links open their own destination.");
+      if (target.pathname !== `/c/${card.publicSlug}` || (target.search && target.search !== "?source=nfc") || target.hash) fail("Client activation requires a generated Oneinfo /c/card-id link. Custom external QR links open their own destination.");
       const [existing] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, cardId));
       if (existing && !input.replaceExisting) fail("A code was already issued. Explicitly replace it only if the old code was lost; the old code will stop working.");
       if (card.inventoryStatus === "SALEABLE") await tx.update(cards).set({ inventoryStatus: "RESERVED", updatedAt: new Date() }).where(eq(cards.id, cardId));
@@ -243,6 +244,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
       const card = await claimable(tx, claim);
       const { links: _, ...fields } = input.profile;
       const [profile] = await tx.insert(customerProfiles).values({ ...fields, publicSlug: `client-${randomBytes(9).toString("hex")}`, published: false }).returning();
+      await ensureProfileHandle(tx, profile!.id, profile!.displayName);
       const [created] = await tx.insert(customerAccounts).values({ email: input.email, passwordHash, profileId: profile!.id })
         .onConflictDoNothing({ target: customerAccounts.email }).returning();
       if (!created) fail("This email already has an account. Sign in instead.");

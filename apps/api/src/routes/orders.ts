@@ -1,3 +1,4 @@
+import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -16,7 +17,7 @@ import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEma
 import { orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
 import { attemptOrderEmail, queueOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
 import { dispatchOrderEmail } from "../domain/order-email-worker.js";
-import { allowAuthAttempt } from "../domain/auth-attempts.js";
+
 import { parseBody, sendCreated } from "../http.js";
 
 const shippingSettingsId = "default";
@@ -122,24 +123,27 @@ export const orderRoutes: FastifyPluginAsync = async app => {
   app.post("/admin/:id/cancel", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    const { reason, refundConfirmed } = parseBody(z.object({ reason: z.string().trim().min(5).max(500), refundConfirmed: z.boolean().default(false) }), request.body);
+    const { reason, refundConfirmed, cardsRecovered } = parseBody(z.object({ reason: z.string().trim().min(5).max(500), refundConfirmed: z.boolean().default(false), cardsRecovered: z.boolean().default(false) }), request.body);
     return db.transaction(async tx => {
       await lockPrintedStock(tx);
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order) conflict("Order not found.");
       if (order.cancelledAt) return receipt(order);
+      if (!order.stockReservations) conflict("This older order needs a manual stock check before cancellation. Contact support to reconcile its inventory.");
       if (order.shippedAt || order.deliveredAt) conflict("A shipped order requires a return, not cancellation.");
       if (order.transactionId && !refundConfirmed) conflict("Check the payment and resolve any refund before cancelling.");
       const allocated = await tx.select({ card: cards }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
         .where(eq(orderCardAllocations.orderId, id)).for("update", { of: cards });
       for (const { card } of allocated) {
         const [secret] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
-        if (card.profileId || card.customerAccountId || card.companyId || secret || !["IN_PRODUCTION", "QC_PASSED"].includes(card.lifecycleStatus)) conflict("An allocated card has been issued. Recover it and revoke its activation code before cancelling.");
+        if (card.profileId || card.customerAccountId || card.companyId || !["IN_PRODUCTION", "QC_PASSED"].includes(card.lifecycleStatus)) conflict("An allocated card has been issued. Recover it and revoke its activation code before cancelling.");
+        if ((secret || card.inventoryStatus === "DISPATCHED") && !cardsRecovered) conflict("Confirm that issued cards and secret codes were recovered before releasing stock.");
+        if (secret) await tx.delete(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
       }
       const catalog = await tx.select().from(products).where(inArray(products.id, order.items.map(item => item.productId))).orderBy(asc(products.id)).for("update");
       for (const product of catalog) {
         const variants = product.variants.map(variant => {
-          const line = order.stockReservations.find(item => item.productId === product.id && item.variantId === variant.id);
+          const line = order.stockReservations!.find(item => item.productId === product.id && item.variantId === variant.id);
           return line && variant.stockQuantity !== undefined ? { ...variant, stockQuantity: variant.stockQuantity + line.quantity } : variant;
         });
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
@@ -147,7 +151,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       await tx.delete(orderCardAllocations).where(eq(orderCardAllocations.orderId, id));
       for (const { card } of allocated) await tx.update(cards).set({ inventoryStatus: card.qcStatus === "PASSED" ? "SALEABLE" : "NOT_READY", updatedAt: new Date() }).where(eq(cards.id, card.id));
       const [cancelled] = await tx.update(storeOrders).set({ cancelledAt: new Date(), cancellationReason: reason }).where(eq(storeOrders.id, id)).returning();
-      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_CANCELLED", targetType: "store_order", targetId: id, metadata: { reason, refundConfirmed } });
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_ORDER_CANCELLED", targetType: "store_order", targetId: id, metadata: { reason, refundConfirmed, cardsRecovered } });
       await allocatePendingOrders(tx);
       return receipt(cancelled!);
     });

@@ -1,3 +1,4 @@
+import { qrUrl, nfcUrlFromQr } from "../domain/card-urls.js";
 import { fileURLToPath } from "node:url";
 import { config } from "../config.js";
 import { openNfcState, type NfcDevice, type BridgeSession, type ReadSession, type VerificationSession } from "../domain/nfc-state.js";
@@ -93,7 +94,7 @@ async function createVerification(stationId: string, input: { cardId: string; me
   }
   assertStationIdle(stationId);
   const session: VerificationSession = { id, cardId: card.id, stationId,
-    method: input.method, expectedUrl: card.canonicalUrl, state: deviceId ? "SCANNING" : "PENDING",
+    method: input.method, expectedUrl: input.method === "QR_CAMERA" ? qrUrl(card.canonicalUrl) : card.canonicalUrl, state: deviceId ? "SCANNING" : "PENDING",
     ...(deviceId ? { deviceId } : {}), expiresAt: new Date(Date.now() + 2 * 60_000) };
   verificationSessions.set(session.id, session);
   return session;
@@ -270,8 +271,8 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
       throw Object.assign(new Error("Scan ID belongs to another operation"), { statusCode: 409 });
     }
     const [row] = await db.select({ card: cards, batchCode: cardBatches.batchCode }).from(cards)
-      .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.canonicalUrl, input.scannedValue)).limit(1);
-    if (!row) throw Object.assign(new Error("This QR link is not registered in production"), { statusCode: 404 });
+      .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.canonicalUrl, nfcUrlFromQr(input.scannedValue))).limit(1);
+    if (!row || qrUrl(row.card.canonicalUrl) !== input.scannedValue) throw Object.assign(new Error("This QR link is not registered in production"), { statusCode: 404 });
     if (row.card.qrStatus !== "GENERATED") throw Object.assign(new Error("Generate this card's QR before checking the print"), { statusCode: 409 });
     qrScans.set(input.scanId, { id: input.scanId, cardId: row.card.id, deviceId: device.id, expectedUrl: input.scannedValue,
       expiresAt: new Date(Date.now() + 10 * 60_000) });
@@ -303,7 +304,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     await claimProductionJob(job.id, { idempotencyKey: scanId }, operator, device);
     assertStationIdle(device.stationId);
     const session: BridgeSession = { id: scanId, jobId: job.id, cardId: card.id, stationId: device.stationId, deviceId: device.id,
-      expectedUrl: scan.expectedUrl, state: "WRITING", phoneInitiated: true, createdAt: new Date(), expiresAt: new Date(Date.now() + 3 * 60_000) };
+      expectedUrl: card.canonicalUrl, state: "WRITING", phoneInitiated: true, createdAt: new Date(), expiresAt: new Date(Date.now() + 3 * 60_000) };
     sessions.set(scanId, session);
     return sendCreated(reply, { ...session, sessionId: session.id });
   });
@@ -331,16 +332,16 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     prune();
     const existing = verificationSessions.get(input.scanId);
     if (existing) {
-      if (existing.deviceId !== device.id || existing.expectedUrl !== input.scannedValue) throw Object.assign(new Error("Scan ID belongs to another operation"), { statusCode: 409 });
+      if (existing.deviceId !== device.id || existing.expectedUrl !== nfcUrlFromQr(input.scannedValue)) throw Object.assign(new Error("Scan ID belongs to another operation"), { statusCode: 409 });
       return { ...existing, sessionId: existing.id };
     }
-    const [card] = await db.select().from(cards).where(eq(cards.canonicalUrl, input.scannedValue)).limit(1);
-    if (!card) throw Object.assign(new Error("This QR link is not registered in production"), { statusCode: 404 });
+    const [card] = await db.select().from(cards).where(eq(cards.canonicalUrl, nfcUrlFromQr(input.scannedValue))).limit(1);
+    if (!card || qrUrl(card.canonicalUrl) !== input.scannedValue) throw Object.assign(new Error("This QR link is not registered in production"), { statusCode: 404 });
     const session = await createVerification(device.stationId, { cardId: card.id, method: "NFC_READ" }, device.id, input.scanId);
     try {
       await db.transaction(async (tx) => {
         const [saved] = await tx.insert(cardVerifications).values({ cardId: card.id, stationId: device.stationId,
-          method: "QR_CAMERA", expectedUrl: card.canonicalUrl, scannedValue: input.scannedValue, matched: true,
+          method: "QR_CAMERA", expectedUrl: qrUrl(card.canonicalUrl), scannedValue: input.scannedValue, matched: true,
           deviceMetadata: { deviceName: device.name, scanId: input.scanId },
         }).returning();
         await tx.insert(cardEvents).values({ cardId: card.id, eventType: "QR_CAMERA_MATCHED", stationId: device.stationId,

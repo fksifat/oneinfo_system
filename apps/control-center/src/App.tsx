@@ -39,6 +39,7 @@ interface Overview {
 
 interface ProfileLink { id?: string; label: string; url: string; sortOrder: number; active: boolean }
 interface Profile {
+  handle?: string | null;
   id: string;
   publicSlug: string;
   displayName: string;
@@ -144,10 +145,25 @@ function PublicProfile({ slug }: { slug: string }) {
   return <ProfileView data={data} />;
 }
 
+function NamedProfile({ handle }: { handle: string }) {
+  const [data, setData] = useState<(import("./ProfileView.js").PublicProfileData & { cardSlug: string | null })>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let current = true;
+    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`).then(result => { if (current) setData(result); })
+      .catch(() => { if (current) setError("This profile is unavailable. Check the link or contact the card owner."); });
+    return () => { current = false; };
+  }, [handle]);
+  if (!data) return <main className="card-portal"><section><h1>{error ? "Profile unavailable" : "Opening profile…"}</h1>{error && <p role="alert">{error}</p>}<a href="/">Oneinfo home</a></section></main>;
+  return data.cardSlug ? <CardPortal slug={data.cardSlug} /> : <ProfileView data={data} />;
+}
+
 export function App() {
   if (/^\/team\/?$/.test(window.location.pathname)) return <TeamPortal />;
   const cardPath = window.location.pathname.match(/^\/c\/([A-Za-z0-9_-]{1,64})(?:\/(?:signup|login|edit))?\/?$/);
   if (cardPath) return <CardPortal slug={cardPath[1]!} />;
+  const namedPath = window.location.pathname.match(/^\/([A-Za-z0-9]{1,64})\/?$/);
+  if (namedPath && !["admin", "team", "dashboard", "health", "api", "c"].includes(namedPath[1]!.toLowerCase())) return <NamedProfile handle={namedPath[1]!} />;
   const profileSlug = new URLSearchParams(window.location.search).get("profile");
   if (profileSlug) return <PublicProfile slug={profileSlug} />;
 
@@ -173,9 +189,15 @@ export function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [search, setSearch] = useState("");
+  const [listPage, setListPage] = useState(1);
+  const [listQuery, setListQuery] = useState("");
+  const [listMore, setListMore] = useState({ profiles: false, batches: false, audit: false });
+  useEffect(() => { setSearch(""); setListQuery(""); setListPage(1); }, [view]);
+  useEffect(() => { const timer = setTimeout(() => { setListQuery(search); setListPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
+  const listParams = (target: string) => `?page=${view === target ? listPage : 1}&query=${encodeURIComponent(view === target ? listQuery : "")}`;
   const [syncError, setSyncError] = useState("");
   const [lastSynced, setLastSynced] = useState("");
-  const refreshing = useRef(false);
+  const refreshing = useRef<symbol | undefined>(undefined);
   useEffect(() => {
     const changed = () => { setView(currentView()); window.scrollTo(0, 0); };
     window.addEventListener("hashchange", changed);
@@ -204,11 +226,12 @@ export function App() {
 
   const refresh = useCallback(async () => {
     if (!token || refreshing.current) return;
-    refreshing.current = true;
+    const refreshId = Symbol();
+    refreshing.current = refreshId;
     try {
       const [summary, profileList, cardList, batchList, stationList, auditList] = await Promise.all([
         api<Overview>("/api/v1/admin/overview", token),
-        api<{ items: Profile[] }>("/api/v1/profiles", token),
+        api<{ items: Profile[]; hasMore: boolean }>(`/api/v1/profiles${listParams("profiles")}`, token),
         (async () => {
           const items: CardRow[] = [];
           let hasMore = true;
@@ -218,12 +241,14 @@ export function App() {
           }
           return { items, hasMore };
         })(),
-        api<{ items: Batch[] }>("/api/v1/admin/batches", token),
+        api<{ items: Batch[]; hasMore: boolean }>(`/api/v1/admin/batches${listParams("batches")}`, token),
         api<{ items: Station[] }>("/api/v1/admin/stations", token),
-        api<{ items: Audit[] }>("/api/v1/admin/audit-logs", token),
+        api<{ items: Audit[]; hasMore: boolean }>(`/api/v1/admin/audit-logs${listParams("audit")}`, token),
       ]);
+      if (refreshing.current !== refreshId) return;
       setOverview(summary);
       setProfiles(profileList.items);
+      setListMore({ profiles: profileList.hasMore, batches: batchList.hasMore, audit: auditList.hasMore });
       setCards(cardList.items);
       setMoreCards(cardList.hasMore);
       setBatches(batchList.items);
@@ -232,17 +257,18 @@ export function App() {
       setSyncError("");
       setLastSynced(new Date().toLocaleTimeString());
     } catch (error) {
+      if (refreshing.current !== refreshId) return;
       const message = error instanceof Error ? error.message : "Could not refresh data";
       setSyncError(message); setMessage(message);
-    } finally { refreshing.current = false; }
-  }, [token, cardPages]);
+    } finally { if (refreshing.current === refreshId) refreshing.current = undefined; }
+  }, [token, cardPages, listPage, listQuery, view]);
 
   useEffect(() => {
     void refresh();
     const interval = window.setInterval(() => void refresh(), 5000);
     const onFocus = () => void refresh();
     window.addEventListener("focus", onFocus);
-    return () => { window.clearInterval(interval); window.removeEventListener("focus", onFocus); };
+    return () => { refreshing.current = undefined; window.clearInterval(interval); window.removeEventListener("focus", onFocus); };
   }, [refresh]);
 
   const editProfile = async (profile: Profile) => {
@@ -274,6 +300,15 @@ export function App() {
     finally { setBusy(false); }
   };
 
+  const recoverStation = async (station: Station) => {
+    if (!window.confirm(`Stop all writers at ${station.stationCode} first. Revoke its access and return unfinished jobs to the queue? Register a new station before continuing.`)) return;
+    setBusy(true);
+    try {
+      const result = await api<{ recovered: number }>(`/api/v1/admin/stations/${station.id}/recover-jobs`, token, { method: "POST" });
+      setMessage(`${result.recovered} jobs recovered. Register a new station before continuing.`); await refresh();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Job recovery failed."); }
+    finally { setBusy(false); }
+  };
   const revokeStation = async (station: Station) => {
     if (!window.confirm(`Revoke ${station.stationCode}? Its connected devices will lose access until the workstation is registered again.`)) return;
     setBusy(true);
@@ -286,7 +321,7 @@ export function App() {
   };
 
   const deferredSearch = useDeferredValue(search);
-  const filteredProfiles = useMemo(() => profiles.filter((profile) => `${profile.displayName} ${profile.company} ${profile.publicSlug}`.toLowerCase().includes(deferredSearch.toLowerCase())), [profiles, deferredSearch]);
+  const filteredProfiles = profiles;
 
   if (!token) return (
     <div className="auth-page">
@@ -362,15 +397,16 @@ export function App() {
             <div className={`tile-cover theme-${profile.theme.toLowerCase()}`}></div><div className="tile-avatar">{initials(profile.displayName)}</div>
             <span className={profile.published ? "pill success" : "pill"}>{profile.published ? "Published" : "Draft"}</span>
             <h3>{profile.displayName}</h3><p>{profile.headline || "No headline"}{profile.company ? ` · ${profile.company}` : ""}</p>
-            <small>oneinfo / {profile.publicSlug}</small><div className="tile-actions"><button onClick={() => void editProfile(profile)}>Edit</button>{profile.published ? <a href={`?profile=${profile.publicSlug}`} target="_blank">Open profile ↗</a> : null}</div>
+            <small>oneinfo / {profile.handle || profile.publicSlug}</small><div className="tile-actions"><button onClick={() => void editProfile(profile)}>Edit</button>{profile.published ? <a href={profile.handle ? `/${profile.handle}` : `?profile=${profile.publicSlug}`} target="_blank">Open profile ↗</a> : null}</div>
           </article>)}</div>
           {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
         </section> : null}
 
         {view === "cards" ? <><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<div key={card.id}><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a><CardPassport cardId={card.id} token={token} /></div>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
           <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <button onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button>}</> : null}
+        {["batches", "audit"].includes(view) && <div className="list-toolbar"><label>Search {view}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label></div>}
         {view === "batches" ? <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map((batch) => [batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status, <a href={`${PRODUCTION_URL}/?batch=${encodeURIComponent(batch.id)}`} target="_blank" rel="noreferrer">Open batch ↗</a>])} /> : null}
-        {view === "stations" ? <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">ACCESS CONTROL</p><h2>Production stations</h2></div></div><div className="data-table"><div className="data-row data-header"><span>Station</span><span>Status</span><span>Last seen</span><span>Action</span></div>{stations.map((station) => <div className="data-row station-row" key={station.id}><span><strong>{station.stationCode}</strong><small>{station.name}</small></span><span><b className={`status-text ${station.status.toLowerCase()}`}>{station.status}</b></span><span>{formatDate(station.lastSeenAt)}</span><span>{station.status === "ACTIVE" ? <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button> : "—"}</span></div>)}</div></section> : null}
+        {view === "stations" ? <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">ACCESS CONTROL</p><h2>Production stations</h2></div></div><div className="data-table"><div className="data-row data-header"><span>Station</span><span>Status</span><span>Last seen</span><span>Action</span></div>{stations.map((station) => <div className="data-row station-row" key={station.id}><span><strong>{station.stationCode}</strong><small>{station.name}</small></span><span><b className={`status-text ${station.status.toLowerCase()}`}>{station.status}</b></span><span>{formatDate(station.lastSeenAt)}</span><span>{station.status === "ACTIVE" ? <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button> : "—"}<button className="quiet" disabled={busy} onClick={() => void recoverStation(station)}>Recover unfinished jobs</button></span></div>)}</div></section> : null}
         {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
         {view === "production" ? <section className="production-hub">
           <article className="panel connected-production-head"><div><p className="eyebrow">CONNECTED PRODUCTION WORKSPACE</p><h2>QR, NFC and final QC</h2><p>Your production workstation shares card, order and QC records with this Admin through the cloud database. This dashboard refreshes every five seconds.</p></div>{embedProduction ? <a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open full console ↗</a> : null}</article>
@@ -383,6 +419,10 @@ export function App() {
             <p className="workstation-help">If the tab cannot connect, start Oneinfo on this PC and try again. Production updates will appear here automatically.</p>
           </article>}
         </section> : null}
+        {(view === "profiles" || view === "batches" || view === "audit") && <nav className="list-toolbar" aria-label="List pages">
+          <button className="quiet" disabled={listPage === 1} onClick={() => setListPage(page => page - 1)}>Previous page</button>
+          <span>Page {listPage}</span><button className="quiet" disabled={!listMore[view]} onClick={() => setListPage(page => page + 1)}>Next page</button>
+        </nav>}
       </main>
 
       <footer className="status-bar" role="status" aria-live="polite"><span className={busy ? "working" : ""}></span>{busy ? "Working." : message}</footer>

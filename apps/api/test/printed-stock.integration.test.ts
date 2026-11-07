@@ -1,3 +1,4 @@
+import { qrUrl } from "../src/domain/card-urls.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
@@ -24,8 +25,17 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   beforeAll(async () => {
     const { config } = await import("../src/config.js");
     if (!/^\/oneinfo_print_stock_\d+_test$/.test(new URL(config.DATABASE_URL).pathname)) throw new Error("Disposable test database required");
+    Object.assign(config, {
+      BREVO_SMTP_USER: undefined,
+      BREVO_SMTP_KEY: undefined,
+      RESEND_API_KEY: "test-key",
+      ORDER_EMAIL_FROM: "Oneinfo <test@example.com>",
+      STOREFRONT_URL: "https://example.com",
+      CRM_LEAD_WEBHOOK_URL: "https://crm.example.com/leads",
+      CRM_LEAD_WEBHOOK_TOKEN: undefined,
+    });
     vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-      if (url === process.env.CRM_LEAD_WEBHOOK_URL) return Response.json({ accepted: true });
+      if (url === config.CRM_LEAD_WEBHOOK_URL) return Response.json({ accepted: true });
       if (url !== "https://api.resend.com/emails") throw new Error("Unexpected external request");
       if (failNextShippingEmail && String(init?.body).includes("Your Oneinfo order has shipped")) {
         failNextShippingEmail = false;
@@ -36,6 +46,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     client = await import("../src/db/client.js");
     schema = await import("../src/db/schema.js");
     app = (await import("../src/app.js")).buildApp();
+    app.log.level = "silent";
     const auth = (await app.inject({ method: "POST", url: "/api/v1/dev/token" })).json();
     headers = { authorization: `Bearer ${auth.accessToken}` };
     const station = (await app.inject({ method: "POST", url: "/api/v1/production/stations/register", headers,
@@ -44,7 +55,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     await client.db.insert(schema.products).values({ id: productId, slug: "test-card", name: "Test card", priceMinor: 50000, status: "PUBLISHED",
       variants: [{ id: variantId, name: "Standard", priceMinor: 50000, available: true, imageUrl: "" }] });
     await client.db.insert(schema.storeShippingSettings).values({ id: "default", rates: { insideDhaka: 6000, subDhaka: 10000, outsideDhaka: 12000 }, codAdvanceTaka: 0 });
-  });
+  }, 30_000);
   beforeEach(async () => {
     failNextShippingEmail = false;
     await client.db.execute(sql`truncate table card_batches, customer_profiles, store_orders, audit_logs cascade`);
@@ -109,7 +120,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     for (const created of [first, second]) {
       const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
       const scanId = randomUUID();
-      const result = await app.inject({ method: "POST", url: "/api/v1/local-nfc/device/resolve-qr", headers: deviceHeaders, payload: { scanId, scannedValue: card!.canonicalUrl } });
+      const result = await app.inject({ method: "POST", url: "/api/v1/local-nfc/device/resolve-qr", headers: deviceHeaders, payload: { scanId, scannedValue: qrUrl(card!.canonicalUrl) } });
       expect(result.statusCode).toBe(200);
       expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toMatchObject({ id: scanId, cardId: card!.id, batchId: created.id });
     }
@@ -518,18 +529,18 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const [card] = await client.db.select().from(schema.cards);
     const send = await phone();
     const scanId = randomUUID();
-    expect((await send("resolve-qr", { scanId, scannedValue: card!.canonicalUrl })).statusCode).toBe(200);
+    expect((await send("resolve-qr", { scanId, scannedValue: qrUrl(card!.canonicalUrl) })).statusCode).toBe(200);
     const write = await send("load-to-nfc", { scanId });
     expect(write.statusCode, write.body).toBe(201);
     const result = { result: "SUCCEEDED", expectedUrl: card!.canonicalUrl, readbackUrl: card!.canonicalUrl };
     expect((await send(`tasks/${scanId}/result`, result)).statusCode).toBe(200);
     expect((await send(`tasks/${scanId}/result`, result)).statusCode).toBe(200);
     const wrongScan = randomUUID();
-    expect((await send("verification-from-qr", { scanId: wrongScan, scannedValue: card!.canonicalUrl })).statusCode).toBe(201);
+    expect((await send("verification-from-qr", { scanId: wrongScan, scannedValue: qrUrl(card!.canonicalUrl) })).statusCode).toBe(201);
     expect((await send(`verification-tasks/${wrongScan}/result`, { scannedValue: "https://example.com/wrong-card" })).json().state).toBe("MISMATCH");
     expect((await send(`verification-tasks/${wrongScan}/approve`, {})).statusCode).toBe(409);
     const finalScan = randomUUID();
-    expect((await send("verification-from-qr", { scanId: finalScan, scannedValue: card!.canonicalUrl })).statusCode).toBe(201);
+    expect((await send("verification-from-qr", { scanId: finalScan, scannedValue: qrUrl(card!.canonicalUrl) })).statusCode).toBe(201);
     expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toMatchObject({ cardId: card!.id, batchId: card!.batchId });
     expect((await send(`verification-tasks/${finalScan}/result`, { scannedValue: card!.canonicalUrl })).json().state).toBe("MATCHED");
     const approved = await send(`verification-tasks/${finalScan}/approve`, {});
@@ -665,4 +676,107 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       } finally { await secondApp.close(); }
     } finally { Object.assign(config, saved); }
   });
+  it("assigns stable case-insensitive handles under concurrent duplicate names", async () => {
+    const make = (slug: string, name = "Sushmoy Nandi") => request("/api/v1/profiles", { publicSlug: slug, displayName: name, published: true });
+    const profiles = await Promise.all([make("same-one"), make("same-two"), make("same-three", "sushmoy nandi")]);
+    expect(new Set(profiles.map(profile => profile.handle.toLowerCase())).size).toBe(3);
+    expect(profiles.map(profile => profile.handle.toLowerCase()).sort()).toEqual(["sushmoynandi", "sushmoynandi2", "sushmoynandi3"]);
+    const owner = profiles[0];
+    const found = await request(`/api/v1/profiles/handle/${owner.handle.toUpperCase()}`);
+    expect(found.profile.id).toBe(owner.id);
+    await app.inject({ method: "PATCH", url: `/api/v1/profiles/${owner.id}`, headers, payload: { displayName: "New Name" } });
+    expect((await request(`/api/v1/profiles/handle/${owner.handle}`)).profile.displayName).toBe("New Name");
+    await app.inject({ method: "PATCH", url: `/api/v1/profiles/${owner.id}`, headers, payload: { published: false } });
+    expect((await app.inject({ url: `/api/v1/profiles/handle/${owner.handle}` })).statusCode).toBe(404);
+    expect((await make("reserved-name", "Admin")).handle).toBe("AdminProfile");
+  });
+
+  it("reserves stock before payment, freezes the total, and releases stock once on cancellation", async () => {
+    const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
+    try {
+      await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 1 })) }).where(eq(schema.products.id, productId));
+      const payload = { ...orderPayload(), payment: { method: "BKASH", amountMinor: 56000 } };
+      const reserved = await request("/api/v1/orders/reserve", payload);
+      expect(reserved.status).toBe("AWAITING_PAYMENT");
+      expect((await request("/api/v1/orders/reserve", payload)).id).toBe(reserved.id);
+      expect((await app.inject({ method: "POST", url: "/api/v1/orders/reserve", payload: { ...payload, requestId: randomUUID() } })).statusCode).toBe(409);
+      expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
+      expect(await client.db.select().from(schema.orderEmails)).toHaveLength(0);
+      const [remaining] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
+      await client.db.update(schema.products).set({ variants: remaining!.variants.map(variant => ({ ...variant, priceMinor: 60000 })) }).where(eq(schema.products.id, productId));
+      const paid = await request("/api/v1/orders", { ...payload, payment: { ...payload.payment, transactionId: "AUDITPAY01" } });
+      expect(paid).toMatchObject({ id: reserved.id, status: "RECEIVED", totalMinor: 56000 });
+      const cancelUrl = `/api/v1/orders/admin/${paid.id}/cancel`;
+      expect((await app.inject({ method: "POST", url: cancelUrl, headers, payload: { reason: "Customer cancelled" } })).statusCode).toBe(409);
+      await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
+      await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
+      expect((await client.db.select().from(schema.products).where(eq(schema.products.id, productId)))[0]!.variants[0]!.stockQuantity).toBe(1);
+      expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${paid.id}/fulfillment`, headers, payload: { status: "PROCESSING" } })).statusCode).toBe(409);
+    } finally { await client.db.update(schema.products).set({ variants: catalog!.variants }).where(eq(schema.products.id, productId)); }
+  });
+
+  it("never allocates a card after issuing its private activation code", async () => {
+    const card = await readyForClaim(); await issue(card.id); await order();
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
+    expect((await client.db.select().from(schema.cards))[0]!.inventoryStatus).toBe("RESERVED");
+  });
+
+  it("creates company accounts from one-use invitation links and revokes sessions on reset", async () => {
+    const { createAccountLink } = await import("../src/domain/account-tokens.js");
+    const link = await createAccountLink("invited@example.com", "invite", { name: "Invited Company" });
+    const input = { token: link.token, password: "a long invitation password", displayName: "Invited Owner" };
+    await request("/api/v1/customer/account-link/complete", input);
+    expect((await app.inject({ method: "POST", url: "/api/v1/customer/account-link/complete", payload: input })).statusCode).toBe(400);
+    const login = await request("/api/v1/customer/login", { email: "invited@example.com", password: input.password });
+    const auth = { authorization: `Bearer ${login.accessToken}` };
+    expect((await app.inject({ url: "/api/v1/company/me", headers: auth })).json().items).toHaveLength(1);
+    const reset = await createAccountLink("invited@example.com", "reset");
+    await request("/api/v1/customer/account-link/complete", { token: reset.token, password: "another long password" });
+    expect((await app.inject({ url: "/api/v1/customer/me", headers: auth })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: "/api/v1/customer/login", payload: { email: "invited@example.com", password: input.password } })).statusCode).toBe(401);
+    expect((await request("/api/v1/customer/login", { email: "invited@example.com", password: "another long password" })).accessToken).toBeTruthy();
+    const expired = await createAccountLink("invited@example.com", "reset");
+    await client.db.update(schema.accountTokens).set({ expiresAt: new Date(0) });
+    expect((await app.inject({ method: "POST", url: "/api/v1/customer/account-link/complete", payload: { token: expired.token, password: "another long password" } })).statusCode).toBe(400);
+  });
+
+  it("recovers queued email after a restart and fences concurrent send attempts", async () => {
+    const result = await order();
+    await client.db.delete(schema.orderEmails).where(eq(schema.orderEmails.orderId, result.id));
+    await client.db.delete(schema.auditLogs).where(eq(schema.auditLogs.targetId, result.id));
+    const { queueOrderEmail, attemptOrderEmail } = await import("../src/domain/order-email-history.js");
+    await client.db.transaction(tx => queueOrderEmail(tx, result.id, "confirmation"));
+    const send = vi.fn(async () => { await new Promise(resolve => setTimeout(resolve, 30)); return true; });
+    await Promise.all([attemptOrderEmail(result.id, "confirmation", send), attemptOrderEmail(result.id, "confirmation", send)]);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect((await client.db.select().from(schema.orderEmails))[0]!.status).toBe("accepted");
+    const { drainOrderEmails } = await import("../src/domain/order-email-worker.js");
+    await client.db.transaction(tx => queueOrderEmail(tx, result.id, "shipping"));
+    await client.db.update(schema.storeOrders).set({ shippedAt: new Date(), courierTrackingId: "RECOVERED-1" }).where(eq(schema.storeOrders.id, result.id));
+    await drainOrderEmails();
+    expect((await client.db.select().from(schema.orderEmails)).find(row => row.kind === "shipping")!.status).toBe("accepted");
+  });
+
+  it("persists team enquiries idempotently and supports admin search and pagination", async () => {
+    const payload = { requestId: randomUUID(), name: "Team Buyer", email: "teams@example.com", company: "Audit Team", quantity: "12" };
+    await request("/api/v1/company/enquiries", payload); await request("/api/v1/company/enquiries", payload);
+    expect((await request("/api/v1/company/admin/enquiries?query=Audit%20Team")).items).toHaveLength(1);
+    expect((await app.inject({ url: "/api/v1/company/admin/enquiries" })).statusCode).toBe(401);
+    await client.db.insert(schema.customerProfiles).values(Array.from({ length: 101 }, (_, i) => ({ publicSlug: `page-${i}`, displayName: `Paged ${i}` })));
+    const first = await request("/api/v1/profiles?query=Paged"), second = await request("/api/v1/profiles?query=Paged&page=2");
+    expect(first.items).toHaveLength(100); expect(first.hasMore).toBe(true); expect(second.items).toHaveLength(1);
+    expect(new Set([...first.items, ...second.items].map(row => row.id)).size).toBe(101);
+  });
+
+  it("fences a stopped station before recovering its jobs", async () => {
+    const station = await request("/api/v1/production/stations/register", { stationCode: `RECOVERY-${randomUUID()}`, name: "Recovery test" });
+    const created = await batch(1, false);
+    const [job] = await client.db.select().from(schema.productionJobs).where(eq(schema.productionJobs.batchId, created.id));
+    const auth = { ...headers, "x-station-key": station.stationCredential };
+    expect((await app.inject({ method: "POST", url: `/api/v1/production/jobs/${job!.id}/claim`, headers: auth, payload: { idempotencyKey: randomUUID() } })).statusCode).toBe(200);
+    expect((await request(`/api/v1/admin/stations/${station.station.id}/recover-jobs`, {})).recovered).toBe(1);
+    expect((await app.inject({ method: "POST", url: `/api/v1/production/jobs/${job!.id}/claim`, headers: auth, payload: { idempotencyKey: randomUUID() } })).statusCode).toBe(401);
+    expect((await request(`/api/v1/production/jobs/${job!.id}/claim`, { idempotencyKey: randomUUID() })).job.assignedStationId).not.toBe(station.station.id);
+  });
+
 });
