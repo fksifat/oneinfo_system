@@ -10,6 +10,7 @@ const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT
 const bdt = (minor: number) => money.format(minor / 100);
 const path = "/api/v1/orders";
 const searchFields = ["payment", "delivery", "qr"] as const;
+const needsPacking = (order: StoreOrder) => Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 
 function getInitials(name: string) {
@@ -276,7 +277,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               <span className="filter-label">Search orders</span>
               <div className="filter-input-wrap">
                 <span className="filter-search-icon" aria-hidden="true">🔍</span>
-                <input type="search" name="query" maxLength={254} defaultValue={requestedOrder ?? ""} placeholder="Order ID, phone, customer name, email…" />
+                <input type="search" name="query" maxLength={254} defaultValue={requestedOrder ?? ""} placeholder="Invoice, order ID, phone or email…" />
               </div>
             </label>
             <label className="filter-field">
@@ -325,7 +326,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                   {order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && (
                     <span className={`order-qr-pill ${order.qrAllocation?.status === "ASSIGNED" ? "is-assigned" : "is-pending"}`}>
                       <span className="order-qr-dot" aria-hidden="true"></span>
-                      {order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}
+                      {order.invoiceNumber ? needsPacking(order) ? "Awaiting packing" : "Cards packed" : order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}
                     </span>
                   )}
                 </div>
@@ -349,13 +350,13 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
           </summary>
 
           <div className="store-order-content">
-            <OrderTrackingPipeline order={order} compact />
-
             <div className="order-work-panels">
-              <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
-                startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />
-              <OrderPacking order={order} token={token} initiallyOpen={requestedOrder === order.id && requestedTask === "packing"} />
+              {!order.invoiceNumber && <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
+                startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />}
+              <OrderPacking order={order} token={token} onChange={() => loadOrders()} initiallyOpen={Boolean(order.invoiceNumber) || (requestedOrder === order.id && requestedTask === "packing")} />
             </div>
+
+            <OrderTrackingPipeline order={order} compact />
 
             <div className="order-info-cards">
               <div className="order-info-card">
@@ -365,8 +366,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                 </div>
                 <dl>
                   <div><dt>Order ID</dt><dd className="mono-code">{order.id}</dd></div>
-                  <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted" : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
-                  <div><dt>Client activation</dt><dd>The client claims ownership using their secret code and account.</dd></div>
+                  {order.invoiceNumber && <div><dt>Invoice number</dt><dd className="mono-code">{order.invoiceNumber}</dd></div>}
+                  <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted"
+                    : order.invoiceNumber ? needsPacking(order) ? "Pick ready stock and scan the cards while packing" : "Cards linked at packing"
+                    : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
+                  <div><dt>Client activation</dt><dd>{order.invoiceNumber ? "After delivery, scan the card, enter the invoice number and verify through the order email." : "The client claims ownership using their secret code and account."}</dd></div>
                   {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="order-slug-link">{card.publicSlug} ↗</a> <span className="qc-badge">QC {card.qcStatus}</span></dd></div>)}
                 </dl>
               </div>
@@ -435,7 +439,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                   </button>
                 )}
                 {!["AWAITING_PAYMENT", "CANCELLED"].includes(order.status) && (
-                  <button className="button-action button-action-delivered" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
+                  <button className="button-action button-action-delivered" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt) || needsPacking(order)} onClick={() => void markDelivered(order)}>
                     <span aria-hidden="true">★</span> {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
                   </button>
                 )}
@@ -449,7 +453,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                     <span>Courier tracking ID</span>
                     <input name="trackingId" maxLength={100} required defaultValue={order.courierTrackingId ?? ""} placeholder="Tracking ID…" />
                   </label>
-                  <button type="submit" className="button-action button-action-ship" disabled={Boolean(delivering)}>
+                  <button type="submit" className="button-action button-action-ship" disabled={Boolean(delivering) || needsPacking(order)}>
                     {order.status === "SHIPPED" ? "Update tracking ID" : "Mark shipped"}
                   </button>
                 </form>
@@ -493,8 +497,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                     <span>Payment checked and any refund resolved</span>
                   </label>
                   <label className="order-check-label">
-                    <input type="checkbox" name="cardsRecovered" />
-                    <span>Any issued physical cards and secret codes have been recovered; invalidate those codes</span>
+                    <input type="checkbox" name="cardsRecovered" required={Boolean(order.invoiceNumber && order.assignedCards?.length)} />
+                    <span>{order.invoiceNumber ? "All packed cards have been returned to stock" : "Any issued physical cards and secret codes have been recovered; invalidate those codes"}</span>
                   </label>
                   <button type="submit" className="button-cancel-order" disabled={Boolean(delivering)}>Cancel order</button>
                 </form>

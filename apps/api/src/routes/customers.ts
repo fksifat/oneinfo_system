@@ -7,8 +7,11 @@ import { ActivateCardSchema, ClaimCardSchema, CustomerLoginSchema, CustomerProfi
   profileModes, ProfileModesSchema, profileSources, ShareContactSchema } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerContactLeads, customerProfiles, profileActivity, profileLinks } from "../db/schema.js";
-import { codeHash, hashPassword, issueClaimToken, issueCustomerToken, matchesCode, readClaimToken, requireCustomer, verifyPassword } from "../domain/customer-auth.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerContactLeads, customerProfiles, orderCardAllocations, profileActivity, profileLinks, storeOrders } from "../db/schema.js";
+import { codeHash, hashPassword, issueClaimToken, issueCustomerToken, issueInvoiceClaimToken, matchesCode, readClaimToken, requireCustomer, verifyPassword } from "../domain/customer-auth.js";
+import { deliveredInvoice, invoiceActivationTarget, invoicePattern } from "../domain/order-invoice.js";
+import { escapeEmailHtml, sendTransactionalEmail, transactionalEmailEnabled } from "../domain/transactional-email.js";
+import { isManagedCardUrl } from "../domain/card-urls.js";
 import { parseBody, sendCreated } from "../http.js";
 import { publicProfileFields } from "./profiles.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
@@ -59,8 +62,29 @@ async function readyCard(tx: Transaction, cardId: string) {
   return card;
 }
 
-async function claimable(tx: Transaction, token: Awaited<ReturnType<typeof readClaimToken>>) {
+async function invoiceOrderId(tx: Transaction, cardId: string) {
+  const [row] = await tx.select({ id: storeOrders.id }).from(orderCardAllocations)
+    .innerJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId))
+    .where(and(eq(orderCardAllocations.cardId, cardId), isNotNull(storeOrders.invoiceNumber)));
+  return row?.id;
+}
+
+async function claimable(tx: Transaction, token: Awaited<ReturnType<typeof readClaimToken>>, email: string) {
+  if (token.orderId) {
+    const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, token.orderId)).for("update");
+    if (!order || !deliveredInvoice(order) || await invoiceOrderId(tx, token.cardId) !== order.id) {
+      fail("Activation is no longer valid. Scan the delivered card and request a new email link.", 401);
+    }
+    if (order.customer.email.toLowerCase() !== email.toLowerCase()) fail("Use the email address from your order to activate this card.", 403);
+    const card = await readyCard(tx, token.cardId);
+    if (card.profileId || card.lifecycleStatus !== "QC_PASSED" || card.qrStatus !== "GENERATED" || card.nfcStatus !== "WRITTEN" ||
+      !["RESERVED", "DISPATCHED"].includes(card.inventoryStatus) || !isManagedCardUrl(card.canonicalUrl, card.publicSlug)) {
+      fail("This card is not ready for invoice activation.");
+    }
+    return card;
+  }
   const card = await readyCard(tx, token.cardId);
+  if (await invoiceOrderId(tx, card.id)) fail("This card requires invoice activation.", 403);
   const [secret] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id)).for("update");
   if (!secret?.codeHash || secret.redeemedAt || secret.version !== token.version) fail("Activation is no longer valid. Scan the card and enter its current secret code again.", 401);
   return card;
@@ -96,6 +120,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const result = await db.transaction(async tx => {
       await lockPrintedStock(tx);
       const card = await readyCard(tx, cardId);
+      if (await invoiceOrderId(tx, cardId)) fail("Invoice cards are activated through the order email.");
       const target = new URL(card.canonicalUrl);
       if (target.pathname !== `/c/${card.publicSlug}` || (target.search && target.search !== "?source=nfc") || target.hash) fail("Client activation requires a generated Oneinfo /c/card-id link. Custom external QR links open their own destination.");
       const [existing] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, cardId));
@@ -114,10 +139,12 @@ export const customerRoutes: FastifyPluginAsync = async app => {
   app.get("/cards/:cardSlug", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const { cardSlug } = request.params as { cardSlug: string };
-    const [row] = await db.select({ card: cards, confirmed: cardBatches.printConfirmedAt, ownerActive: customerAccounts.active }).from(cards)
+    const [row] = await db.select({ card: cards, confirmed: cardBatches.printConfirmedAt, ownerActive: customerAccounts.active,
+      legacyCode: cardActivationSecrets.cardId }).from(cards)
       .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id))
       .leftJoin(companies, eq(cards.companyId, companies.id))
       .leftJoin(customerAccounts, contactOwner)
+      .leftJoin(cardActivationSecrets, and(eq(cardActivationSecrets.cardId, cards.id), isNotNull(cardActivationSecrets.codeHash)))
       .where(eq(cards.publicSlug, cardSlug)).limit(1);
     if (!row) fail("Card not found", 404);
     const { card } = row;
@@ -130,7 +157,8 @@ export const customerRoutes: FastifyPluginAsync = async app => {
         return { status: "PROFILE", profile, links, canShareContact: row.ownerActive === true, crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL) };
       }
     }
-    return { status: card.customerAccountId || card.companyId ? "UNAVAILABLE" : "ACTIVATION_REQUIRED", publicSlug: card.publicSlug };
+    return { status: card.customerAccountId || card.companyId ? "UNAVAILABLE" : "ACTIVATION_REQUIRED",
+      publicSlug: card.publicSlug, activationMethod: row.legacyCode ? "SECRET" : "INVOICE" };
   });
 
   app.post("/cards/:cardSlug/contact-leads", { bodyLimit: 8192 }, async (request, reply) => {
@@ -219,6 +247,40 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     });
   });
 
+  app.post("/cards/:cardSlug/invoice-activation", { bodyLimit: 1024 }, async (request, reply) => {
+    await limit(request);
+    reply.header("Cache-Control", "no-store");
+    const { cardSlug } = parseBody(cardSlugSchema, request.params);
+    const { invoiceNumber } = parseBody(z.object({ invoiceNumber: z.string().trim().toUpperCase().regex(invoicePattern) }), request.body);
+    if (!transactionalEmailEnabled || !config.STOREFRONT_URL) fail("Activation email is temporarily unavailable. Please try again later.", 503);
+    const entry = await invoiceActivationTarget(and(eq(storeOrders.invoiceNumber, invoiceNumber), eq(cards.publicSlug, cardSlug)));
+    const generic = { message: "If this invoice matches the delivered card, a verification link will be sent to the order email. The link expires in 15 minutes." };
+    if (!entry) return generic;
+    if (!await allowAuthAttempt(`invoice-mail:${entry.order.id}:${entry.card.id}`, 3, 60 * 60_000) ||
+      !await allowAuthAttempt(`invoice-mail:${entry.order.id}`, 15, 60 * 60_000)) return generic;
+    const claimToken = await issueInvoiceClaimToken(entry.card.id, entry.order.id);
+    const url = new URL(`/c/${encodeURIComponent(cardSlug)}`, config.STOREFRONT_URL);
+    url.hash = `invoice-claim/${claimToken}`;
+    const sent = await sendTransactionalEmail({ to: entry.order.customer.email, subject: "Activate your Oneinfo card",
+      text: `Confirm activation for invoice ${invoiceNumber}: ${url.href}\nThe link expires in 15 minutes.`,
+      html: `<p>Confirm activation for invoice ${invoiceNumber}.</p><p><a href="${escapeEmailHtml(url.href)}">Continue activation</a></p><p>The link expires in 15 minutes.</p>`,
+      idempotencyKey: `oneinfo-invoice-claim/${randomUUID()}` });
+    if (!sent) request.log.warn({ cardId: entry.card.id }, "Invoice activation email was not accepted");
+    return generic;
+  });
+
+  app.post("/cards/:cardSlug/invoice-claim", { bodyLimit: 4096 }, async (request, reply) => {
+    await limit(request);
+    reply.header("Cache-Control", "no-store");
+    const { cardSlug } = parseBody(cardSlugSchema, request.params);
+    const { claimToken } = parseBody(z.object({ claimToken: z.string().max(2048) }), request.body);
+    const claim = await readClaimToken(claimToken);
+    if (!claim.orderId) fail("Invalid activation link.", 401);
+    const entry = await invoiceActivationTarget(and(eq(storeOrders.id, claim.orderId), eq(cards.id, claim.cardId), eq(cards.publicSlug, cardSlug)));
+    if (!entry) fail("Activation link is unavailable. Scan the delivered card and request a new link.", 401);
+    return { email: entry.order.customer.email };
+  });
+
   app.post("/cards/:cardSlug/activate", async (request, reply) => {
     await limit(request);
     const { cardSlug } = request.params as { cardSlug: string };
@@ -227,6 +289,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     if (!card) fail("Invalid secret code or card unavailable.", 403);
     const token = await db.transaction(async tx => {
       await readyCard(tx, card.id);
+      if (await invoiceOrderId(tx, card.id)) fail("This card requires invoice activation.", 403);
       const [secret] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
       if (!secret?.codeHash || secret.redeemedAt || !matchesCode(card.id, secretCode, secret.codeHash)) fail("Invalid secret code or card unavailable.", 403);
       return issueClaimToken(card.id, secret.version);
@@ -241,11 +304,12 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const claim = await readClaimToken(input.claimToken);
     const passwordHash = await hashPassword(input.password);
     const account = await db.transaction(async tx => {
-      const card = await claimable(tx, claim);
+      const card = await claimable(tx, claim, input.email);
       const { links: _, ...fields } = input.profile;
       const [profile] = await tx.insert(customerProfiles).values({ ...fields, publicSlug: `client-${randomBytes(9).toString("hex")}`, published: false }).returning();
       await ensureProfileHandle(tx, profile!.id, profile!.displayName);
-      const [created] = await tx.insert(customerAccounts).values({ email: input.email, passwordHash, profileId: profile!.id })
+      const [created] = await tx.insert(customerAccounts).values({ email: input.email, passwordHash, profileId: profile!.id,
+        ...(claim.orderId ? { emailVerifiedAt: new Date() } : {}) })
         .onConflictDoNothing({ target: customerAccounts.email }).returning();
       if (!created) fail("This email already has an account. Sign in instead.");
       await saveProfile(tx, created.profileId, input.profile);
@@ -290,7 +354,8 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const input = parseBody(ClaimCardSchema.extend({ profile: profileUpdateSchema }), request.body);
     const token = await readClaimToken(input.claimToken);
     await db.transaction(async tx => {
-      const card = await claimable(tx, token);
+      const card = await claimable(tx, token, account.email);
+      if (token.orderId && !account.emailVerifiedAt) await tx.update(customerAccounts).set({ emailVerifiedAt: new Date() }).where(eq(customerAccounts.id, account.id));
       await saveProfile(tx, account.profileId, input.profile);
       await finishClaim(tx, card, account, request.id);
     });

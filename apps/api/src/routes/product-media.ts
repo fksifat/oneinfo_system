@@ -9,8 +9,9 @@ import { put } from "@vercel/blob";
 import { requireCustomer, readClaimToken } from "../domain/customer-auth.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import { db } from "../db/client.js";
-import { cardActivationSecrets } from "../db/schema.js";
-import { eq } from "drizzle-orm";
+import { cardActivationSecrets, cards, storeOrders } from "../db/schema.js";
+import { and, eq } from "drizzle-orm";
+import { invoiceActivationTarget } from "../domain/order-invoice.js";
 
 const directory = resolve(process.env.PRODUCT_MEDIA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.product-media"));
 const formats = {
@@ -99,8 +100,14 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
       let subject: string;
       if (kind === "profile-claim") {
         const claim = await readClaimToken(request.headers.authorization?.replace(/^Bearer /, "") ?? "");
-        const [secret] = await db.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, claim.cardId)).limit(1);
-        if (!secret?.codeHash || secret.redeemedAt || secret.version !== claim.version) return reply.code(401).send({ message: "Activation expired. Scan your card and enter its secret code again." });
+        if (claim.orderId) {
+          if (!await invoiceActivationTarget(and(eq(storeOrders.id, claim.orderId), eq(cards.id, claim.cardId)))) {
+            return reply.code(401).send({ message: "Activation expired. Request a new email link." });
+          }
+        } else {
+          const [secret] = await db.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, claim.cardId)).limit(1);
+          if (!secret?.codeHash || secret.redeemedAt || secret.version !== claim.version) return reply.code(401).send({ message: "Activation expired. Scan your card and enter its secret code again." });
+        }
         subject = `claim:${claim.cardId}`;
       } else subject = `customer:${(await requireCustomer(request)).id}`;
       if (!await allowAuthAttempt(`profile-photo:${subject}`, 30, 60 * 60_000)) return reply.code(429).header("Retry-After", "3600").send({ message: "Photo upload limit reached. Please try again in an hour." });

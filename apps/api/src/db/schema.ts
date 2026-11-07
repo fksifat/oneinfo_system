@@ -435,6 +435,7 @@ export const storeCoupons = pgTable("store_coupons", {
 
 export const storeOrders = pgTable("store_orders", {
   id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  invoiceNumber: varchar("invoice_number", { length: 15 }),
   profileId: uuid("profile_id").references(() => customerProfiles.id, { onDelete: "set null" }),
   requestId: uuid("request_id").notNull(),
   requestHash: varchar("request_hash", { length: 64 }).notNull(),
@@ -463,6 +464,7 @@ export const storeOrders = pgTable("store_orders", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, table => [
   uniqueIndex("store_orders_transaction_unique").on(table.transactionId),
+  uniqueIndex("store_orders_invoice_unique").on(table.invoiceNumber),
   uniqueIndex("store_orders_request_unique").on(table.requestId),
   index("store_orders_created_idx").on(table.createdAt, table.id),
 ]);

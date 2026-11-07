@@ -10,6 +10,7 @@ import { parseBody } from "../http.js";
 import { sendReviewInvitation } from "../domain/review-invitation.js";
 import { queueOrderEmail } from "../domain/order-email-history.js";
 import { dispatchOrderEmail, reviewTokenHash } from "../domain/order-email-worker.js";
+import { assertInvoicePacked } from "../domain/order-packing.js";
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
 const tokenSchema = z.object({ token: z.string().min(40).max(100) });
@@ -79,6 +80,7 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
       if (order.cancelledAt || order.awaitingPayment) throw Object.assign(new Error("Only an open order can be delivered"), { statusCode: 409 });
       if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) throw Object.assign(new Error("Verify the order payment before marking it delivered"), { statusCode: 409 });
+      await assertInvoicePacked(tx, order);
       const [existing] = await tx.select().from(storeReviewInvites).where(eq(storeReviewInvites.orderId, id));
       if (existing?.sentAt) return;
       const tokenHash = reviewTokenHash(id);
