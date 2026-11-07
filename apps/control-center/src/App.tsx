@@ -390,13 +390,26 @@ export function App() {
 
         {view === "overview" && overview ? <section className="dashboard">
           {overview.attention && <NeedsAttention counts={overview.attention} />}
-          {!!overview.stockAlerts?.length && <section className="panel"><div className="panel-head"><h2>Low stock</h2></div>
-            <ul>{overview.stockAlerts.map((alert, index) => <li key={`${alert.name}-${index}`}>{alert.name} · {alert.remaining} remaining</li>)}</ul></section>}
+          {!!overview.stockAlerts?.length && (
+            <div className="stock-alert-strip" role="alert">
+              <div className="stock-alert-content">
+                <span className="stock-alert-tag">STOCK ALERT</span>
+                <div className="stock-alert-text">
+                  {overview.stockAlerts.map((alert, index) => (
+                    <span key={`${alert.name}-${index}`}>
+                      <strong>{alert.name}</strong> · <b>{alert.remaining} remaining</b>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <a href="#batches" className="stock-alert-action">Create batch ↗</a>
+            </div>
+          )}
           <div className="metric-grid">
-            <Metric label="Client profiles" value={overview.profiles} detail="Digital identities" />
-            <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} saleable`} />
-            <Metric label="Pending jobs" value={overview.pendingJobs} detail="Across QR, NFC and QC" highlight />
-            <Metric label="Stations online" value={overview.stationsOnline ?? 0} detail={`${overview.stations} active registrations`} />
+            <Metric label="Client profiles" value={overview.profiles} detail="Digital identities" icon="ID" />
+            <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} saleable`} icon="QC" />
+            <Metric label="Pending jobs" value={overview.pendingJobs} detail="Across QR, NFC and QC" highlight icon="⚡" />
+            <Metric label="Stations online" value={overview.stationsOnline ?? 0} detail={`${overview.stations} active registrations`} icon="PC" />
           </div>
           <div className="dashboard-grid">
             <article className="panel lifecycle-panel"><div className="panel-head"><div><p className="eyebrow">CARD LIFECYCLE</p><h2>Production readiness</h2></div><span>{overview.cards} cards</span></div>
@@ -469,8 +482,19 @@ export function App() {
   );
 }
 
-function Metric({ label, value, detail, highlight = false }: { label: string; value: number; detail: string; highlight?: boolean }) {
-  return <article className={`metric ${highlight ? "highlight" : ""}`}><span>{label}</span><strong>{value.toLocaleString()}</strong><small>{detail}</small></article>;
+function Metric({ label, value, detail, highlight = false, icon }: { label: string; value: number; detail: string; highlight?: boolean; icon?: string }) {
+  return (
+    <article className={`metric ${highlight ? "highlight" : ""}`}>
+      <div className="metric-header">
+        <span className="metric-label">{label}</span>
+        {icon && <span className="metric-badge" aria-hidden="true">{icon}</span>}
+      </div>
+      <strong className="metric-value">{value.toLocaleString()}</strong>
+      <div className="metric-footer">
+        <small className="metric-detail">{detail}</small>
+      </div>
+    </article>
+  );
 }
 
 function Empty({ title, text, action, onAction }: { title: string; text: string; action: string; onAction: () => void }) {

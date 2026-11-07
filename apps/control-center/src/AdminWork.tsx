@@ -17,12 +17,43 @@ type Task = { key: string; stage: Stage; units: number; orderId: string | null; 
 type FollowUp = { cardId: string; publicSlug: string; customer: string; orderId: string; deliveredAt: string };
 
 export function NeedsAttention({ counts }: { counts: Partial<Record<Stage, number>> }) {
-  return <section className="panel"><div className="panel-head"><div><h2>Needs attention</h2><p>Cards by next step. Each card appears in one queue.</p></div></div>
-    <div className="attention-list">{Object.entries(stages).map(([key, [label]]) => {
-      const count = counts[key as Stage] ?? 0;
-      return <a key={key} href={`?work=${key}#tracking`}><span>{label}</span><strong>{count}</strong></a>;
-    })}</div>
-  </section>;
+  const total = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
+  return (
+    <section className="panel attention-panel">
+      <div className="panel-head">
+        <div>
+          <div className="panel-eyebrow-row">
+            <span className="live-pulse-dot" aria-hidden="true" />
+            <span className="panel-eyebrow">OPERATIONAL QUEUES</span>
+          </div>
+          <h2>Needs attention</h2>
+          <p>Active items organized by next required production step. Click any queue to proceed.</p>
+        </div>
+        <div className="attention-summary-badge">
+          <strong>{total}</strong>
+          <span>pending action{total === 1 ? "" : "s"}</span>
+        </div>
+      </div>
+      <div className="attention-grid">
+        {Object.entries(stages).map(([key, [label, action]]) => {
+          const count = counts[key as Stage] ?? 0;
+          const hasItems = count > 0;
+          return (
+            <a key={key} href={`?work=${key}#tracking`} className={`attention-chip stage-${key} ${hasItems ? "has-items" : "is-zero"}`}>
+              <div className="attention-chip-header">
+                <span className="stage-status-dot" aria-hidden="true" />
+                <span className="stage-num">{count}</span>
+              </div>
+              <strong className="stage-title">{label}</strong>
+              <span className="stage-link-hint">
+                {action} <span className="arrow-glyph" aria-hidden="true">→</span>
+              </span>
+            </a>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 export function WorkQueue({ token }: { token: string }) {
