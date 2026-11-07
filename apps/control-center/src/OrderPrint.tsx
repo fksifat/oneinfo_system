@@ -1,21 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { StoreOrder } from "@oneinfo/contracts";
-import lightBack from "../../../output/essential-svg/03_PRINT_Light_Back.svg?url";
-import darkBack from "../../../output/essential-svg/05_PRINT_Black_Back.svg?url";
+import { loadPrintTemplate, printArtwork } from "./print-artwork.js";
 import { api } from "./api.js";
 
 type Prepared = { printed: false; finish: "light" | "dark"; imageData: string; publicSlug: string };
 type Result = Prepared | { printed: true };
 
-function printArtwork(template: string, imageData: string) {
-  if (!/^data:image\/png;base64,[a-z0-9+/=]+$/i.test(imageData)) throw new Error("This QR image cannot be exported. Prepare the card again.");
-  if (!template.includes('width="260.79" height="172.91"') || !template.includes("</svg>")) throw new Error("The back artwork has no matching print dimensions. Check the configured template.");
-  // EPS artwork bounds are 92 Ã— 61 mm including bleed. Cover the template's sample QR.
-  return template.replace('width="260.79" height="172.91"', 'width="92mm" height="61mm"')
-    .replace("</svg>", `<rect x="103" y="61" width="55" height="55" fill="white"/><image x="103" y="61" width="55" height="55" href="${imageData}" style="image-rendering:pixelated"/></svg>`);
-}
-
-export function OrderPrint({ order, token, onChange }: { order: StoreOrder; token: string; onChange: () => void }) {
+export function OrderPrint({ order, token, onChange, startCardId, initiallyOpen }: { order: StoreOrder; token: string; onChange: () => void; startCardId?: string | null; initiallyOpen?: boolean }) {
   const [selected, setSelected] = useState<number>();
   const [prepared, setPrepared] = useState<Prepared>();
   const [step, setStep] = useState<"prepare" | "preview" | "scan" | "confirm">("prepare");
@@ -28,7 +19,8 @@ export function OrderPrint({ order, token, onChange }: { order: StoreOrder; toke
   const assigned = new Map(order.assignedCards?.map(card => [`${card.lineIndex}:${card.unitIndex}`, card]));
   const finished = slots.map((slot, index) => confirmed.includes(index) || Boolean(assigned.get(`${slot.lineIndex}:${slot.unitIndex}`)?.printConfirmedAt));
   const next = finished.indexOf(false);
-  const active = selected ?? next;
+  const requested = startCardId ? slots.findIndex(slot => assigned.get(`${slot.lineIndex}:${slot.unitIndex}`)?.id === startCardId) : -1;
+  const active = selected ?? (requested !== -1 && !finished[requested] ? requested : next);
   const slot = slots[active];
   const printed = finished[active];
   const eligible = (order.status === "RECEIVED" || order.status === "PROCESSING") && order.paymentStatus !== "PENDING_VERIFICATION";
@@ -52,9 +44,8 @@ export function OrderPrint({ order, token, onChange }: { order: StoreOrder; toke
     if (!prepared) return;
     const controller = new AbortController();
     let url: string | undefined;
-    void fetch(prepared.finish === "dark" ? darkBack : lightBack, { signal: controller.signal }).then(async response => {
-      if (!response.ok) throw new Error("Could not load the back artwork. Prepare the card again.");
-      const svg = printArtwork(await response.text(), prepared.imageData);
+    void loadPrintTemplate(prepared.finish, controller.signal).then(template => {
+      const svg = printArtwork(template, prepared.imageData);
       if (controller.signal.aborted) return;
       url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
       setArtwork(url);
@@ -82,7 +73,7 @@ export function OrderPrint({ order, token, onChange }: { order: StoreOrder; toke
   }
 
   if (!total || (!eligible && !printedCount)) return null;
-  return <details className="order-print">
+  return <details className="order-print" open={initiallyOpen || undefined}>
     <summary><strong>Card printing</strong> <span>{printedCount} of {total} printed</span></summary>
     <div className="order-print-body">
       <div className="order-print-step">

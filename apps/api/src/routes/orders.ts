@@ -12,6 +12,7 @@ import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardActivationSecrets, cardBatches, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
 import { registerOrderPrint } from "./order-print.js";
+import { qrUrl } from "../domain/card-urls.js";
 import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
 import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
@@ -43,6 +44,34 @@ function conflict(message: string): never {
 
 export const orderRoutes: FastifyPluginAsync = async app => {
   registerOrderPrint(app);
+  app.post("/admin/:id/packing-check", { bodyLimit: 524288 }, async request => {
+    const operator = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    const { scans } = parseBody(z.object({ scans: z.array(z.string().trim().min(1).max(2048)).max(4950) }), request.body);
+    return db.transaction(async tx => {
+      await lockPrintedStock(tx);
+      const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
+      if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
+      if (order.cancelledAt || order.awaitingPayment || order.shippedAt || order.deliveredAt) conflict("Packing is available for open orders only.");
+      if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) conflict("Verify payment before packing.");
+      const assigned = await tx.select({ card: cards, printed: cardBatches.printConfirmedAt }).from(orderCardAllocations)
+        .innerJoin(cards, eq(cards.id, orderCardAllocations.cardId)).innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
+        .where(eq(orderCardAllocations.orderId, id)).for("update", { of: cards });
+      const required = order.items.reduce((sum, item) => sum + item.quantity, 0);
+      if (assigned.length !== required || assigned.some(({ card, printed }) => !printed || card.qcStatus !== "PASSED" ||
+          card.nfcStatus !== "WRITTEN" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus))) {
+        conflict("All ordered cards need confirmed printing, NFC and passed QC before packing.");
+      }
+      const byCode = new Map(assigned.flatMap(({ card }) => [card.publicSlug, qrUrl(card.canonicalUrl)].map(code => [code, card.id] as const)));
+      const matched = scans.map(code => byCode.get(code));
+      if (matched.length !== required || matched.some(id => !id) || new Set(matched).size !== required) {
+        conflict("Scan each assigned card once. A missing, duplicate, or different card cannot pass the packing check.");
+      }
+      await tx.insert(auditLogs).values({ actorId: operator.operatorId, action: "ORDER_PACKING_CHECKED", targetType: "store_order",
+        targetId: id, requestId: request.id, metadata: { cardIds: matched } });
+      return { checked: required };
+    });
+  });
   app.post("/coupon", { bodyLimit: 1024 }, async (request, reply) => {
     const { code } = parseBody(z.object({ code: CouponCodeSchema }), request.body);
     const [coupon] = await db.select().from(storeCoupons).where(eq(storeCoupons.code, code));
@@ -267,7 +296,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const page = rows.slice(0, 50);
     const allocations = page.length ? await db.select({ orderId: orderCardAllocations.orderId, id: cards.id, publicSlug: cards.publicSlug,
       lineIndex: orderCardAllocations.lineIndex, unitIndex: orderCardAllocations.unitIndex, printConfirmedAt: cardBatches.printConfirmedAt,
-      canonicalUrl: cards.canonicalUrl, qcStatus: cards.qcStatus }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
+      canonicalUrl: cards.canonicalUrl, qcStatus: cards.qcStatus, nfcStatus: cards.nfcStatus, inventoryStatus: cards.inventoryStatus }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
       .where(inArray(orderCardAllocations.orderId, page.map(row => row.id))) : [];
     const invites = page.length ? await db.select().from(storeReviewInvites).where(inArray(storeReviewInvites.orderId, page.map(row => row.id))) : [];

@@ -1,3 +1,5 @@
+import { OrderPrint } from "./OrderPrint.js";
+import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api } from "./api.js";
@@ -11,6 +13,9 @@ const searchFields = ["payment", "delivery", "qr"] as const;
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 
 export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void }) {
+  const params = new URLSearchParams(location.search);
+  const requestedOrder = params.get("order");
+  const requestedTask = params.get("task");
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [items, setItems] = useState<StoreOrder[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -23,7 +28,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   const [verifyingPayment, setVerifyingPayment] = useState<string>();
   const [delivering, setDelivering] = useState<string>();
   const [loading, setLoading] = useState(false);
-  const [filters, setFilters] = useState<AdminOrderSearch>({});
+  const [filters, setFilters] = useState<AdminOrderSearch>(() => requestedOrder ? { query: requestedOrder } : {});
   const activeFilters = useRef(filters);
   const [saving, setSaving] = useState(false);
   const [orderError, setOrderError] = useState("");
@@ -246,7 +251,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     <section className="panel store-orders-list">
       <div className="panel-head"><div><h2>Received orders</h2><p>Review payments, delivery details, and order items.</p></div><button type="button" className="quiet" disabled={loading} onClick={() => void loadOrders()}>Refresh</button></div>
       {supportsSearch && <form className="order-filter-form" onSubmit={searchOrders}>
-        <label>Search orders<input type="search" name="query" maxLength={254} placeholder="Order ID, phone or email" /></label>
+        <label>Search orders<input type="search" name="query" maxLength={254} defaultValue={requestedOrder ?? ""} placeholder="Order ID, phone or email" /></label>
         <label>Payment<select name="payment"><option value="">Any</option><option value="PENDING_VERIFICATION">Pending</option><option value="VERIFIED">Verified</option></select></label>
         <label>Delivery<select name="delivery"><option value="">Any</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label>QR allocation<select name="qr"><option value="">Any</option><option value="AWAITING_QR">Awaiting QR</option><option value="PARTIAL">Partially assigned</option><option value="ASSIGNED">Assigned</option></select></label>
@@ -255,7 +260,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       {orderError && <p className="store-order-notice is-error" role="alert">{orderError}</p>}
       {orderMessage && <p className="store-order-notice" role="status">{orderMessage}</p>}
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
-      {items.map(order => <details className="store-order" key={order.id}>
+      {items.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
         <summary>
           <span className="store-order-customer"><strong>{order.customer.name}</strong>{order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && <small>{order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}</small>}<small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
           <span className="store-order-total">
@@ -270,7 +275,9 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
         </summary>
         <div className="store-order-content">
           <OrderTrackingPipeline order={order} compact />
-          <OrderPrint order={order} token={token} onChange={() => void loadOrders()} />
+          <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
+            startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />
+          <OrderPacking order={order} token={token} initiallyOpen={requestedOrder === order.id && requestedTask === "packing"} />
           <dl>
             <div><dt>Order ID</dt><dd>{order.id}</dd></div>
             <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted" : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
@@ -420,4 +427,4 @@ function OrderEmailHistory({ orderId, token }: { orderId: string; token: string 
     </li>)}</ul>}
   </div>;
 }
-import { OrderPrint } from "./OrderPrint.js";
+

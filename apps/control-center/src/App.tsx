@@ -1,3 +1,6 @@
+import { ActivationFollowUp, CardLookup, NeedsAttention, WorkQueue } from "./AdminWork.js";
+import { BatchReprint } from "./BatchReprint.js";
+import { productionUrl as PRODUCTION_URL, workstationLink } from "./admin-links.js";
 import { Orders } from "./Orders.js";
 import { AdminTrackingHub } from "./AdminTrackingHub.js";
 import { Products } from "./Products.js";
@@ -28,7 +31,6 @@ const navGroups: { label: string; pages: View[] }[] = [
   { label: "Production", pages: ["cards", "batches", "production", "stations"] },
   { label: "People & activity", pages: ["profiles", "companies", "audit"] },
 ];
-const PRODUCTION_URL = (import.meta.env.VITE_PRODUCTION_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
 
 
 interface Overview {
@@ -40,6 +42,7 @@ interface Overview {
   qrArtifacts: number;
   nfcAttempts: number;
   inventory: Record<string, number>;
+  attention?: Record<string, number>;
   stockAlerts?: { name: string; remaining: number }[];
 }
 
@@ -78,7 +81,7 @@ interface Card {
 
 interface CardRow { card: Card; profileName: string | null; imageData: string | null; activationCodeIssuedAt: string | null }
 interface Batch { id: string; batchCode: string; productVariantId: string; plannedQuantity: number; status: string; createdAt: string; total: number; qrGenerated: number; nfcWritten: number; qcPassed: number }
-interface Station { id: string; stationCode: string; name: string; status: string; lastSeenAt: string | null; createdAt: string }
+interface Station { id: string; stationCode: string; name: string; status: string; lastSeenAt: string | null; createdAt: string; online: boolean; currentJob?: { type: string; status: string; publicSlug: string; cardId: string; batchId: string } | null }
 interface Audit { id: string; action: string; targetType: string; targetId: string; createdAt: string }
 
 interface ProfileDraft {
@@ -186,6 +189,8 @@ export function App() {
   const [cards, setCards] = useState<CardRow[]>([]);
   const [cardPages, setCardPages] = useState(1);
   const [moreCards, setMoreCards] = useState(false);
+  const [draftProfiles, setDraftProfiles] = useState(false);
+  const [reprintBatch, setReprintBatch] = useState("");
   const [batches, setBatches] = useState<Batch[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [audits, setAudits] = useState<Audit[]>([]);
@@ -201,7 +206,7 @@ export function App() {
   const [listMore, setListMore] = useState({ profiles: false, batches: false, audit: false });
   useEffect(() => { setSearch(""); setListQuery(""); setListPage(1); }, [view]);
   useEffect(() => { const timer = setTimeout(() => { setListQuery(search); setListPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
-  const listParams = (target: string) => `?page=${view === target ? listPage : 1}&query=${encodeURIComponent(view === target ? listQuery : "")}`;
+  const listParams = (target: string) => `?page=${view === target ? listPage : 1}&query=${encodeURIComponent(view === target ? listQuery : "")}${target === "profiles" && view === target && draftProfiles ? "&visibility=draft" : ""}`;
   const [syncError, setSyncError] = useState("");
   const [lastSynced, setLastSynced] = useState("");
   const refreshing = useRef<symbol | undefined>(undefined);
@@ -268,7 +273,7 @@ export function App() {
       const message = error instanceof Error ? error.message : "Could not refresh data";
       setSyncError(message); setMessage(message);
     } finally { if (refreshing.current === refreshId) refreshing.current = undefined; }
-  }, [token, cardPages, listPage, listQuery, view]);
+  }, [token, cardPages, listPage, listQuery, view, draftProfiles]);
 
   useEffect(() => {
     void refresh();
@@ -329,6 +334,7 @@ export function App() {
 
   const deferredSearch = useDeferredValue(search);
   const filteredProfiles = profiles;
+  const currentGroupLabel = navGroups.find(g => g.pages.includes(view))?.label ?? "Workspace";
 
   if (!token) return (
     <div className="auth-page">
@@ -372,20 +378,24 @@ export function App() {
 
       <main className="workspace">
         <header className="workspace-header">
-          <div><p className="eyebrow">{view.replaceAll("_", " ")}</p><h1>{nav.find((item) => item.id === view)?.label}</h1></div>
-          <div className="header-tools">{view === "orders" && <button className="quiet" onClick={() => setOrdersSettingsOpen(true)}>Settings</button>}<button className="quiet" onClick={() => void refresh()}>Refresh</button><div className="user-chip">FA</div></div>
+          <div className="workspace-title-block">
+            <span className="workspace-breadcrumb">{currentGroupLabel} <i aria-hidden="true">/</i> {nav.find((item) => item.id === view)?.label}</span>
+            <h1>{nav.find((item) => item.id === view)?.label}</h1>
+          </div>
+          <div className="header-tools">{view === "orders" && <button className="quiet" onClick={() => setOrdersSettingsOpen(true)}>Settings</button>}<button className="quiet" onClick={() => void refresh()}>Refresh</button><div className="user-chip" title="Operator: FA">FA</div></div>
         </header>
         {syncError && <div className="workspace-error" role="alert"><span>Live updates paused: {syncError}</span><button className="quiet" onClick={() => void refresh()}>Retry connection</button></div>}
         {!lastSynced && !syncError && <p role="status">Loading your workspace…</p>}
 
         {view === "overview" && overview ? <section className="dashboard">
+          {overview.attention && <NeedsAttention counts={overview.attention} />}
           {!!overview.stockAlerts?.length && <section className="panel"><div className="panel-head"><h2>Low stock</h2></div>
             <ul>{overview.stockAlerts.map((alert, index) => <li key={`${alert.name}-${index}`}>{alert.name} · {alert.remaining} remaining</li>)}</ul></section>}
           <div className="metric-grid">
             <Metric label="Client profiles" value={overview.profiles} detail="Digital identities" />
             <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} saleable`} />
             <Metric label="Pending jobs" value={overview.pendingJobs} detail="Across QR, NFC and QC" highlight />
-            <Metric label="Active stations" value={overview.stations} detail="Registered workstations" />
+            <Metric label="Stations online" value={stations.filter(station => station.online).length} detail={`${overview.stations} active registrations`} />
           </div>
           <div className="dashboard-grid">
             <article className="panel lifecycle-panel"><div className="panel-head"><div><p className="eyebrow">CARD LIFECYCLE</p><h2>Production readiness</h2></div><span>{overview.cards} cards</span></div>
@@ -400,12 +410,13 @@ export function App() {
 
         {view === "products" ? <Products token={token} /> : null}
         {view === "orders" ? <Orders token={token} settingsOpen={ordersSettingsOpen} onSettingsOpenChange={setOrdersSettingsOpen} /> : null}
-        {view === "tracking" ? <AdminTrackingHub token={token} /> : null}
+        {view === "tracking" ? <><WorkQueue token={token} /><AdminTrackingHub token={token} /></> : null}
         {view === "reviews" ? <Reviews token={token} /> : null}
         {view === "companies" ? <TeamAdmin token={token} /> : null}
 
         {view === "profiles" ? <section>
-          <div className="list-toolbar"><input type="search" aria-label="Search client profiles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><button onClick={() => { setProfileError(""); setEditing({ ...blankProfile }); }}>New client profile</button></div>
+          <ActivationFollowUp token={token} />
+          <div className="list-toolbar"><input type="search" aria-label="Search client profiles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><label><input type="checkbox" checked={draftProfiles} onChange={event => { setDraftProfiles(event.target.checked); setListPage(1); }} /> Unpublished only</label><button onClick={() => { setProfileError(""); setEditing({ ...blankProfile }); }}>New client profile</button></div>
           <div className="profile-grid">{filteredProfiles.map((profile) => <article className="profile-tile" key={profile.id}>
             <div className={`tile-cover theme-${profile.theme.toLowerCase()}`}></div><div className="tile-avatar">{initials(profile.displayName)}</div>
             <span className={profile.published ? "pill success" : "pill"}>{profile.published ? "Published" : "Draft"}</span>
@@ -415,11 +426,24 @@ export function App() {
           {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
         </section> : null}
 
-        {view === "cards" ? <><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<div key={card.id}><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a><CardPassport cardId={card.id} token={token} /></div>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
-          <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <button onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button>}</> : null}
+        {view === "cards" ? <><CardLookup token={token} /><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<div key={card.id}><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a><CardPassport cardId={card.id} token={token} /></div>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
+          <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <div className="table-footer-action"><button className="quiet" onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button></div>}</> : null}
         {["batches", "audit"].includes(view) && <div className="list-toolbar"><label>Search {view}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label></div>}
-        {view === "batches" ? <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map((batch) => [batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status, <a href={`${PRODUCTION_URL}/?batch=${encodeURIComponent(batch.id)}`} target="_blank" rel="noreferrer">Open batch ↗</a>])} /> : null}
-        {view === "stations" ? <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">ACCESS CONTROL</p><h2>Production stations</h2></div></div><div className="data-table"><div className="data-row data-header"><span>Station</span><span>Status</span><span>Last seen</span><span>Action</span></div>{stations.map((station) => <div className="data-row station-row" key={station.id}><span><strong>{station.stationCode}</strong><small>{station.name}</small></span><span><b className={`status-text ${station.status.toLowerCase()}`}>{station.status}</b></span><span>{formatDate(station.lastSeenAt)}</span><span>{station.status === "ACTIVE" ? <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button> : "—"}<button className="quiet" disabled={busy} onClick={() => void recoverStation(station)}>Recover unfinished jobs</button></span></div>)}</div></section> : null}
+        {view === "batches" ? <>
+          {reprintBatch && <section className="panel operation-panel" id="batch-reprint"><BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} /></section>}
+          <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map(batch => [
+            batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status,
+            <div key={batch.id} className="operation-actions"><a href={workstationLink(batch.id)} target="_blank" rel="noreferrer">Open batch</a>
+              <button className="quiet" onClick={() => { setReprintBatch(batch.id); requestAnimationFrame(() => document.getElementById("batch-reprint")?.scrollIntoView({ block: "start" })); }}>Reprint</button></div>
+          ])} /></> : null}
+        {view === "stations" ? <section className="panel operation-panel"><div className="panel-head"><div><h2>Production stations</h2>
+          <p>{stations.filter(station => station.online).length} online · {stations.length} shown. Online means seen within the last 30 seconds.</p></div></div>
+          {stations.map(station => <div className="operation-row" key={station.id}><div><strong>{station.stationCode} · {station.name}</strong>
+            <small>{station.status === "REVOKED" ? "Revoked" : station.online ? "Online now" : "Offline"} · Last seen {formatDate(station.lastSeenAt)}</small>
+            {station.currentJob ? <small>{station.currentJob.status === "RETRYABLE_FAILURE" ? "Needs retry" : "Current job"} · {station.currentJob.type.replaceAll("_", " ")} · <a href={workstationLink(station.currentJob.batchId, station.currentJob.cardId)} target="_blank" rel="noreferrer">{station.currentJob.publicSlug}</a></small> : <small>No active job</small>}</div>
+            <div className="operation-actions">{station.status === "ACTIVE" && <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button>}
+              <button className="quiet" disabled={busy} onClick={() => void recoverStation(station)}>Recover unfinished jobs</button></div></div>)}
+        </section> : null}
         {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
         {view === "production" ? <section className="production-hub">
           <article className="panel connected-production-head"><div><p className="eyebrow">CONNECTED PRODUCTION WORKSPACE</p><h2>QR, NFC and final QC</h2><p>Your production workstation shares card, order and QC records with this Admin through the cloud database. This dashboard refreshes every five seconds.</p></div>{embedProduction ? <a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open full console ↗</a> : null}</article>

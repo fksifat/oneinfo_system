@@ -1,5 +1,6 @@
+import { printTemplateUrl } from "./print-artwork.js";
 import { useCallback, useEffect, useLayoutEffect, useState, useRef } from "react";
-import { ProductImageSchema, ProductInputSchema, productMedia, discountPercent, variantPrice, type Product, type ProductInput, type ProductVariant } from "@oneinfo/contracts";
+import { printFinish, ProductImageSchema, ProductInputSchema, productMedia, discountPercent, variantPrice, type Product, type ProductInput, type ProductVariant } from "@oneinfo/contracts";
 import { api, productMediaUrl } from "./api.js";
 import { ProductMediaEditor } from "./ProductMediaEditor.js";
 
@@ -124,7 +125,8 @@ export function Products({ token }: { token: string }) {
               <div className="catalog-form-grid" hidden={section !== "media"}>
                 <label className="full catalog-default-preview"><span>Default large preview<small>Opens first when this colour is selected.</small></span><select value={v.defaultMediaIndex} onChange={e=>changeVariant(v.id,{defaultMediaIndex:Number(e.target.value)})}>{(v.media?.length ? v.media : [null]).map((m,i)=><option value={i} key={m?.id ?? "empty"}>{m ? `${i+1}. ${m.label || (m.type === "model" ? "3D View" : m.type)}` : "Card illustration"}</option>)}</select></label>
                 <ProductMediaEditor items={v.media ?? []} token={token} onChange={media=>changeVariant(v.id,{media,defaultMediaIndex:Math.min(v.defaultMediaIndex,Math.max(0,media.length-1)),imageUrl:"",backImageUrl:""})} />
-              </div><div className="variant-footer" hidden={section === "media"}><label className="catalog-check"><input type="checkbox" checked={v.available} onChange={e => changeVariant(v.id,{available:e.target.checked})} />Available to order</label>
+              </div>{section === "colours" && <PrintSetup slug={editing.slug} appearance={v.appearance} />}
+              <div className="variant-footer" hidden={section === "media"}><label className="catalog-check"><input type="checkbox" checked={v.available} onChange={e => changeVariant(v.id,{available:e.target.checked})} />Available to order</label>
                 <label>Stock quantity <input type="number" min={0} max={1000000} step={1} placeholder="Untracked" value={v.stockQuantity ?? ""}
                   onChange={event => changeVariant(v.id, { stockQuantity: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>
                 <button type="button" className="catalog-remove" disabled={editing.variants.length === 1} onClick={() => { const variants=editing.variants.filter(x => x.id !== v.id); setEditing({...editing,variants}); setActiveVariant(variants[0]!.id); }}>Remove colour</button></div></div>}
@@ -146,4 +148,14 @@ export function Products({ token }: { token: string }) {
       </form>
     </dialog>}
   </section>;
+}
+
+function PrintSetup({ slug, appearance }: { slug: string; appearance: string }) {
+  const finish = printFinish(slug, appearance);
+  return <details className="variant-print-setup"><summary>Print setup · {finish ? "Ready" : "Artwork needed"}</summary>
+    {finish ? <><p>Back artwork, 92 × 61 mm with bleed, and QR position are set.</p>
+      <img className="order-print-preview" loading="lazy" src={printTemplateUrl(finish)} alt="Sample back artwork and QR placement" />
+      <small>Sample preview. Prepare an order card to download its unique QR.</small></> :
+      <p>Back artwork, print size and QR position need a production template for this colour.</p>}
+  </details>;
 }

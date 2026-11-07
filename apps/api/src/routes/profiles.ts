@@ -1,6 +1,7 @@
 import { adminPage } from "../domain/admin-page.js";
 import { ensureProfileHandle } from "../domain/profile-handles.js";
 import type { FastifyPluginAsync } from "fastify";
+import { z } from "zod";
 import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
@@ -91,7 +92,10 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   app.get("/", async (request) => {
     await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);
     const { page, query } = adminPage(request.query);
-    const profiles = await db.select().from(customerProfiles).where(sql`position(lower(${query}) in lower(${customerProfiles.displayName} || ' ' || ${customerProfiles.company} || ' ' || ${customerProfiles.publicSlug} || ' ' || coalesce(${customerProfiles.handle}, '') || ' ' || ${customerProfiles.email})) > 0`).orderBy(asc(customerProfiles.displayName), asc(customerProfiles.id)).limit(101).offset((page - 1) * 100);
+    const { visibility } = parseBody(z.object({ visibility: z.literal("draft").optional() }), request.query);
+    const profiles = await db.select().from(customerProfiles).where(and(visibility ? eq(customerProfiles.published, false) : undefined,
+      sql`position(lower(${query}) in lower(${customerProfiles.displayName} || ' ' || ${customerProfiles.company} || ' ' || ${customerProfiles.publicSlug} || ' ' || coalesce(${customerProfiles.handle}, '') || ' ' || ${customerProfiles.email})) > 0`))
+      .orderBy(asc(customerProfiles.displayName), asc(customerProfiles.id)).limit(101).offset((page - 1) * 100);
     return { items: profiles.slice(0, 100), hasMore: profiles.length > 100 };
   });
 

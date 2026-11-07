@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { and, eq } from "drizzle-orm";
+import { printFinish } from "@oneinfo/contracts";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
@@ -37,8 +38,8 @@ export function registerOrderPrint(app: FastifyInstance) {
       }
 
       const [product] = await tx.select({ slug: products.slug, variants: products.variants }).from(products).where(eq(products.id, line!.productId));
-      const finish = product?.variants.find(variant => variant.id === line!.variantId)?.appearance;
-      if (product?.slug !== "oneinfo-essential" || (finish !== "light" && finish !== "dark")) {
+      const finish = printFinish(product?.slug ?? "", product?.variants.find(variant => variant.id === line!.variantId)?.appearance);
+      if (!finish) {
         return conflict("No print artwork is configured for this variant. Configure its back artwork, print dimensions, and QR position before downloading.");
       }
       let card = allocated?.card;
