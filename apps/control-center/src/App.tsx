@@ -440,8 +440,61 @@ export function App() {
           {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
         </section> : null}
 
-        {view === "cards" ? <><CardLookup token={token} /><DataPanel title="Confirmed printed QR stock" columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]} rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [<div key={card.id}><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{imageData && <img src={imageData} width="72" height="72" alt={`QR ${card.publicSlug}`} />}<br />{card.publicSlug}</a><CardPassport cardId={card.id} token={token} /></div>, profileName ?? "Awaiting client signup", card.qrStatus, card.nfcStatus, card.qcStatus, card.inventoryStatus,
-          <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <div className="table-footer-action"><button className="quiet" onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button></div>}</> : null}
+        {view === "cards" ? (
+          <>
+            <CardLookup token={token} />
+            <DataPanel
+              title="Confirmed printed QR stock"
+              columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]}
+              rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [
+                <div key={card.id} className="card-qr-cell">
+                  <a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="qr-thumb-anchor" title={"Open " + card.publicSlug}>
+                    {imageData ? (
+                      <div className="qr-thumb-box">
+                        <img src={imageData} width="52" height="52" alt={"QR " + card.publicSlug} />
+                      </div>
+                    ) : (
+                      <div className="qr-thumb-box qr-placeholder"><span>QR</span></div>
+                    )}
+                  </a>
+                  <div className="card-qr-meta">
+                    <a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="card-slug-link">
+                      <code>{card.publicSlug}</code>
+                      <span className="external-glyph" aria-hidden="true">↗</span>
+                    </a>
+                    <div className="card-cell-actions">
+                      <CardPassport cardId={card.id} token={token} />
+                    </div>
+                  </div>
+                </div>,
+                profileName ? (
+                  <div className="card-profile-cell" key="profile">
+                    <div className="profile-mini-avatar" aria-hidden="true">{initials(profileName)}</div>
+                    <div className="profile-cell-meta">
+                      <strong className="profile-cell-name">{profileName}</strong>
+                      <small className="profile-cell-sub">Assigned identity</small>
+                    </div>
+                  </div>
+                ) : (
+                  <span className="awaiting-signup-pill" key="awaiting">
+                    <span className="status-dot"></span>
+                    Awaiting signup
+                  </span>
+                ),
+                <StatusBadge key="qr" value={card.qrStatus} />,
+                <StatusBadge key="nfc" value={card.nfcStatus} />,
+                <StatusBadge key="qc" value={card.qcStatus} />,
+                <StatusBadge key="inv" value={card.inventoryStatus} />,
+                <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />
+              ])}
+            />
+            {moreCards && (
+              <div className="table-footer-action">
+                <button className="quiet" onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button>
+              </div>
+            )}
+          </>
+        ) : null}
         {["batches", "audit"].includes(view) && <div className="list-toolbar"><label>Search {view}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label></div>}
         {view === "batches" ? <>
           {reprintBatch && <section className="panel operation-panel" id="batch-reprint"><BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} onClose={() => setReprintBatch("")} /></section>}
@@ -494,6 +547,21 @@ function Metric({ label, value, detail, highlight = false, icon }: { label: stri
         <small className="metric-detail">{detail}</small>
       </div>
     </article>
+  );
+}
+
+function StatusBadge({ value }: { value: string }) {
+  const norm = value.toUpperCase();
+  let tone = "is-neutral";
+  if (["PASSED", "GENERATED", "WRITTEN", "ACTIVE", "READY", "ONLINE", "PUBLISHED", "SALEABLE"].includes(norm)) tone = "is-good";
+  else if (["RESERVED", "PENDING", "UNWRITTEN", "BLANK", "NOT_READY", "DRAFT"].includes(norm)) tone = "is-warn";
+  else if (["FAILED", "RETRYABLE_FAILURE", "REVOKED", "REJECTED"].includes(norm)) tone = "is-bad";
+
+  return (
+    <span className={"table-status-pill " + tone}>
+      <span className="status-dot"></span>
+      {value.replaceAll("_", " ")}
+    </span>
   );
 }
 

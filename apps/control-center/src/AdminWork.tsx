@@ -132,21 +132,48 @@ export function CardLookup({ token }: { token: string }) {
   const [card, setCard] = useState<FoundCard>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  return <section className="panel operation-panel"><h2>Scan to find a card</h2>
-    <form className="list-toolbar" onSubmit={async e => {
-      e.preventDefault(); if (busy) return;
-      const value = new FormData(e.currentTarget).get("value"); setBusy(true); setError(""); setCard(undefined);
-      try { setCard(await api<FoundCard>("/api/v1/admin/cards/lookup", token, { method: "POST", body: JSON.stringify({ value }) })); }
-      catch (e) { setError(e instanceof Error ? e.message : "Could not find the card."); }
-      finally { setBusy(false); }
-    }}>
-      <label>QR link or card code<input name="value" type="search" maxLength={2048} required placeholder="Scan with a QR reader or paste the link" /></label>
-      <button disabled={busy}>{busy ? "Finding…" : "Find card"}</button>
-    </form>
-    {error && <p role="alert">{error}</p>}
-    {card && <div className="operation-row" role="status"><div><strong>{card.publicSlug} · {card.inventoryStatus.replaceAll("_", " ")}</strong>
-      <small>{card.printConfirmedAt ? "Print confirmed" : "Print unconfirmed"} · {card.batchCode}</small></div>
-      <div className="operation-actions"><a href={workstationLink(card.batchId, card.id)} target="_blank" rel="noreferrer">Open batch</a>
-        {card.orderId && <a href={orderLink(card.orderId)}>Open order</a>}<CardPassport cardId={card.id} token={token} /></div></div>}
-  </section>;
+  return (
+    <section className="panel operation-panel card-lookup-panel">
+      <div className="panel-head card-lookup-head">
+        <div>
+          <span className="eyebrow">HARDWARE INSPECTION</span>
+          <h2>Scan to find a card</h2>
+          <p>Scan with an optical 2D barcode scanner or paste the public card URL to inspect state.</p>
+        </div>
+      </div>
+      <form className="list-toolbar card-lookup-form" onSubmit={async e => {
+        e.preventDefault(); if (busy) return;
+        const value = new FormData(e.currentTarget).get("value"); setBusy(true); setError(""); setCard(undefined);
+        try { setCard(await api<FoundCard>("/api/v1/admin/cards/lookup", token, { method: "POST", body: JSON.stringify({ value }) })); }
+        catch (e) { setError(e instanceof Error ? e.message : "Could not find the card."); }
+        finally { setBusy(false); }
+      }}>
+        <label className="card-lookup-label">
+          <span className="control-kicker">QR link or card code</span>
+          <div className="card-lookup-input-wrap">
+            <span className="scanner-glyph" aria-hidden="true">📷</span>
+            <input name="value" type="search" maxLength={2048} required placeholder="Scan with a QR reader or paste card URL (e.g. https://oneinfo.online/c/DwwWaqIx8xQa)" />
+          </div>
+        </label>
+        <button className="button-lookup-submit" disabled={busy}>{busy ? "Finding…" : "Find card"}</button>
+      </form>
+      {error && <p role="alert" className="lookup-error-banner">{error}</p>}
+      {card && (
+        <div className="operation-row lookup-result-row" role="status">
+          <div className="lookup-result-info">
+            <div className="lookup-result-title">
+              <strong><code>{card.publicSlug}</code></strong>
+              <span className="status-pill is-good">{card.inventoryStatus.replaceAll("_", " ")}</span>
+            </div>
+            <small>{card.printConfirmedAt ? "✓ Print confirmed" : "⏳ Print unconfirmed"} · Batch {card.batchCode}</small>
+          </div>
+          <div className="operation-actions">
+            <a href={workstationLink(card.batchId, card.id)} target="_blank" rel="noreferrer" className="action-pill-link">Open batch ↗</a>
+            {card.orderId && <a href={orderLink(card.orderId)} className="action-pill-link">Open order ↗</a>}
+            <CardPassport cardId={card.id} token={token} />
+          </div>
+        </div>
+      )}
+    </section>
+  );
 }

@@ -7,8 +7,8 @@ export function ActivationCode({ cardId, slug, token, issued, claimed, ready }: 
   const [secret, setSecret] = useState<{ secretCode: string; canonicalUrl: string }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  if (claimed) return <span>Client claimed</span>;
-  if (!ready) return <span>Awaiting final QC</span>;
+  if (claimed) return <span className="table-status-pill is-good"><span className="status-dot"></span>Client claimed</span>;
+  if (!ready) return <span className="table-status-pill is-warn"><span className="status-dot"></span>Awaiting QC</span>;
   const generate = async () => {
     const replaceExisting = issued || Boolean(secret);
     if (replaceExisting && !window.confirm("Replace this card's secret code? Its previous code and unfinished activation will stop working.")) return;
@@ -34,7 +34,7 @@ export function ActivationCode({ cardId, slug, token, issued, claimed, ready }: 
     popup.focus(); popup.print();
   };
   return <div className="activation-code-control">
-    <button className="quiet" disabled={busy} onClick={() => void generate()}>{busy ? "Issuing…" : issued || secret ? "Replace secret code" : "Generate secret code"}</button>
+    <button className="quiet button-secret-pill" disabled={busy} onClick={() => void generate()}>{busy ? "Issuing…" : issued || secret ? "Replace secret code" : "Generate secret code"}</button>
     {secret && <><strong className="private-code">{secret.secretCode}</strong><small>Copy or print now. The code cannot be retrieved later.</small>
       <button className="quiet" onClick={() => void navigator.clipboard.writeText(secret.secretCode).catch(() => setError("Copy failed. Select and copy the code manually."))}>Copy code</button>
       <button className="quiet" onClick={print}>Print private slip</button></>}
