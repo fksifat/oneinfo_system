@@ -115,16 +115,44 @@ export function ActivationFollowUp({ token }: { token: string }) {
       .then(result => { if (current) setResult(result); }).catch(e => { if (current) setError(e.message); });
     return () => { current = false; };
   }, [token, open, page]);
-  return <details className="panel operation-panel" onToggle={e => setOpen(e.currentTarget.open)}>
-    <summary>Activation follow-up</summary><p>Delivered cards that still need a client to activate them.</p>
-    {error && <p role="alert">{error}</p>}
-    {!result && open && !error && <p role="status">Loading delivered cards…</p>}
-    {result?.items.length === 0 && <p>No delivered cards are awaiting activation.</p>}
-    {result?.items.map(card => <div className="operation-row" key={card.cardId}><div><strong>{card.customer} · {card.publicSlug}</strong>
-      <small>Delivered {new Date(card.deliveredAt).toLocaleDateString("en-BD")}</small></div>
-      <div className="operation-actions"><a href={orderLink(card.orderId)}>Open order</a><CardPassport cardId={card.cardId} token={token} /></div></div>)}
-    <PageButtons page={page} hasMore={result?.hasMore ?? false} setPage={setPage} />
-  </details>;
+  return (
+    <details className="panel operation-panel activation-followup-panel" onToggle={e => setOpen(e.currentTarget.open)}>
+      <summary className="activation-followup-summary">
+        <div className="summary-left">
+          <span className="summary-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+          <div className="summary-titles">
+            <span className="eyebrow">CLIENT ENGAGEMENT</span>
+            <strong className="summary-title">Activation follow-up</strong>
+          </div>
+        </div>
+        <span className="summary-badge">
+          {result?.items ? result.items.length + " cards awaiting signup" : "Delivered card queue"}
+        </span>
+      </summary>
+      <div className="activation-followup-content">
+        <p className="activation-followup-desc">Delivered cards that still need a client to activate them and publish their digital identity.</p>
+        {error && <p role="alert" className="lookup-error-banner">{error}</p>}
+        {!result && open && !error && <p role="status" className="followup-loading">Loading delivered cards…</p>}
+        {result?.items.length === 0 && <p className="followup-empty">✓ No delivered cards are awaiting activation.</p>}
+        {result?.items.map(card => (
+          <div className="operation-row followup-card-row" key={card.cardId}>
+            <div className="followup-card-info">
+              <div className="followup-title-row">
+                <strong>{card.customer}</strong>
+                <code>{card.publicSlug}</code>
+              </div>
+              <small>Delivered {new Date(card.deliveredAt).toLocaleDateString("en-BD")}</small>
+            </div>
+            <div className="operation-actions">
+              <a href={orderLink(card.orderId)} className="action-pill-link">Open order ↗</a>
+              <CardPassport cardId={card.cardId} token={token} />
+            </div>
+          </div>
+        ))}
+        <PageButtons page={page} hasMore={result?.hasMore ?? false} setPage={setPage} />
+      </div>
+    </details>
+  );
 }
 
 type FoundCard = { id: string; publicSlug: string; inventoryStatus: string; batchId: string; batchCode: string; orderId: string | null; printConfirmedAt: string | null };

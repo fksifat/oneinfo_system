@@ -428,17 +428,88 @@ export function App() {
         {view === "reviews" ? <Reviews token={token} /> : null}
         {view === "companies" ? <TeamAdmin token={token} /> : null}
 
-        {view === "profiles" ? <section>
-          <ActivationFollowUp token={token} />
-          <div className="list-toolbar"><input type="search" aria-label="Search client profiles" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search clients or profile slugs" /><label><input type="checkbox" checked={draftProfiles} onChange={event => { setDraftProfiles(event.target.checked); setListPage(1); }} /> Unpublished only</label><button onClick={() => { setProfileError(""); setEditing({ ...blankProfile }); }}>New client profile</button></div>
-          <div className="profile-grid">{filteredProfiles.map((profile) => <article className="profile-tile" key={profile.id}>
-            <div className={`tile-cover theme-${profile.theme.toLowerCase()}`}></div><div className="tile-avatar">{initials(profile.displayName)}</div>
-            <span className={profile.published ? "pill success" : "pill"}>{profile.published ? "Published" : "Draft"}</span>
-            <h3>{profile.displayName}</h3><p>{profile.headline || "No headline"}{profile.company ? ` · ${profile.company}` : ""}</p>
-            <small>oneinfo / {profile.handle || profile.publicSlug}</small><div className="tile-actions"><button onClick={() => void editProfile(profile)}>Edit</button>{profile.published ? <a href={profile.handle ? `/${profile.handle}` : `?profile=${profile.publicSlug}`} target="_blank">Open profile ↗</a> : null}</div>
-          </article>)}</div>
-          {filteredProfiles.length === 0 ? <Empty title="No client profiles" text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles." action="Create profile" onAction={() => setEditing({ ...blankProfile })} /> : null}
-        </section> : null}
+        {view === "profiles" ? (
+          <section className="client-profiles-view">
+            <ActivationFollowUp token={token} />
+            <div className="list-toolbar profiles-toolbar-console">
+              <div className="profiles-search-wrap">
+                <span className="search-glyph" aria-hidden="true">🔍</span>
+                <input
+                  type="search"
+                  aria-label="Search client profiles"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search clients or profile slugs"
+                />
+              </div>
+              <div className="profiles-filter-actions">
+                <label className="profiles-filter-toggle">
+                  <input
+                    type="checkbox"
+                    checked={draftProfiles}
+                    onChange={event => { setDraftProfiles(event.target.checked); setListPage(1); }}
+                  />
+                  <span className="toggle-label">Unpublished only</span>
+                </label>
+                <button
+                  type="button"
+                  className="button-create-profile"
+                  onClick={() => { setProfileError(""); setEditing({ ...blankProfile }); }}
+                >
+                  + New client profile
+                </button>
+              </div>
+            </div>
+
+            <div className="profile-grid">
+              {filteredProfiles.map((profile) => (
+                <article className="profile-tile" key={profile.id}>
+                  <div className={"tile-cover theme-" + profile.theme.toLowerCase()}>
+                    <span className="cover-brand-glyph">ONEINFO DIGITAL PROFILE</span>
+                  </div>
+                  <div className="tile-avatar">{initials(profile.displayName)}</div>
+                  <div className="tile-status-tag">
+                    {profile.published ? (
+                      <span className="table-status-pill is-good">
+                        <span className="status-dot"></span>Published
+                      </span>
+                    ) : (
+                      <span className="table-status-pill is-warn">
+                        <span className="status-dot"></span>Draft
+                      </span>
+                    )}
+                  </div>
+                  <h3>{profile.displayName}</h3>
+                  <p>{profile.headline || "No headline"}{profile.company ? " · " + profile.company : ""}</p>
+                  <div className="profile-slug-tag">
+                    <code>oneinfo / {profile.handle || profile.publicSlug}</code>
+                  </div>
+                  <div className="tile-actions">
+                    <button type="button" onClick={() => void editProfile(profile)}>Edit</button>
+                    {profile.published ? (
+                      <a
+                        href={profile.handle ? "/" + profile.handle : "?profile=" + profile.publicSlug}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open profile ↗
+                      </a>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
+            </div>
+
+            {filteredProfiles.length === 0 ? (
+              <Empty
+                title="No client profiles"
+                text="Clients create their profile after activating a QC-passed card with its private secret code. Administrators can also create standalone profiles."
+                action="Create profile"
+                onAction={() => setEditing({ ...blankProfile })}
+              />
+            ) : null}
+          </section>
+        ) : null}
 
         {view === "cards" ? (
           <>
