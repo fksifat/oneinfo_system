@@ -100,74 +100,204 @@ function CompanyWorkspace() {
     }, false);
   }
 
-  return <TeamPage title="Company workspace">
-    {feedback && <p role="status">{feedback}</p>}
-    {!token ? <form onSubmit={login}>
-      <label>Account email<input name="email" type="email" autoComplete="username" required /></label>
-      <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
-      <button disabled={busy}>Sign in</button><a href="/team#recover">Forgot password?</a>
-    </form> : <>
-      <button type="button" className="quiet" disabled={busy} onClick={signOut}>Sign out</button><AccountSettings token={token} onSignOut={signOut} />
-      {companies === undefined ? <p>Loading your companies…</p> : companies.length === 0 ? <p>This account has no company workspaces.</p> :
-        <label>Company<select value={selected} disabled={busy} onChange={event => setSelected(event.target.value)}>{companies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
-      {workspace && <>
-        {workspace.company.domain && <p><a href={`https://${workspace.company.domain}/team`} target="_blank" rel="noreferrer">Open branded portal</a></p>}
-        <h2>Branding and profile defaults</h2>
-        <form key={workspace.company.id} onSubmit={event => {
-          event.preventDefault(); const input = values(event.currentTarget);
-          void run(async () => { await companyApi(`${endpoint}/settings`, "PUT", { ...input, allowEmployeeEdits: input.allowEmployeeEdits === "on" }, token); return "Company settings saved."; });
-        }}>
-          <label>Company name<input name="name" required maxLength={120} defaultValue={workspace.company.name} /></label>
-          <label>Logo URL<input name="logoUrl" type="url" defaultValue={workspace.company.logoUrl} /></label>
-          <label>Profile headline default<input name="headline" maxLength={160} defaultValue={workspace.company.headline} /></label>
-          <label>Profile bio default<textarea name="bio" maxLength={600} defaultValue={workspace.company.bio} /></label>
-          <label>Profile theme<select name="theme" defaultValue={workspace.company.theme}>{themeOptions}</select></label>
-          <label className="team-check"><input name="allowEmployeeEdits" type="checkbox" defaultChecked={workspace.company.allowEmployeeEdits} /> Allow employees to edit their public information</label>
-          <button disabled={busy}>Save settings</button>
-        </form>
-        <h2>Import employees</h2><p>CSV headers are name, email and optional headline. Employee account emails stay private.</p>
-        <form onSubmit={event => {
-          event.preventDefault(); void run(async () => {
-            const employees = readEmployeeCsv(csv);
-            const result = await companyApi<{ added: number; skipped: number }>(`${endpoint}/employees`, "POST", { employees }, token);
-            setCsv(""); return `Imported ${result.added}. Skipped ${result.skipped} already listed.`;
-          });
-        }}><label>CSV file<input type="file" accept=".csv,text/csv" onChange={event => {
-          const file = event.target.files?.[0];
-          if (!file) return;
-          if (file.size > 128 * 1024) { setFeedback("Choose a CSV file under 128 KB."); return; }
-          void file.text().then(setCsv).catch(() => setFeedback("Could not read the CSV file."));
-        }} /></label><label>CSV contents<textarea required value={csv} onChange={event => setCsv(event.target.value)} placeholder="name,email,headline" /></label><button disabled={busy}>Import employees</button></form>
-        <h2>Employees</h2>
-        {editLink && <label>Private edit link, valid for seven days<input readOnly value={editLink} onFocus={event => event.currentTarget.select()} /></label>}
-        <ul className="team-list">{workspace.employees.map(employee => <li key={employee.id}>
-          <strong>{employee.name}</strong> · {employee.email} · {employee.active ? "Active" : "Inactive"}
-          <div><button className="quiet" type="button" disabled={busy} onClick={() => {
-            if (employee.active && !confirm(`Deactivate ${employee.name} and their assigned cards?`)) return;
-            void run(async () => { setEditLink(""); await companyApi(`${endpoint}/employees/${employee.id}`, "PATCH", { active: !employee.active }, token); return "Employee status updated."; });
-          }}>{employee.active ? "Deactivate" : "Reactivate"}</button>
-          {employee.active && workspace.company.allowEmployeeEdits && <button className="quiet" type="button" disabled={busy} onClick={() => void run(async () => {
-            const result = await companyApi<{ path: string }>(`${endpoint}/employees/${employee.id}/edit-link`, "POST", undefined, token);
-            setEditLink(new URL(result.path, location.origin).href); return "Private edit link created. Share it with this employee.";
-          }, false)}>Create edit link</button>}</div>
-        </li>)}</ul>
-        <h2>Company cards</h2>
-        {workspace.cards.length === 0 && <p>Oneinfo Admin can reserve QC-passed cards for this company.</p>}
-        <ul className="team-list">{workspace.cards.map(card => <li key={card.id}>
-          <strong>{card.publicSlug}</strong> · {card.lifecycleStatus}
-          {card.lifecycleStatus === "ACTIVATED" && <p><a href={`/c/${card.publicSlug}?source=nfc`}>NFC link</a> · <a href={`/c/${card.publicSlug}?source=qr`}>QR link</a></p>}
-          {["QC_PASSED", "ACTIVATED", "SUSPENDED"].includes(card.lifecycleStatus) && <form key={`${card.id}-${card.profileId}`} onSubmit={event => {
-            event.preventDefault(); const employeeId = values(event.currentTarget).employeeId || null;
-            void run(async () => { await companyApi(`${endpoint}/cards/${card.id}`, "PUT", { employeeId }, token); return "Card assignment saved."; });
-          }}><label>Assigned employee<select name="employeeId" defaultValue={workspace.employees.find(item => item.profileId === card.profileId)?.id ?? ""}>
-            <option value="">Unassigned</option>{workspace.employees.filter(item => item.active || item.profileId === card.profileId).map(item => <option key={item.id} value={item.id} disabled={!item.active}>{item.name}</option>)}</select></label>
-            <button disabled={busy}>Save assignment</button></form>}
-        </li>)}</ul>
-        <LeadInbox key={`${token}:${selected}`} token={token} companyId={selected} />
-        <ProfileAnalytics key={selected} token={token} companyId={selected} />
-      </>}
-    </>}
-  </TeamPage>;
+  if (!token) {
+    return <TeamPage title="Company workspace">
+      {feedback && <p role="status">{feedback}</p>}
+      <form onSubmit={login}>
+        <label>Account email<input name="email" type="email" autoComplete="username" required /></label>
+        <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
+        <button disabled={busy}>Sign in</button><a href="/team#recover">Forgot password?</a>
+      </form>
+    </TeamPage>;
+  }
+
+  return <main className="card-portal card-portal-studio"><section className="studio-container">
+    <header className="studio-header">
+      <div className="studio-header-main">
+        <div className="studio-badge-row">
+          <span className="studio-eyebrow">ONEINFO // B2B WORKSPACE</span>
+          <span className="studio-status-pill">● ENTERPRISE ACTIVE</span>
+        </div>
+        <h1>Company workspace</h1>
+        <p className="portal-privacy">Manage organization branding, digital NFC cards, employee directories, and visitor inquiries in real time.</p>
+      </div>
+      <div className="studio-header-actions company-workspace-actions">
+        {companies && companies.length > 0 && (
+          <label className="company-select-wrap">
+            <span className="sr-only">Company</span>
+            <select value={selected} disabled={busy} onChange={event => setSelected(event.target.value)} className="company-select-dropdown">
+              {companies.map(item => <option key={item.id} value={item.id}>🏢 {item.name}</option>)}
+            </select>
+          </label>
+        )}
+        <button type="button" className="quiet studio-btn-back" disabled={busy} onClick={signOut}>Sign out</button>
+      </div>
+    </header>
+
+    {feedback && <p role="status" className="status-feedback-banner">{feedback}</p>}
+
+    {companies === undefined ? (
+      <div className="studio-card"><p>Loading your companies…</p></div>
+    ) : companies.length === 0 ? (
+      <div className="studio-card"><p>This account has no company workspaces.</p></div>
+    ) : workspace ? (
+      <div className="studio-workspace-grid">
+        <div className="studio-editor-column">
+          {/* 1. Branding and profile defaults */}
+          <div className="studio-card">
+            <div className="studio-card-top-row">
+              <h2>Branding and profile defaults</h2>
+              {workspace.company.domain && (
+                <a href={`https://${workspace.company.domain}/team`} target="_blank" rel="noreferrer" className="studio-portal-link">
+                  Open branded portal ↗
+                </a>
+              )}
+            </div>
+            <form key={workspace.company.id} onSubmit={event => {
+              event.preventDefault(); const input = values(event.currentTarget);
+              void run(async () => { await companyApi(`${endpoint}/settings`, "PUT", { ...input, allowEmployeeEdits: input.allowEmployeeEdits === "on" }, token); return "Company settings saved."; });
+            }}>
+              <div className="studio-form-grid">
+                <label>Company name<input name="name" required maxLength={120} defaultValue={workspace.company.name} /></label>
+                <label>Logo URL<input name="logoUrl" type="url" defaultValue={workspace.company.logoUrl} placeholder="https://..." /></label>
+                <label>Profile theme<select name="theme" defaultValue={workspace.company.theme}>{themeOptions}</select></label>
+                <label>Profile headline default<input name="headline" maxLength={160} defaultValue={workspace.company.headline} placeholder="e.g. Executive at..." /></label>
+              </div>
+              <label className="studio-bio-label">Profile bio default<textarea name="bio" maxLength={600} defaultValue={workspace.company.bio} placeholder="Standard introduction for company digital profiles..." /></label>
+              <label className="team-check studio-check-label"><input name="allowEmployeeEdits" type="checkbox" defaultChecked={workspace.company.allowEmployeeEdits} /> Allow employees to edit their public information</label>
+              <div className="studio-save-action">
+                <button className="studio-save-button" disabled={busy}>Save settings</button>
+              </div>
+            </form>
+          </div>
+
+          {/* 2. Import employees */}
+          <div className="studio-card">
+            <h2>Import employees</h2>
+            <p>CSV headers are name, email and optional headline. Employee account emails stay private.</p>
+            <form onSubmit={event => {
+              event.preventDefault(); void run(async () => {
+                const employees = readEmployeeCsv(csv);
+                const result = await companyApi<{ added: number; skipped: number }>(`${endpoint}/employees`, "POST", { employees }, token);
+                setCsv(""); return `Imported ${result.added}. Skipped ${result.skipped} already listed.`;
+              });
+            }}>
+              <label className="studio-upload-label">
+                <span>CSV file</span>
+                <input type="file" accept=".csv,text/csv" onChange={event => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  if (file.size > 128 * 1024) { setFeedback("Choose a CSV file under 128 KB."); return; }
+                  void file.text().then(setCsv).catch(() => setFeedback("Could not read the CSV file."));
+                }} />
+              </label>
+              <label className="studio-bio-label">CSV contents<textarea required value={csv} onChange={event => setCsv(event.target.value)} placeholder="name,email,headline" /></label>
+              <div className="studio-save-action">
+                <button className="studio-save-button" disabled={busy}>Import employees</button>
+              </div>
+            </form>
+          </div>
+
+          {/* 3. Employees list */}
+          <div className="studio-card">
+            <div className="studio-card-top-row">
+              <h2>Employees</h2>
+              <span className="studio-counter-pill">{workspace.employees.length} members</span>
+            </div>
+            {editLink && <label className="studio-edit-link-box">Private edit link, valid for seven days<input readOnly value={editLink} onFocus={event => event.currentTarget.select()} /></label>}
+            <ul className="team-list">
+              {workspace.employees.map(employee => <li key={employee.id} className="team-employee-item">
+                <div className="employee-info-col">
+                  <div className="employee-avatar-circle">{employee.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"}</div>
+                  <div className="employee-details">
+                    <strong>{employee.name}</strong> · <span className="employee-email-sub">{employee.email}</span> · <span className={`employee-status-tag ${employee.active ? "active" : "inactive"}`}>{employee.active ? "Active" : "Inactive"}</span>
+                  </div>
+                </div>
+                <div className="employee-actions-row">
+                  <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => {
+                    if (employee.active && !confirm(`Deactivate ${employee.name} and their assigned cards?`)) return;
+                    void run(async () => { setEditLink(""); await companyApi(`${endpoint}/employees/${employee.id}`, "PATCH", { active: !employee.active }, token); return "Employee status updated."; });
+                  }}>{employee.active ? "Deactivate" : "Reactivate"}</button>
+                  {employee.active && workspace.company.allowEmployeeEdits && <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => void run(async () => {
+                    const result = await companyApi<{ path: string }>(`${endpoint}/employees/${employee.id}/edit-link`, "POST", undefined, token);
+                    setEditLink(new URL(result.path, location.origin).href); return "Private edit link created. Share it with this employee.";
+                  }, false)}>Create edit link</button>}
+                </div>
+              </li>)}
+            </ul>
+          </div>
+
+          {/* 4. Company cards */}
+          <div className="studio-card">
+            <div className="studio-card-top-row">
+              <h2>Company cards</h2>
+              <span className="studio-counter-pill">{workspace.cards.length} cards</span>
+            </div>
+            {workspace.cards.length === 0 && <p className="studio-empty-text">Oneinfo Admin can reserve QC-passed cards for this company.</p>}
+            <ul className="team-list">
+              {workspace.cards.map(card => <li key={card.id} className="team-card-item">
+                <div className="card-top-meta">
+                  <span className="card-slug-mono">💳 {card.publicSlug}</span>
+                  <span className={`card-status-pill status-${card.lifecycleStatus.toLowerCase()}`}>{card.lifecycleStatus}</span>
+                </div>
+                {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">NFC link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a></div>}
+                {["QC_PASSED", "ACTIVATED", "SUSPENDED"].includes(card.lifecycleStatus) && <form key={`${card.id}-${card.profileId}`} onSubmit={event => {
+                  event.preventDefault(); const employeeId = values(event.currentTarget).employeeId || null;
+                  void run(async () => { await companyApi(`${endpoint}/cards/${card.id}`, "PUT", { employeeId }, token); return "Card assignment saved."; });
+                }} className="card-assign-form">
+                  <label className="card-assign-label">Assigned employee<select name="employeeId" defaultValue={workspace.employees.find(item => item.profileId === card.profileId)?.id ?? ""}>
+                    <option value="">Unassigned</option>{workspace.employees.filter(item => item.active || item.profileId === card.profileId).map(item => <option key={item.id} value={item.id} disabled={!item.active}>{item.name}</option>)}</select></label>
+                  <button disabled={busy} className="studio-btn-assign">Save assignment</button>
+                </form>}
+              </li>)}
+            </ul>
+          </div>
+        </div>
+
+        <aside className="studio-sidebar-column">
+          {/* Company Preview Card */}
+          <div className="studio-card studio-preview-card">
+            <div className="studio-preview-header">
+              <span className="studio-card-tag">ORGANIZATION SNAPSHOT</span>
+              <span className="studio-theme-indicator">{workspace.company.theme}</span>
+            </div>
+            <div className="company-profile-preview-card">
+              {workspace.company.logoUrl && <img className="team-logo company-mockup-logo" src={workspace.company.logoUrl} alt={workspace.company.name} />}
+              <h3 className="company-preview-name">{workspace.company.name}</h3>
+              {workspace.company.domain && <span className="company-domain-tag">🌐 {workspace.company.domain}</span>}
+              <div className="company-stats-grid">
+                <div className="company-stat-cell">
+                  <strong>{workspace.employees.filter(e => e.active).length}</strong>
+                  <span>Active staff</span>
+                </div>
+                <div className="company-stat-cell">
+                  <strong>{workspace.cards.length}</strong>
+                  <span>Cards deployed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Lead Inbox */}
+          <div className="studio-card studio-side-panel">
+            <LeadInbox key={`${token}:${selected}`} token={token} companyId={selected} />
+          </div>
+
+          {/* Profile Analytics */}
+          <div className="studio-card studio-side-panel">
+            <ProfileAnalytics key={selected} token={token} companyId={selected} />
+          </div>
+
+          {/* Account Security */}
+          <div className="studio-card studio-side-panel studio-security-panel">
+            <AccountSettings token={token} onSignOut={signOut} />
+          </div>
+
+          <small className="profile-footer">Powered by Arise Studio</small>
+        </aside>
+      </div>
+    ) : null}
+  </section></main>;
 }
 
 function EmployeeEditor({ secret }: { secret: string }) {
