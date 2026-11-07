@@ -136,6 +136,49 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }
   const order = (quantity = 1) => request("/api/v1/orders", orderPayload(quantity));
 
+  it("prepares and confirms ordered cards individually without duplicating assigned stock or QR artifacts", async () => {
+    const [essential] = await client.db.select().from(schema.products).where(eq(schema.products.slug, "oneinfo-essential"));
+    const variant = essential!.variants[0]!;
+    const buy = (quantity: number) => request("/api/v1/orders", {
+      ...orderPayload(quantity), items: [{ productId: essential!.id, variantId: variant.id, quantity, unitPriceMinor: variant.salePriceMinor ?? variant.priceMinor }],
+    });
+    const print = (id: string, unitIndex: number, action: "prepare" | "confirm") =>
+      request(`/api/v1/orders/admin/${id}/card-print`, { lineIndex: 0, unitIndex, action });
+    const single = await buy(1);
+    const attempt = (id: string) => app.inject({ method: "POST", url: `/api/v1/orders/admin/${id}/card-print`, headers,
+      payload: { lineIndex: 0, unitIndex: 0, action: "prepare" } });
+    const unsupported = await order();
+    expect((await attempt(unsupported.id)).statusCode).toBe(409);
+    await client.db.update(schema.storeOrders).set({ cancelledAt: new Date() }).where(eq(schema.storeOrders.id, unsupported.id));
+    await client.db.update(schema.storeOrders).set({ paymentAmountMinor: 10000 }).where(eq(schema.storeOrders.id, single.id));
+    expect((await attempt(single.id)).statusCode).toBe(409);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
+    await client.db.update(schema.storeOrders).set({ paymentVerifiedAt: new Date() }).where(eq(schema.storeOrders.id, single.id));
+    const [first, replay] = await Promise.all([print(single.id, 0, "prepare"), print(single.id, 0, "prepare")]);
+    expect(first).toEqual(replay);
+    expect(first.imageData).toMatch(/^data:image\/png;base64,/);
+    const batches = () => client.db.select().from(schema.cardBatches);
+    expect((await batches())[0]!.printConfirmedAt).toBeNull();
+    expect(await client.db.select().from(schema.qrArtifacts)).toHaveLength(1);
+    expect(await print(single.id, 0, "confirm")).toEqual({ printed: true });
+    expect(await print(single.id, 0, "confirm")).toEqual({ printed: true });
+    expect((await batches())[0]!.printConfirmedAt).toBeTruthy();
+    expect((await request("/api/v1/admin/batches")).items).toHaveLength(1);
+    expect((await request("/api/v1/admin/cards")).items).toHaveLength(1);
+    const stock = await batch(1);
+    await confirm(stock.id);
+    const multi = await buy(2);
+    expect(await print(multi.id, 0, "prepare")).toEqual({ printed: true });
+    expect(await batches()).toHaveLength(2);
+    expect((await print(multi.id, 1, "prepare")).printed).toBe(false);
+    expect((await batches()).filter(item => !item.printConfirmedAt)).toHaveLength(1);
+    expect(await print(multi.id, 1, "confirm")).toEqual({ printed: true });
+    const allocations = await client.db.select().from(schema.orderCardAllocations);
+    expect(new Set(allocations.map(item => item.cardId)).size).toBe(3);
+    const cards = await client.db.select().from(schema.cards);
+    expect(cards.every(card => card.nfcStatus === "PENDING" && card.qcStatus === "PENDING")).toBe(true);
+  });
+
   it("limits checkout spam without blocking a saved order's retry receipt", async () => {
     const payload = orderPayload();await request("/api/v1/orders", payload);
     const { allowAuthAttempt } = await import("../src/domain/auth-attempts.js");

@@ -22,6 +22,11 @@ const nav: { id: View; label: string; icon: string }[] = [
   { id: "companies", label: "Companies", icon: "▦" },
 ];
 const currentView = () => nav.find(item => item.id === window.location.hash.slice(1))?.id ?? "overview";
+const navGroups: { label: string; pages: View[] }[] = [
+  { label: "Workspace", pages: ["overview", "orders", "products", "reviews"] },
+  { label: "Production", pages: ["cards", "batches", "production", "stations"] },
+  { label: "People & activity", pages: ["profiles", "companies", "audit"] },
+];
 const PRODUCTION_URL = (import.meta.env.VITE_PRODUCTION_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
 
 
@@ -352,8 +357,13 @@ export function App() {
     <div className="control-shell">
       <aside className="sidebar">
         <div className="logo light"><img src={oneinfoLogo} alt="Oneinfo" /></div>
-        <p className="workspace-label">OPERATIONS WORKSPACE</p>
-        <nav aria-label="Admin pages">{nav.map((item) => <button key={item.id} aria-current={view === item.id ? "page" : undefined} className={view === item.id ? "active" : ""} onClick={() => { window.location.hash = item.id; }}><NavIcon name={item.id} />{item.label}</button>)}</nav>
+        <nav aria-label="Admin pages">{navGroups.map(group => <div className="admin-nav-group" key={group.label}>
+          <p>{group.label}</p>
+          {group.pages.map(id => {
+            const item = nav.find(page => page.id === id)!;
+            return <button key={id} aria-current={view === id ? "page" : undefined} className={view === id ? "active" : ""} onClick={() => { window.location.hash = id; }}><NavIcon name={id} />{item.label}</button>;
+          })}
+        </div>)}</nav>
         <div className="sidebar-foot"><span className={`health-dot ${syncError ? "offline" : ""}`}></span><div><strong>{syncError ? "API disconnected" : lastSynced ? "Live API connected" : "Connecting…"}</strong><small>{lastSynced ? `Synced ${lastSynced} · every 5s` : "Connecting to shared production API"}</small></div></div>
 
       </aside>

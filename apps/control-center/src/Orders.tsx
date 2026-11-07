@@ -268,6 +268,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
           </span>
         </summary>
         <div className="store-order-content">
+          <OrderPrint order={order} token={token} onChange={() => void loadOrders()} />
           <dl>
             <div><dt>Order ID</dt><dd>{order.id}</dd></div>
             <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted" : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
@@ -417,3 +418,4 @@ function OrderEmailHistory({ orderId, token }: { orderId: string; token: string 
     </li>)}</ul>}
   </div>;
 }
+import { OrderPrint } from "./OrderPrint.js";
