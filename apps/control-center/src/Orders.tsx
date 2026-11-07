@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api } from "./api.js";
+import { OrderTrackingPipeline } from "./OrderTrackingPipeline.js";
 
 const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
@@ -268,6 +269,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
           </span>
         </summary>
         <div className="store-order-content">
+          <OrderTrackingPipeline order={order} compact />
           <OrderPrint order={order} token={token} onChange={() => void loadOrders()} />
           <dl>
             <div><dt>Order ID</dt><dd>{order.id}</dd></div>
