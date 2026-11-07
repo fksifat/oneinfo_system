@@ -565,17 +565,87 @@ export function App() {
               <button className="quiet" disabled={busy} onClick={() => void recoverStation(station)}>Recover unfinished jobs</button></div></div>)}
         </section> : null}
         {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
-        {view === "production" ? <section className="production-hub">
-          <article className="panel connected-production-head"><div><p className="eyebrow">CONNECTED PRODUCTION WORKSPACE</p><h2>QR, NFC and final QC</h2><p>Your production workstation shares card, order and QC records with this Admin through the cloud database. This dashboard refreshes every five seconds.</p></div>{embedProduction ? <a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open full console ↗</a> : null}</article>
-          {overview ? <div className="metric-grid"><Metric label="Production batches" value={overview.batches} detail="Shared with the console" /><Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} QC approved and saleable`} /><Metric label="Pending jobs" value={overview.pendingJobs} detail="QR, NFC and QC" /><Metric label="Active stations" value={overview.stations} detail="Managed by this admin panel" /></div> : null}
-          {embedProduction ? <><iframe className="production-frame" src={PRODUCTION_URL} title="Connected Oneinfo production console" /><p className="hardware-note">Use the console's registered station and pair your phone there. Operator credentials stay in the console; no access tokens are sent in links.</p></> : <article className="panel workstation-launch">
-            <p className="eyebrow">PRODUCTION PC</p><h2>Open your workstation console</h2>
-            <p>Generate and print QR batches, read or write NFC tags, and complete phone QC in the console on your production PC.</p>
-            <ol><li>Start Oneinfo on the PC where it is installed.</li><li>Open the console below in its own tab to use this browser's saved station.</li><li>Use its Connection tab to pair your phone and continue production.</li></ol>
-            <a href={PRODUCTION_URL} target="_blank" rel="noreferrer">Open production console on this PC ↗</a>
-            <p className="workstation-help">If the tab cannot connect, start Oneinfo on this PC and try again. Production updates will appear here automatically.</p>
-          </article>}
-        </section> : null}
+        {view === "production" ? (
+          <section className="production-hub">
+            <article className="panel connected-production-head">
+              <div className="connected-head-content">
+                <div className="connected-eyebrow-row">
+                  <span className="eyebrow">CONNECTED PRODUCTION WORKSPACE</span>
+                  <span className="sync-pulse-badge">
+                    <span className="status-dot"></span>
+                    Live telemetry · 5s sync
+                  </span>
+                </div>
+                <h2>QR, NFC and final QC</h2>
+                <p>Your production workstation shares card encoding, batch printing, and quality control telemetry directly with this Admin panel through the cloud database.</p>
+              </div>
+              {embedProduction ? (
+                <a href={PRODUCTION_URL} target="_blank" rel="noreferrer" className="action-pill-link production-launch-pill">
+                  Open full console <span className="action-glyph">↗</span>
+                </a>
+              ) : null}
+            </article>
+
+            {overview ? (
+              <div className="metric-grid">
+                <Metric label="Production batches" value={overview.batches} detail="Synced with hardware hub" icon="📦" />
+                <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} QC approved & saleable`} icon="💳" />
+                <Metric label="Pending jobs" value={overview.pendingJobs} detail="QR, NFC and optical QC" highlight icon="⚡" />
+                <Metric label="Active stations" value={overview.stations} detail="Registered terminals" icon="🖥️" />
+              </div>
+            ) : null}
+
+            {embedProduction ? (
+              <div className="embedded-console-wrap">
+                <iframe className="production-frame" src={PRODUCTION_URL} title="Connected Oneinfo production console" />
+                <p className="hardware-note">
+                  <span className="note-badge">SECURE HARDWARE LINK</span>
+                  Use the console's registered station and pair your phone there. Operator credentials stay in the console; no access tokens are sent in links.
+                </p>
+              </div>
+            ) : (
+              <article className="panel workstation-launch">
+                <div className="workstation-launch-header">
+                  <span className="eyebrow">PRODUCTION WORKSTATION SETUP</span>
+                  <h2>Open your workstation console</h2>
+                  <p>Generate and print QR batches, write NFC NTAG213 chips, and complete phone-assisted QC tests on your dedicated production PC.</p>
+                </div>
+                <div className="workstation-steps-grid">
+                  <div className="workstation-step-card">
+                    <div className="step-numeral-badge">01</div>
+                    <div className="step-card-body">
+                      <strong>Start local instance</strong>
+                      <p>Run Oneinfo on the PC where thermal card printers and NFC writers are connected.</p>
+                    </div>
+                  </div>
+                  <div className="workstation-step-card">
+                    <div className="step-numeral-badge">02</div>
+                    <div className="step-card-body">
+                      <strong>Open operator terminal</strong>
+                      <p>Launch the console in its dedicated browser window using this station's saved credentials.</p>
+                    </div>
+                  </div>
+                  <div className="workstation-step-card">
+                    <div className="step-numeral-badge">03</div>
+                    <div className="step-card-body">
+                      <strong>Pair operator phone</strong>
+                      <p>Open the Connection tab and scan the pairing QR with your phone for tactile tap-testing.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="workstation-launch-action-bar">
+                  <a href={PRODUCTION_URL} target="_blank" rel="noreferrer" className="button-launch-primary">
+                    Open production console on this PC <span className="action-glyph">↗</span>
+                  </a>
+                  <p className="workstation-help">
+                    <span className="help-icon" aria-hidden="true">💡</span>
+                    If the tab cannot connect, start Oneinfo on this PC and try again. Production telemetry will appear here automatically.
+                  </p>
+                </div>
+              </article>
+            )}
+          </section>
+        ) : null}
         {(view === "profiles" || view === "batches" || view === "audit") && (
           <nav className="list-pagination-bar" aria-label="List pages">
             <button className="pagination-button" disabled={listPage === 1} onClick={() => setListPage(page => page - 1)}>
