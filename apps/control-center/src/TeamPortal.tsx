@@ -224,9 +224,9 @@ function CompanyWorkspace() {
 
     {workspace && (
       <nav className="studio-quick-nav" aria-label="Workspace sections">
-        <a href="#branding" className="studio-nav-pill">🎨 Branding</a>
-        <a href="#company-employees" className="studio-nav-pill">👥 Team ({workspace.employees.length})</a>
-        <a href="#company-cards" className="studio-nav-pill">💳 NFC Cards ({deployed}/{workspace.cards.length})</a>
+        <a href="#section-branding" className="studio-nav-pill">🎨 Branding</a>
+        <a href="#section-employees" className="studio-nav-pill">👥 Team ({workspace.employees.length})</a>
+        <a href="#section-cards" className="studio-nav-pill">💳 NFC Cards ({deployed}/{workspace.cards.length})</a>
         <a href="#company-leads" className="studio-nav-pill">📬 Shared Contacts</a>
         <a href="#company-analytics" className="studio-nav-pill">📊 Analytics</a>
         <a href="#company-security" className="studio-nav-pill">🔒 Security</a>
@@ -245,7 +245,7 @@ function CompanyWorkspace() {
       <div className="studio-workspace-grid">
         <div className="studio-editor-column">
           {/* 1. Branding and profile defaults */}
-          <div className="studio-card" id="branding">
+          <div className="studio-card" id="section-branding">
             <div className="studio-card-top-row">
               <h2>Branding and profile defaults</h2>
               {workspace.company.domain && (
@@ -297,7 +297,7 @@ function CompanyWorkspace() {
           </div>
 
           {/* 2. Employees list & Quick Add */}
-          <div className="studio-card" id="company-employees">
+          <div className="studio-card" id="section-employees">
             <div className="studio-card-top-row">
               <h2 id="company-employees" tabIndex={-1}>Employees</h2>
               <div className="studio-card-header-actions">
@@ -509,7 +509,7 @@ function CompanyWorkspace() {
           </div>
 
           {/* 4. Company cards */}
-          <div className="studio-card" id="company-cards">
+          <div className="studio-card" id="section-cards">
             <div className="studio-card-top-row">
               <h2 id="company-cards" tabIndex={-1}>Company cards</h2>
               <span className="studio-counter-pill">{workspace.cards.length} cards ({deployed} deployed)</span>
