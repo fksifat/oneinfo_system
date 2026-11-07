@@ -1,4 +1,5 @@
 import { Orders } from "./Orders.js";
+import { AdminTrackingHub } from "./AdminTrackingHub.js";
 import { Products } from "./Products.js";
 import { Reviews } from "./Reviews.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
@@ -12,10 +13,10 @@ import { TeamAdmin, TeamPortal } from "./TeamPortal.js";
 import { ActivationCode } from "./ActivationCode.js";
 import { CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 
-type View = "orders" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production" | "companies";
+type View = "orders" | "tracking" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production" | "companies";
 const nav: { id: View; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "◫" }, { id: "products", label: "Products", icon: "▣" },
-  { id: "orders", label: "Orders", icon: "≡" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
+  { id: "orders", label: "Orders", icon: "≡" }, { id: "tracking", label: "Card pipeline", icon: "→" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
   { id: "cards", label: "Cards & inventory", icon: "▱" }, { id: "batches", label: "Production batches", icon: "▦" },
   { id: "production", label: "NFC & QR operations", icon: "⌁" }, { id: "stations", label: "Stations", icon: "⌂" },
   { id: "audit", label: "Audit history", icon: "≡" },
@@ -23,7 +24,7 @@ const nav: { id: View; label: string; icon: string }[] = [
 ];
 const currentView = () => nav.find(item => item.id === window.location.hash.slice(1))?.id ?? "overview";
 const navGroups: { label: string; pages: View[] }[] = [
-  { label: "Workspace", pages: ["overview", "orders", "products", "reviews"] },
+  { label: "Workspace", pages: ["overview", "orders", "tracking", "products", "reviews"] },
   { label: "Production", pages: ["cards", "batches", "production", "stations"] },
   { label: "People & activity", pages: ["profiles", "companies", "audit"] },
 ];
@@ -124,6 +125,7 @@ function NavIcon({ name }: { name: string }) {
     {name === "overview" ? <><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></> : null}
     {name === "products" ? <><path d="m12 3.8 8.2 4.3v7.8L12 20.2l-8.2-4.3V8.1L12 3.8Z" /><path d="m3.9 8.2 8.1 4.3 8.1-4.3M12 12.5v7.3" /></> : null}
     {name === "orders" ? <><path d="M7 3.5h10l3 3v14H4v-17h3Z" /><path d="M8 10h8M8 14h8M8 18h5" /></> : null}
+    {name === "tracking" ? <><path d="M4 12h14m-5-5 5 5-5 5" /><circle cx="4" cy="12" r="1.5" /></> : null}
     {name === "reviews" ? <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 3.5Z" /> : null}
     {name === "profiles" ? <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c.3-3.4 2.1-5.2 5.5-5.2s5.2 1.8 5.5 5.2M16 5.3a3.2 3.2 0 0 1 0 6.1M17 14.9c2.2.5 3.4 2.2 3.6 5.1" /></> : null}
     {name === "cards" ? <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.4-1.5 1.4-2.2 3-2.2s2.6.7 3 2.2M14 10h4M14 14h4" /></> : null}
@@ -398,6 +400,7 @@ export function App() {
 
         {view === "products" ? <Products token={token} /> : null}
         {view === "orders" ? <Orders token={token} settingsOpen={ordersSettingsOpen} onSettingsOpenChange={setOrdersSettingsOpen} /> : null}
+        {view === "tracking" ? <AdminTrackingHub token={token} /> : null}
         {view === "reviews" ? <Reviews token={token} /> : null}
         {view === "companies" ? <TeamAdmin token={token} /> : null}
 
