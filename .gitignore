@@ -18,6 +18,8 @@ local.properties
 .product-media/
 .oneinfo/
 .cloud-dist/
+output/
+*.mp4
 .env.*.local
 __pycache__/
 *.pyc
