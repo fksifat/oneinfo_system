@@ -134,60 +134,145 @@ export function CardPortal({ slug }: { slug: string }) {
   </div><ProfileView data={card} onActivity={card.canShareContact ? track : undefined} contactAction={card.canShareContact && <ShareContact key={slug} crmEnabled={Boolean(card.crmEnabled)}
     send={input => customerApi(`/cards/${encodeURIComponent(slug)}/contact-leads`, "POST", { ...input, source })} />} /></>;
 
-  return <main className="card-portal"><section>
-    <p className="eyebrow">ONEINFO · YOUR DIGITAL CARD</p>
-    {mode !== "public" && <button type="button" className="quiet" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>}
-    {mode === "public" || (mode === "signup" && !claimToken) ? <>
-      <h1>Activate your card</h1><p>Enter the private secret code supplied with your card. Then create your account and save your public profile.</p>
-      {claimToken && <button type="button" className="quiet" onClick={() => navigate("signup")}>Continue account setup</button>}
-      <form onSubmit={activate}><label>Secret code<input autoComplete="off" spellCheck={false} autoCapitalize="characters" required maxLength={64} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={secretCode} onChange={event => setSecretCode(event.target.value)} /></label>
-        <button disabled={busy}>{busy ? "Checking…" : "Activate & continue"}</button></form>
-    </> : mode === "login" ? <>
-      <h1>Sign in</h1><p>{claimToken ? "Sign in to link this card to your existing profile." : "Sign in to manage your card and public details."}</p>
-      <form onSubmit={login}><label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
-        <label>Password<input type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /></label><button disabled={busy}>Sign in</button></form><a href="/team#recover">Forgot password?</a>
-      {claimToken && <button className="quiet" disabled={busy} onClick={() => navigate("signup")}>Create a new account</button>}
-    </> : <>
-      <h1>{mode === "signup" ? "Create your account" : claimToken ? "Set up your card" : "Edit your public profile"}</h1>
-      {mode === "details" && !claimToken && <LeadInbox key={token} token={token} />}
-      <p className="portal-privacy">The profile details below will be visible to anyone who scans your QR or NFC. Your password and account email stay private; use Public email only if you want to share it.</p>
-      <form onSubmit={save}>
-        {mode === "signup" && <fieldset><legend>Private account</legend>
-          <label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
-          <label>Password (at least 12 characters)<input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)} /></label>
-        </fieldset>}
-        <fieldset><legend>Public profile</legend><ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} /><label>Full name<input autoComplete="name" minLength={2} maxLength={120} required value={profile.displayName} onChange={event => update("displayName", event.target.value)} /></label>
-          <label>Headline / profession<input maxLength={160} value={profile.headline} onChange={event => update("headline", event.target.value)} /></label>
-          <label>Company<input maxLength={120} value={profile.company} onChange={event => update("company", event.target.value)} /></label>
-          <label>About you<textarea maxLength={600} value={profile.bio} onChange={event => update("bio", event.target.value)} /></label>
-          <label>Public phone<input type="tel" maxLength={40} value={profile.phone} onChange={event => update("phone", event.target.value)} /></label>
-          <label>Public email<input type="email" value={profile.email} onChange={event => update("email", event.target.value)} /></label>
-          <label>Website<input type="url" maxLength={500} value={profile.website} onChange={event => update("website", event.target.value)} /></label>
-          <label>Theme<select value={profile.theme} onChange={event => update("theme", event.target.value as Draft["theme"])}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label>
-        </fieldset>
-        <fieldset><legend>Card mode</legend>
-          <label>Active mode<select value={profile.profileMode} onChange={event => update("profileMode", event.target.value as Draft["profileMode"])}>
-            <option value="BUSINESS">Business</option><option value="EVENT">Event</option><option value="PORTFOLIO">Portfolio</option>
-          </select></label>
-          {(["EVENT", "PORTFOLIO"] as const).map(mode => <div key={mode} className="portal-link" hidden={profile.profileMode !== mode}>
-            <label>{mode === "EVENT" ? "Event name" : "Portfolio title"}<input maxLength={120} value={profile.modeContent[mode]?.title ?? ""}
-              onChange={event => update("modeContent", { ...profile.modeContent, [mode]: { description: profile.modeContent[mode]?.description ?? "", title: event.target.value } })} /></label>
-            <label>Description<textarea maxLength={600} value={profile.modeContent[mode]?.description ?? ""}
-              onChange={event => update("modeContent", { ...profile.modeContent, [mode]: { title: profile.modeContent[mode]?.title ?? "", description: event.target.value } })} /></label>
-          </div>)}
-        </fieldset>
-        <fieldset><legend>Social & other links</legend>{profile.links.map((link, index) => <div className="portal-link" key={index}>
-          <label>Label<input required maxLength={40} value={link.label} onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, label: event.target.value } : item))} /></label>
-          <label>URL<input required type="url" maxLength={500} value={link.url} onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, url: event.target.value } : item))} /></label>
-          <button type="button" className="quiet" onClick={() => update("links", profile.links.filter((_, i) => i !== index))}>Remove link</button>
-        </div>)}<button type="button" className="quiet" disabled={profile.links.length >= 12} onClick={() => update("links", [...profile.links, { label: "", url: "", sortOrder: profile.links.length, active: true }])}>Add link</button></fieldset>
-        <button disabled={busy || photoBusy}>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
-      </form>{mode === "signup" && <button className="quiet" disabled={busy} onClick={() => navigate("login")}>Already have an account? Sign in</button>}
-      {mode === "details" && !claimToken && <><AccountSettings token={token} onSignOut={() => { sessionStorage.removeItem("oneinfo.customer.token"); setToken(""); navigate("login"); }} /><ProfileAnalytics token={token} base={base} />
-        <p><a href="/team?manage=1">Company workspace</a></p></>}
-    </>}
-    {error && <p className="portal-error" role="alert">{error}</p>}
-    <small className="profile-footer">Powered by Arise Studio</small>
+  const isEditor = mode === "details" || (mode === "signup" && Boolean(claimToken)) || Boolean(claimToken) || (mode === "signup");
+
+  if (!isEditor) {
+    return <main className="card-portal"><section>
+      <p className="eyebrow">ONEINFO · YOUR DIGITAL CARD</p>
+      {mode !== "public" && <button type="button" className="quiet" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>}
+      {mode === "public" || (mode === "signup" && !claimToken) ? <>
+        <h1>Activate your card</h1><p>Enter the private secret code supplied with your card. Then create your account and save your public profile.</p>
+        {claimToken && <button type="button" className="quiet" onClick={() => navigate("signup")}>Continue account setup</button>}
+        <form onSubmit={activate}><label>Secret code<input autoComplete="off" spellCheck={false} autoCapitalize="characters" required maxLength={64} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={secretCode} onChange={event => setSecretCode(event.target.value)} /></label>
+          <button disabled={busy}>{busy ? "Checking…" : "Activate & continue"}</button></form>
+      </> : <>
+        <h1>Sign in</h1><p>{claimToken ? "Sign in to link this card to your existing profile." : "Sign in to manage your card and public details."}</p>
+        <form onSubmit={login}><label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
+          <label>Password<input type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /></label><button disabled={busy}>Sign in</button></form><a href="/team#recover">Forgot password?</a>
+        {claimToken && <button className="quiet" disabled={busy} onClick={() => navigate("signup")}>Create a new account</button>}
+      </>}
+      {error && <p className="portal-error" role="alert">{error}</p>}
+      <small className="profile-footer">Powered by Arise Studio</small>
+    </section></main>;
+  }
+
+  return <main className="card-portal card-portal-studio"><section className="studio-container">
+    <header className="studio-header">
+      <div className="studio-header-main">
+        <div className="studio-badge-row">
+          <span className="studio-eyebrow">ONEINFO // DIGITAL IDENTITY STUDIO</span>
+          <span className="studio-status-pill">● LIVE ON NFC &amp; QR</span>
+        </div>
+        <h1>{mode === "signup" ? "Create your account" : claimToken ? "Set up your card" : "Edit your public profile"}</h1>
+        <p className="portal-privacy">The profile details below will be visible to anyone who scans your QR or NFC. Your password and account email stay private; use Public email only if you want to share it.</p>
+      </div>
+      <div className="studio-header-actions">
+        {mode !== "public" && <button type="button" className="quiet studio-btn-back" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>}
+      </div>
+    </header>
+
+    <div className="studio-workspace-grid">
+      <div className="studio-editor-column">
+        <form onSubmit={save} className="studio-form">
+          {mode === "signup" && <fieldset className="studio-card"><legend>Private account</legend>
+            <label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
+            <label>Password (at least 12 characters)<input type="password" autoComplete="new-password" minLength={12} maxLength={128} required value={password} onChange={event => setPassword(event.target.value)} /></label>
+          </fieldset>}
+
+          <fieldset className="studio-card"><legend>Public profile</legend>
+            <ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
+            <div className="studio-form-grid">
+              <label>Full name<input autoComplete="name" minLength={2} maxLength={120} required value={profile.displayName} onChange={event => update("displayName", event.target.value)} /></label>
+              <label>Headline / profession<input maxLength={160} value={profile.headline} placeholder="e.g. Founder &amp; CEO" onChange={event => update("headline", event.target.value)} /></label>
+              <label>Company<input maxLength={120} value={profile.company} placeholder="e.g. Arise Studio" onChange={event => update("company", event.target.value)} /></label>
+              <label>Theme<select value={profile.theme} onChange={event => update("theme", event.target.value as Draft["theme"])}><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></select></label>
+              <label>Public phone<input type="tel" maxLength={40} value={profile.phone} placeholder="+880..." onChange={event => update("phone", event.target.value)} /></label>
+              <label>Public email<input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} /></label>
+              <label className="studio-col-span-2">Website<input type="url" maxLength={500} value={profile.website} placeholder="https://..." onChange={event => update("website", event.target.value)} /></label>
+            </div>
+            <label className="studio-bio-label">About you<textarea maxLength={600} value={profile.bio} placeholder="Share a brief introduction for visitors who scan or tap your card..." onChange={event => update("bio", event.target.value)} /></label>
+          </fieldset>
+
+          <fieldset className="studio-card"><legend>Card mode</legend>
+            <label>Active mode<select value={profile.profileMode} onChange={event => update("profileMode", event.target.value as Draft["profileMode"])}>
+              <option value="BUSINESS">Business</option><option value="EVENT">Event</option><option value="PORTFOLIO">Portfolio</option>
+            </select></label>
+            {(["EVENT", "PORTFOLIO"] as const).map(mode => <div key={mode} className="portal-link" hidden={profile.profileMode !== mode}>
+              <label>{mode === "EVENT" ? "Event name" : "Portfolio title"}<input maxLength={120} value={profile.modeContent[mode]?.title ?? ""}
+                onChange={event => update("modeContent", { ...profile.modeContent, [mode]: { description: profile.modeContent[mode]?.description ?? "", title: event.target.value } })} /></label>
+              <label>Description<textarea maxLength={600} value={profile.modeContent[mode]?.description ?? ""}
+                onChange={event => update("modeContent", { ...profile.modeContent, [mode]: { title: profile.modeContent[mode]?.title ?? "", description: event.target.value } })} /></label>
+            </div>)}
+          </fieldset>
+
+          <fieldset className="studio-card"><legend>Social & other links</legend>
+            {profile.links.map((link, index) => <div className="portal-link studio-link-item" key={index}>
+              <label>Label<input required maxLength={40} value={link.label} placeholder="e.g. LinkedIn, Portfolio, GitHub" onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, label: event.target.value } : item))} /></label>
+              <label>URL<input required type="url" maxLength={500} value={link.url} placeholder="https://..." onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, url: event.target.value } : item))} /></label>
+              <button type="button" className="quiet studio-btn-remove" onClick={() => update("links", profile.links.filter((_, i) => i !== index))}>Remove link</button>
+            </div>)}
+            <button type="button" className="quiet studio-btn-add" disabled={profile.links.length >= 12} onClick={() => update("links", [...profile.links, { label: "", url: "", sortOrder: profile.links.length, active: true }])}>+ Add link</button>
+          </fieldset>
+
+          <div className="studio-save-action">
+            <button className="studio-save-button" disabled={busy || photoBusy}>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
+            <span className="studio-save-note">Instant cloud sync to your physical NFC card &amp; QR tag.</span>
+          </div>
+        </form>
+
+        {mode === "signup" && <button className="quiet studio-switch-btn" disabled={busy} onClick={() => navigate("login")}>Already have an account? Sign in</button>}
+        {error && <p className="portal-error" role="alert">{error}</p>}
+      </div>
+
+      <aside className="studio-sidebar-column">
+        {/* 3D Physical & Live Digital Card Preview */}
+        <div className="studio-preview-card">
+          <div className="studio-preview-header">
+            <span className="studio-card-tag">TAP / SCAN LIVE PREVIEW</span>
+            <span className="studio-theme-indicator">{profile.theme}</span>
+          </div>
+          <div className={`studio-phone-mockup theme-${profile.theme.toLowerCase()}`}>
+            <div className="studio-mockup-cover">
+              <div className="studio-mockup-badge">ONEINFO</div>
+            </div>
+            <div className="studio-mockup-body">
+              <div className="studio-mockup-avatar">
+                {profile.avatarUrl ? <img src={profile.avatarUrl} alt="Avatar preview" /> : (profile.displayName.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI")}
+              </div>
+              <div className="studio-mockup-badge-mode">{profile.profileMode ?? "BUSINESS"} PROFILE</div>
+              <h4 className="studio-mockup-name">{profile.displayName || "Your Name"}</h4>
+              <p className="studio-mockup-title">{profile.headline || "Your headline or profession"}</p>
+              {profile.company && <p className="studio-mockup-comp">{profile.company}</p>}
+              {profile.bio && <p className="studio-mockup-bio-text">{profile.bio.length > 90 ? profile.bio.slice(0, 90) + "…" : profile.bio}</p>}
+              
+              <div className="studio-mockup-chips">
+                {profile.phone && <span className="mockup-chip">📞 Call</span>}
+                {profile.email && <span className="mockup-chip">✉️ Email</span>}
+                {profile.website && <span className="mockup-chip">🌐 Web</span>}
+                {profile.links.slice(0, 2).map((l, i) => <span key={i} className="mockup-chip">🔗 {l.label || "Link"}</span>)}
+              </div>
+              <div className="studio-mockup-save-btn">Save to Contacts</div>
+            </div>
+          </div>
+          <p className="studio-preview-caption">Updates in real-time as you type. Scanned visitors see this layout.</p>
+        </div>
+
+        {mode === "details" && !claimToken && <>
+          <div className="studio-side-panel">
+            <LeadInbox key={token} token={token} />
+          </div>
+          <div className="studio-side-panel">
+            <ProfileAnalytics token={token} base={base} />
+          </div>
+          <div className="studio-side-panel studio-security-panel">
+            <AccountSettings token={token} onSignOut={() => { sessionStorage.removeItem("oneinfo.customer.token"); setToken(""); navigate("login"); }} />
+            <p className="studio-company-link"><a href="/team?manage=1">Company workspace &rarr;</a></p>
+          </div>
+        </>}
+
+        <small className="profile-footer">Powered by Arise Studio</small>
+      </aside>
+    </div>
   </section></main>;
 }
 
