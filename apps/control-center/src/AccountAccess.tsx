@@ -41,7 +41,14 @@ export function AccountSettings({ token, onSignOut }: { token: string; onSignOut
   const [verified, setVerified] = useState<boolean>();
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { void customerApi<{ emailVerified: boolean }>("/me", "GET", undefined, token).then(result => setVerified(result.emailVerified)).catch(error => setMessage(errorMessage(error))); }, [token]);
+  const [checking, setChecking] = useState(true);
+  async function checkVerification() {
+    setChecking(true);
+    try { setVerified((await customerApi<{ emailVerified: boolean }>("/me", "GET", undefined, token)).emailVerified); }
+    catch (error) { setMessage(errorMessage(error)); }
+    finally { setChecking(false); }
+  }
+  useEffect(() => { void checkVerification(); }, [token]);
   async function run(path: string, body?: unknown) {
     if (busy) return;
     setBusy(true); setMessage("");
@@ -54,7 +61,9 @@ export function AccountSettings({ token, onSignOut }: { token: string; onSignOut
   }
   return <details><summary>Account security</summary>
     {message && <p role="status">{message}</p>}
-    {verified === true ? <p>Email verified</p> : <button type="button" disabled={busy || verified === undefined} onClick={() => void run("/me/verify-email")}>Send verification email</button>}
+    <p role="status">{checking ? "Checking email status…" : verified === true ? "Email verified" : verified === false ? "Email awaiting verification" : "Email status unavailable"}</p>
+    {verified === false && <button type="button" disabled={busy || checking} onClick={() => void run("/me/verify-email")}>Send verification email</button>}
+    {verified !== true && <button type="button" className="quiet" disabled={busy || checking} onClick={() => { setMessage(""); void checkVerification(); }}>Refresh verification status</button>}
     <form onSubmit={event => { event.preventDefault(); void run("/me/password", Object.fromEntries(new FormData(event.currentTarget))); }}>
       <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required maxLength={128} /></label>
       <label>New password<input name="password" type="password" autoComplete="new-password" required minLength={12} maxLength={128} /></label>

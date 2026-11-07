@@ -2,13 +2,14 @@ import { adminPage } from "../domain/admin-page.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import { ensureProfileHandle } from "../domain/profile-handles.js";
 import { createAccountLink, sendAccountLink } from "../domain/account-tokens.js";
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, sql, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import { CreateProfileSchema } from "@oneinfo/contracts";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
 import { isManagedCardUrl } from "../domain/card-urls.js";
+import { employeeEditLink, employeeEditTokenHash, employeeEmailEnabled } from "../domain/employee-email.js";
 import { db } from "../db/client.js";
 import { teamEnquiries, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
 import { requireCustomer } from "../domain/customer-auth.js";
@@ -21,7 +22,6 @@ const domain = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a
 const companyParams = z.object({ companyId: z.uuid() });
 const employeeParams = companyParams.extend({ employeeId: z.uuid() });
 const token = z.string().regex(/^[a-zA-Z0-9_-]{43}$/);
-const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const profileEdit = CreateProfileSchema.pick({ displayName: true, headline: true, bio: true, phone: true, email: true, website: true, avatarUrl: true });
 const settings = CreateProfileSchema.pick({ headline: true, bio: true, theme: true }).extend({ name, logoUrl: z.union([z.literal(""), z.url({ protocol: /^https$/ })]).default(""), allowEmployeeEdits: z.boolean() });
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -116,6 +116,7 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     const [company] = await db.select().from(companies).where(and(eq(companies.id, companyId), eq(companies.ownerAccountId, account.id)));
     if (!company) fail("Company workspace not found.", 404);
     const employees = await db.select({ id: companyEmployees.id, email: companyEmployees.email, active: companyEmployees.active,
+      inviteEmailStatus: companyEmployees.inviteEmailStatus,
       profileId: companyEmployees.profileId, name: customerProfiles.displayName, publicSlug: customerProfiles.publicSlug })
       .from(companyEmployees).innerJoin(customerProfiles, eq(companyEmployees.profileId, customerProfiles.id))
       .where(eq(companyEmployees.companyId, companyId)).orderBy(asc(customerProfiles.displayName));
@@ -142,6 +143,7 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     const account = await requireCustomer(request);
     const { companyId } = parseBody(companyParams, request.params);
     const { employees } = parseBody(z.object({ employees: z.array(z.object({ name, email, headline: z.string().trim().max(160).optional() })).min(1).max(200) }), request.body);
+    if (!await allowAuthAttempt(`employee-import:${account.id}`, 10, 3600_000)) fail("Too many employee imports. Please try again later.", 429);
     return db.transaction(async tx => {
       const company = await ownCompany(tx, companyId, account.id);
       const existing = await tx.select({ email: companyEmployees.email }).from(companyEmployees).where(eq(companyEmployees.companyId, companyId));
@@ -154,10 +156,27 @@ export const companyRoutes: FastifyPluginAsync = async app => {
           headline: employee.headline || company.headline, company: company.name, bio: company.bio, theme: company.theme, published: true }).returning({ id: customerProfiles.id });
         if (!profile) throw new Error("Employee profile creation failed");
         await ensureProfileHandle(tx, profile.id, employee.name);
-        await tx.insert(companyEmployees).values({ companyId, profileId: profile.id, email: employee.email });
+        await tx.insert(companyEmployees).values({ companyId, profileId: profile.id, email: employee.email,
+          inviteEmailStatus: employeeEmailEnabled ? "pending" : "failed", inviteEmailUpdatedAt: new Date() });
         added++;
       }
-      return { added, skipped: employees.length - added };
+      return { added, skipped: employees.length - added, queued: employeeEmailEnabled ? added : 0 };
+    });
+  });
+
+  app.post("/me/:companyId/employees/:employeeId/welcome-email", async request => {
+    const account = await requireCustomer(request);
+    const { companyId, employeeId } = parseBody(employeeParams, request.params);
+    return db.transaction(async tx => {
+      await ownCompany(tx, companyId, account.id);
+      const [employee] = await tx.select({ status: companyEmployees.inviteEmailStatus, updatedAt: companyEmployees.inviteEmailUpdatedAt })
+        .from(companyEmployees).where(and(eq(companyEmployees.id, employeeId), eq(companyEmployees.companyId, companyId), eq(companyEmployees.active, true))).for("update");
+      if (!employee) fail("Active employee not found.", 404);
+      if (!employeeEmailEnabled) fail("Employee email is unavailable. Ask Oneinfo to check the email configuration.");
+      if (employee.status === "pending" || employee.status === "sending") return { queued: true };
+      if (employee.updatedAt && Date.now() - employee.updatedAt.getTime() < 60_000) fail("Wait one minute after the last attempt before sending again.", 429);
+      await tx.update(companyEmployees).set({ inviteEmailStatus: "pending", inviteEmailUpdatedAt: new Date() }).where(eq(companyEmployees.id, employeeId));
+      return { queued: true };
     });
   });
 
@@ -167,7 +186,8 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     const { active } = parseBody(z.object({ active: z.boolean() }), request.body);
     return db.transaction(async tx => {
       await ownCompany(tx, companyId, account.id);
-      const [employee] = await tx.update(companyEmployees).set({ active, updatedAt: new Date(), ...(!active ? { editTokenHash: null, editTokenExpiresAt: null } : {}) })
+      const [employee] = await tx.update(companyEmployees).set({ active, updatedAt: new Date(), ...(!active ? { editTokenHash: null, editTokenExpiresAt: null,
+        inviteEmailStatus: sql`case when ${companyEmployees.inviteEmailStatus} = 'pending' then null else ${companyEmployees.inviteEmailStatus} end` } : {}) })
         .where(and(eq(companyEmployees.id, employeeId), eq(companyEmployees.companyId, companyId))).returning();
       if (!employee) fail("Employee not found.", 404);
       await tx.update(customerProfiles).set({ published: active, updatedAt: new Date() }).where(eq(customerProfiles.id, employee.profileId));
@@ -205,16 +225,16 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     return db.transaction(async tx => {
       const company = await ownCompany(tx, companyId, account.id);
       if (!company.allowEmployeeEdits) fail("Enable employee profile edits in company settings first.");
-      const secret = randomBytes(32).toString("base64url");
-      const [employee] = await tx.update(companyEmployees).set({ editTokenHash: hash(secret), editTokenExpiresAt: new Date(Date.now() + 7 * 86400_000) })
+      const link = employeeEditLink();
+      const [employee] = await tx.update(companyEmployees).set(link.fields)
         .where(and(eq(companyEmployees.id, employeeId), eq(companyEmployees.companyId, companyId), eq(companyEmployees.active, true))).returning({ id: companyEmployees.id });
       if (!employee) fail("Active employee not found.", 404);
-      return { path: `/team#edit/${secret}` };
+      return { path: link.path };
     });
   });
 
   async function editable(tx: Transaction, secret: string) {
-    const digest = hash(secret);
+    const digest = employeeEditTokenHash(secret);
     const [recipient] = await tx.select({ companyId: companyEmployees.companyId }).from(companyEmployees).where(eq(companyEmployees.editTokenHash, digest));
     if (!recipient) fail("This employee edit link is invalid or expired.", 404);
     const [company] = await tx.select({ allowed: companies.allowEmployeeEdits }).from(companies).where(eq(companies.id, recipient.companyId)).for("share");
