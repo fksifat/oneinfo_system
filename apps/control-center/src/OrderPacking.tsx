@@ -26,8 +26,9 @@ export function OrderPacking({ order, token, initiallyOpen }: { order: StoreOrde
       <p>${escape(order.customer.name)}<br>${escape(order.customer.phone)}<br>${escape(order.deliveryAddress.addressLine)}<br>
       ${escape(order.deliveryAddress.district)} ${escape(order.deliveryAddress.postalCode ?? "")}</p>
       <h2>Items</h2><ul>${order.items.map(item => `<li>${item.quantity} × ${escape(item.name)} · ${escape(item.variantName)}</li>`).join("")}</ul>
-      <p>Verified cards: ${cards.map(card => escape(card.publicSlug)).join(", ")}</p><button onclick="window.print()">Print packing slip</button></html>`);
+      <p>Verified cards: ${cards.map(card => escape(card.publicSlug)).join(", ")}</p><button type="button">Print packing slip</button></html>`);
     tab.document.close();
+    tab.document.querySelector("button")?.addEventListener("click", () => tab.print());
   }
 
   return <details className="operation-panel order-packing" open={initiallyOpen || undefined}><summary>Packing checklist</summary>

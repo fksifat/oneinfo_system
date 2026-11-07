@@ -1,15 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { escapePrintText as escape, isQrImage, loadPrintTemplate, printArtwork } from "./print-artwork.js";
 
 type Reprint = { id: string; slug: string; imageData: string | null; finish: "light" | "dark" | null; labelOnly: boolean };
 const canPrint = (card: Reprint) => Boolean(card.imageData && (card.finish || card.labelOnly));
 
-export function BatchReprint({ batchId, token }: { batchId: string; token: string }) {
+export function BatchReprint({ batchId, token, onClose }: { batchId: string; token: string; onClose: () => void }) {
   const [result, setResult] = useState<{ code: string; items: Reprint[] }>();
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    let current = true;
+    setError("");
+    void api<{ code: string; items: Reprint[] }>(`/api/v1/admin/batches/${batchId}/reprint`, token)
+      .then(value => { if (current) setResult(value); })
+      .catch(e => { if (current) setError(e instanceof Error ? e.message : "Could not load saved QR codes."); });
+    return () => { current = false; };
+  }, [batchId, token, reload]);
   async function download() {
     if (!result || busy) return;
     setBusy(true); setError("");
@@ -34,15 +43,10 @@ export function BatchReprint({ batchId, token }: { batchId: string; token: strin
     finally { setBusy(false); }
   }
 
-  return <details className="batch-reprint" onToggle={async event => {
-    if (!event.currentTarget.open || result || busy) return;
-    setBusy(true); setError("");
-    try { setResult(await api(`/api/v1/admin/batches/${batchId}/reprint`, token)); }
-    catch (e) { setError(e instanceof Error ? e.message : "Could not load saved QR codes."); }
-    finally { setBusy(false); }
-  }}><summary>Reprint selected cards</summary>
+  return <div className="batch-reprint"><div className="panel-head"><h2>Reprint selected cards</h2>
+    <button className="quiet" type="button" onClick={onClose}>Close reprint</button></div>
     {error && <p role="alert">{error}</p>}
-    {!result && busy && <p role="status">Loading saved QR codes…</p>}
+    {!result && (error ? <button className="quiet" onClick={() => setReload(value => value + 1)}>Try again</button> : <p role="status">Loading saved QR codes…</p>)}
     {result && <><p>Select cards to download a print sheet using their saved QR codes.</p>
       <fieldset disabled={busy}><legend>Cards to reprint</legend>{result.items.map(card => <label key={card.id}>
         <input type="checkbox" disabled={!canPrint(card)} checked={selected.includes(card.id)} onChange={e => {
@@ -50,5 +54,5 @@ export function BatchReprint({ batchId, token }: { batchId: string; token: strin
         }} /> {card.slug} · {canPrint(card) ? (card.labelOnly ? "QR label" : "Card back") : "Print artwork or QR missing"}
       </label>)}</fieldset>
       <button type="button" disabled={!selected.length || busy} onClick={() => void download()}>{busy ? "Preparing…" : `Download selected (${selected.length})`}</button></>}
-  </details>;
+  </div>;
 }

@@ -54,7 +54,7 @@ export const reviewRoutes: FastifyPluginAsync = async app => {
       const [review] = await tx.select({ seen: reviewSeen }).from(storeReviews).where(eq(storeReviews.id, id)).for("update");
       if (!review) throw Object.assign(new Error("Review not found"), { statusCode: 404 });
       if (!review.seen) await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_REVIEW_SEEN",
-        targetType: "store_review", targetId: id, requestId: request.id, createdAt: new Date() });
+        targetType: "store_review", targetId: id, requestId: request.id, createdAt: sql`clock_timestamp()` });
       return { seen: true };
     });
   });

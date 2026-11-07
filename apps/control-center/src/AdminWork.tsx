@@ -91,7 +91,7 @@ export function ActivationFollowUp({ token }: { token: string }) {
     {result?.items.length === 0 && <p>No delivered cards are awaiting activation.</p>}
     {result?.items.map(card => <div className="operation-row" key={card.cardId}><div><strong>{card.customer} · {card.publicSlug}</strong>
       <small>Delivered {new Date(card.deliveredAt).toLocaleDateString("en-BD")}</small></div>
-      <a href={orderLink(card.orderId)}>Open order</a></div>)}
+      <div className="operation-actions"><a href={orderLink(card.orderId)}>Open order</a><CardPassport cardId={card.cardId} token={token} /></div></div>)}
     <PageButtons page={page} hasMore={result?.hasMore ?? false} setPage={setPage} />
   </details>;
 }

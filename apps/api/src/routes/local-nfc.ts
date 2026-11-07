@@ -337,8 +337,10 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     }
     const [job] = await db.select().from(productionJobs).where(and(eq(productionJobs.cardId, card.id), eq(productionJobs.type, "NFC_ENCODING"))).limit(1);
     if (!job) throw Object.assign(new Error("NFC production job not found"), { statusCode: 404 });
+    checkExpectedCard(device.stationId, card.id);
     await claimProductionJob(job.id, { idempotencyKey: scanId }, operator, device);
     assertStationIdle(device.stationId);
+    checkExpectedCard(device.stationId, card.id);
     const session: BridgeSession = { id: scanId, jobId: job.id, cardId: card.id, stationId: device.stationId, deviceId: device.id,
       expectedUrl: card.canonicalUrl, state: "WRITING", phoneInitiated: true, createdAt: new Date(), expiresAt: new Date(Date.now() + 3 * 60_000) };
     sessions.set(scanId, session);
@@ -357,6 +359,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     checkExpectedCard(device.stationId, session.cardId);
     const [job] = await db.select().from(productionJobs).where(and(eq(productionJobs.cardId, session.cardId), eq(productionJobs.type, "QUALITY_CONTROL"))).limit(1);
     if (!job) throw Object.assign(new Error("QC production job not found"), { statusCode: 404 });
+    checkExpectedCard(device.stationId, session.cardId);
     if (job.status !== "COMPLETED") await claimProductionJob(job.id, { idempotencyKey: sessionId }, operator, device);
     const result = await saveQualityCheck(job.id, { idempotencyKey: sessionId, result: "PASSED", evidenceReference: `phone-scans://${sessionId}` }, operator, device, request.id);
     const [card] = await db.select({ inventoryStatus: cards.inventoryStatus }).from(cards).where(eq(cards.id, session.cardId));

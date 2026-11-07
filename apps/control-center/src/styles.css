@@ -984,9 +984,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .attention-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 1px; background: #dbe4e9; border-top: 1px solid #dbe4e9; }
 .attention-list a { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 18px; background: #fff; color: #214d61; }
 .attention-list strong { font-variant-numeric: tabular-nums; color: #102d42; }
+.dashboard > .panel + .panel, .dashboard > .panel + .metric-grid { margin-top: 16px; }
 .operation-panel { margin-block: 12px; padding: 14px 18px; }
 .operation-panel > .panel-head { padding-inline: 0; }
-.operation-panel > summary, .batch-reprint > summary { cursor: pointer; font-weight: 700; }
+.operation-panel > summary { cursor: pointer; font-weight: 700; }
+.batch-reprint > .panel-head { padding: 0; align-items: center; }
 .operation-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 0; border-top: 1px solid #dbe4e9; overflow-wrap: anywhere; }
 .operation-row small { display: block; color: #496575; margin-top: 4px; }
 .operation-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
