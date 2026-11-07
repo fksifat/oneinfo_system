@@ -265,6 +265,10 @@ For local testing, generated URLs default to `http://127.0.0.1:5174/c`; run `npm
 
 Legacy activation codes are 80-bit random values stored only as card-bound SHA-256 hashes. Passwords use salted scrypt. Public authentication and checkout limits use PostgreSQL transaction locks. Customer sessions last eight hours. Activation grants last 15 minutes, and legacy code rotation invalidates its previous grants. External/custom QR links keep their own destination and are only eligible for claimable stock if their exact previous owned base URL is configured as an alias.
 
+## Employee welcome email
+
+Company workspace CSV imports queue a welcome email for each new employee using the private email address in the CSV. If employee profile editing is enabled, the message includes a private edit link valid for seven days. The employee list shows the send status after **Refresh workspace** and lets the owner send or resend the message for active employees. Repeat imports skip existing employees. Apply `0019_employee_welcome_email` before starting the updated API server, which sends queued messages using the configured transactional provider and `STOREFRONT_URL`.
+
 ## Production work still required
 
 Printed QR stock and orders: in Production Console, generate and print a full batch, then tick the printing-complete checkbox and select **Confirm printed batch**. Only confirmed batches appear in Admin stock. Each ordered unit receives one unique managed Oneinfo QR, reserved automatically from the shared QR pool. An order with insufficient stock stays **Awaiting QR** (or partially assigned); confirming another batch fills pending quantities in order of receipt. Admin Orders shows assigned links and refreshes every five seconds. Allocation reserves a physical card without creating a client profile or publishing order contact data. Client ownership is established by secret-code signup, as described above. Assignment does not bypass NFC encoding or final phone QC. Production batches currently track generic QR stock, so allocation does not match catalog finishes/materials.

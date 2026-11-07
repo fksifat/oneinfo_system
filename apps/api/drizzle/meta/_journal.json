@@ -134,6 +134,13 @@
       "when": 1794079598820,
       "tag": "0018_order_invoices",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1794081863511,
+      "tag": "0019_employee_welcome_email",
+      "breakpoints": true
     }
   ]
 }

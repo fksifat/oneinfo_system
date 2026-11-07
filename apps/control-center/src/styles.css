@@ -2607,6 +2607,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .attention-list strong { font-variant-numeric: tabular-nums; color: #102d42; }
 .dashboard > .panel + .panel, .dashboard > .panel + .metric-grid { margin-top: 16px; }
 .operation-panel { margin-block: 12px; padding: 14px 18px; }
+a.company-stat-cell { color: inherit; text-decoration: none; }
+a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-decoration: underline; text-underline-offset: 3px; }
+.lead-inbox > label { margin-top: 12px; }
 .operation-panel > .panel-head { padding-inline: 0; }
 .operation-panel > summary { cursor: pointer; font-weight: 700; }
 .batch-reprint > .panel-head { padding: 0; align-items: center; }
@@ -5626,8 +5629,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   }
 
   .employee-actions-row button {
-    flex: 1;
-    min-height: 42px;
+    flex: 1 0 auto;
+    min-height: 44px;
   }
 
   .card-assign-form {

@@ -189,9 +189,12 @@ export const companyEmployees = pgTable("company_employees", {
   active: boolean("active").notNull().default(true),
   editTokenHash: varchar("edit_token_hash", { length: 64 }),
   editTokenExpiresAt: timestamp("edit_token_expires_at", { withTimezone: true }),
+  inviteEmailStatus: text("invite_email_status").$type<"pending" | "sending" | "accepted" | "failed">(),
+  inviteEmailUpdatedAt: timestamp("invite_email_updated_at", { withTimezone: true }),
   ...timestamps,
 }, table => [uniqueIndex("company_employees_email_unique").on(table.companyId, table.email),
-  uniqueIndex("company_employees_profile_unique").on(table.profileId), uniqueIndex("company_employees_edit_token_unique").on(table.editTokenHash)]);
+  uniqueIndex("company_employees_profile_unique").on(table.profileId), uniqueIndex("company_employees_edit_token_unique").on(table.editTokenHash),
+  index("company_employees_invite_queue_idx").on(table.inviteEmailStatus, table.inviteEmailUpdatedAt).where(sql`${table.inviteEmailStatus} in ('pending', 'sending')`)]);
 
 export const cardBatches = pgTable(
   "card_batches",

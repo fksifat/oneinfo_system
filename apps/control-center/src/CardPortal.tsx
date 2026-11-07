@@ -311,6 +311,8 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
   const [items, setItems] = useState<{ mode: string; campaign: string; source: string; event: string; label: string | null; total: number }[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [source, setSource] = useState("");
+  const visible = items?.filter(item => !source || item.source === source);
   async function load() {
     setBusy(true); setError("");
     try { setItems((await customerApi<{ items: NonNullable<typeof items> }>(`/me/activity${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`, "GET", undefined, token)).items); }
@@ -319,10 +321,13 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
   }
   return <section className="lead-inbox"><h2>Profile analytics</h2><p>Last 30 days. Contact saves count button clicks.</p>
     {base && <p><a href={`${base}?source=nfc`}>NFC link</a> · <a href={`${base}?source=qr`}>QR link</a></p>}
-    <button type="button" className="quiet" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : "Load analytics"}</button>
+    <button type="button" className="quiet" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : items ? "Refresh analytics" : "Load analytics"}</button>
     {error && <p role="alert">{error}</p>}
-    {items?.length === 0 && <p>No activity recorded yet.</p>}
-    {!!items?.length && <ul>{items.map(item => <li key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}>
+    {!!items?.length && <label>Traffic source<select value={source} onChange={event => setSource(event.target.value)}>
+      <option value="">All sources</option><option value="NFC">NFC</option><option value="QR">QR</option><option value="DIRECT">Direct / untagged</option>
+    </select></label>}
+    {visible?.length === 0 && <p role="status">{source ? "No activity from this source." : "No activity recorded yet."}</p>}
+    {!!visible?.length && <ul>{visible.map(item => <li key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}>
       <strong>{item.label ?? ({ VIEW: "Profile views", SAVE: "Contact-save clicks", LINK: "Website clicks", LEAD: "Leads" }[item.event] ?? item.event)} · {item.total}</strong>
       <span>{item.campaign || item.mode} · {item.source === "DIRECT" ? "Direct / untagged" : item.source}</span>
     </li>)}</ul>}
@@ -335,6 +340,9 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [crmEnabled, setCrmEnabled] = useState(false);
+  const [search, setSearch] = useState("");
+  const term = search.trim().toLowerCase();
+  const visible = items?.filter(lead => [lead.name, lead.email, lead.phone, lead.recipientName].some(value => value?.toLowerCase().includes(term)));
 
   async function load(before?: string) {
     if (loading) return;
@@ -371,7 +379,9 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
     </button>
     {error && <p className="portal-error" role="alert">{error}</p>}
     {items?.length === 0 && <p role="status">No contacts have been shared yet.</p>}
-    {!!items?.length && <ul>{items.map(lead => <li key={lead.id}>
+    {companyId && !!items?.length && <label>Search loaded contacts<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, phone or employee" /></label>}
+    {!!items?.length && !visible?.length && <p role="status">No matching contacts in the loaded results.</p>}
+    {!!visible?.length && <ul>{visible.map(lead => <li key={lead.id}>
       <strong>{lead.name}</strong> <time dateTime={lead.createdAt}>{new Date(lead.createdAt).toLocaleString()}</time>
       {lead.recipientName && <small>Shared via {lead.recipientName}’s card</small>}
       {lead.email && <a href={`mailto:${lead.email}`}>{lead.email}</a>}

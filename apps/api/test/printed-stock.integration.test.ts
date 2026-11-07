@@ -20,6 +20,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   let schema: typeof import("../src/db/schema.js");
   let headers: Record<string, string>;
   let failNextShippingEmail = false;
+  let rejectEmployeeEmail = "";
   const productId = randomUUID(), variantId = randomUUID();
 
   beforeAll(async () => {
@@ -41,6 +42,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
         failNextShippingEmail = false;
         return Response.json({}, { status: 503 });
       }
+      if (rejectEmployeeEmail && String(init?.body).includes("Your Oneinfo employee profile is ready") &&
+        JSON.parse(String(init?.body)).to.includes(rejectEmployeeEmail)) return Response.json({}, { status: 503 });
       return Response.json({ id: "test-email" });
     }));
     client = await import("../src/db/client.js");
@@ -58,6 +61,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }, 30_000);
   beforeEach(async () => {
     failNextShippingEmail = false;
+    rejectEmployeeEmail = "";
     await client.db.execute(sql`truncate table card_batches, customer_profiles, store_orders, audit_logs cascade`);
   });
   afterAll(async () => { await app?.close(); await client?.closeDatabase(); vi.unstubAllGlobals(); });
@@ -424,10 +428,38 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(branding.statusCode, branding.body).toBe(200);
     const imported = await send("POST", `${url}/employees`, { employees: [{ name: "First Employee", email: "employee@example.com" }, { name: "Other Employee", email: "other-employee@example.com" }] });
     expect(imported.statusCode, imported.body).toBe(200);
+    expect(imported.json()).toEqual({ added: 2, skipped: 0, queued: 2 });
     const stock = await readyForClaim();
     await request(`/api/v1/company/admin/${id}/cards`, { cardSlug: stock.publicSlug });
     const workspace = (await send("GET", url)).json();
     const [employee, colleague] = workspace.employees;
+    expect(employee.inviteEmailStatus).toBe("pending");
+    expect((await send("POST", `${url}/employees`, { employees: [{ name: "First Employee", email: "EMPLOYEE@example.com" }] })).json())
+      .toEqual({ added: 0, skipped: 1, queued: 0 });
+    const welcome = `${url}/employees/${employee.id}/welcome-email`;
+    expect((await send("POST", welcome, undefined, otherHeaders)).statusCode).toBe(404);
+    const previousLink = (await send("POST", `${url}/employees/${employee.id}/edit-link`)).json().path.split("#edit/")[1];
+    const { drainEmployeeEmails } = await import("../src/domain/employee-email.js");
+    const employeeEmails = () => vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String(init?.body ?? "{}")))
+      .filter(mail => mail.subject === "Your Oneinfo employee profile is ready");
+    rejectEmployeeEmail = "employee@example.com";
+    await Promise.all([drainEmployeeEmails(), drainEmployeeEmails()]);
+    expect(employeeEmails()).toHaveLength(2);
+    expect((await send("GET", url)).json().employees.map((item: { inviteEmailStatus: string }) => item.inviteEmailStatus)).toEqual(["failed", "accepted"]);
+    const editor = "/api/v1/company/employee/profile";
+    expect((await send("POST", editor, { token: previousLink }, {})).statusCode).toBe(200);
+    expect((await send("POST", welcome)).statusCode).toBe(429);
+    await client.db.update(schema.companyEmployees).set({ inviteEmailUpdatedAt: new Date(0) }).where(eq(schema.companyEmployees.id, employee.id));
+    rejectEmployeeEmail = "";
+    expect((await send("POST", welcome)).json()).toEqual({ queued: true });
+    await drainEmployeeEmails();
+    const retried = employeeEmails().at(-1);
+    expect(retried.to).toEqual(["employee@example.com"]);
+    expect(retried.text).toContain("Oneinfo Team");
+    const emailToken = /#edit\/([\w-]+)/.exec(retried.text)![1];
+    expect((await send("POST", editor, { token: emailToken }, {})).json().profile.displayName).toBe("First Employee");
+    expect((await send("POST", editor, { token: previousLink }, {})).statusCode).toBe(404);
+    expect((await send("GET", url)).json().employees[0].inviteEmailStatus).toBe("accepted");
     const teamCard = `/api/v1/customer/cards/${stock.publicSlug}`;
     expect((await send("PUT", `${url}/cards/${stock.id}`, { employeeId: employee.id })).statusCode).toBe(200);
     expect((await request(teamCard)).profile).toMatchObject({ displayName: "First Employee", theme: "MINT", email: "" });
@@ -440,13 +472,13 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const edit = await send("POST", `${url}/employees/${employee.id}/edit-link`);
     expect(edit.statusCode, edit.body).toBe(200);
     const secret = edit.json().path.split("#edit/")[1];
-    const editor = "/api/v1/company/employee/profile";
     expect((await send("POST", editor, { token: secret, profile: { displayName: "Edited Employee", company: "Untrusted Company" } }, {})).json().profile)
       .toMatchObject({ displayName: "Edited Employee", company: "Oneinfo Team" });
     const publicPortal = await app.inject({ url: "/api/v1/company/public/team.example.com", headers: { origin: "https://team.example.com" } });
     expect(publicPortal.headers["access-control-allow-origin"]).toBe("*");
     expect(publicPortal.body).not.toContain("employee@example.com");
     expect((await send("PATCH", `${url}/employees/${employee.id}`, { active: false })).statusCode).toBe(200);
+    expect((await send("POST", welcome)).statusCode).toBe(404);
     expect((await request(teamCard)).status).toBe("UNAVAILABLE");
     expect((await send("POST", editor, { token: secret }, {})).statusCode).toBe(404);
     expect((await send("PUT", `${url}/cards/${stock.id}`, { employeeId: colleague.id })).statusCode).toBe(200);
@@ -458,6 +490,11 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect((await request(`/api/v1/customer/cards/${replacement.publicSlug}`)).profile.displayName).toBe("Other Employee");
     const passport = await request(`/api/v1/production/cards/${stock.id}/history`);
     expect(passport.events.map((event: { eventType: string }) => event.eventType)).toContain("CARD_REPLACED");
+    expect((await send("PUT", `${url}/settings`, { name: "Oneinfo Team", allowEmployeeEdits: false })).statusCode).toBe(200);
+    expect((await send("POST", `${url}/employees`, { employees: [{ name: "Read Only", email: "readonly@example.com" }] })).statusCode).toBe(200);
+    await drainEmployeeEmails();
+    expect(employeeEmails().at(-1)).toMatchObject({ to: ["readonly@example.com"], text: expect.stringContaining("workspace owner") });
+    expect(employeeEmails().at(-1).text).not.toContain("#edit/");
   });
 
   it("prevents concurrent checkout from overselling tracked variants and reports low stock", async () => {
