@@ -1,0 +1,3 @@
+ALTER TABLE "company_employees" ADD COLUMN "invite_email_status" text;--> statement-breakpoint
+ALTER TABLE "company_employees" ADD COLUMN "invite_email_updated_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "company_employees_invite_queue_idx" ON "company_employees" USING btree ("invite_email_status","invite_email_updated_at") WHERE "company_employees"."invite_email_status" in ('pending', 'sending');

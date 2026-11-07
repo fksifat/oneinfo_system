@@ -6,11 +6,14 @@ import { configureLanConnection, lanAddresses, loadLanIdentity } from "./domain/
 import { Bonjour } from "bonjour-service";
 
 import { drainOrderEmails } from "./domain/order-email-worker.js";
+import { drainEmployeeEmails } from "./domain/employee-email.js";
 
 const app = buildApp();
 let emailRun: Promise<void> | undefined;
+let employeeEmailRun: Promise<void> | undefined;
 const emailTimer = setInterval(() => {
   if (!emailRun) emailRun = drainOrderEmails().catch(() => app.log.error("Order email worker failed")).finally(() => { emailRun = undefined; });
+  if (!employeeEmailRun) employeeEmailRun = drainEmployeeEmails().catch(() => app.log.error("Employee email worker failed")).finally(() => { employeeEmailRun = undefined; });
 }, 15_000);
 emailTimer.unref();
 let lan: ReturnType<typeof buildApp> | undefined;
@@ -20,7 +23,7 @@ let networkTimer: NodeJS.Timeout | undefined;
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, "shutting down");
   clearInterval(emailTimer);
-  await emailRun;
+  await Promise.all([emailRun, employeeEmailRun]);
   clearInterval(networkTimer);
   discovery?.unpublishAll(); discovery?.destroy();
   await lan?.close();
@@ -54,7 +57,7 @@ try {
 } catch (error) {
   app.log.error(error);
   clearInterval(emailTimer);
-  await emailRun;
+  await Promise.all([emailRun, employeeEmailRun]);
   clearInterval(networkTimer); discovery?.destroy();
   await lan?.close(); await app.close();
   await closeDatabase();

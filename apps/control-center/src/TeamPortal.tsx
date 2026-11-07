@@ -6,7 +6,8 @@ import { ProfileView, type PublicProfileData } from "./ProfileView.js";
 import { readEmployeeCsv } from "./company-csv.js";
 
 type Company = { id: string; name: string; domain: string | null; logoUrl: string; headline: string; bio: string; theme: string; allowEmployeeEdits: boolean };
-type Workspace = { company: Company; employees: { id: string; name: string; email: string; profileId: string; publicSlug: string; active: boolean }[];
+type Workspace = { company: Company; employees: { id: string; name: string; email: string; profileId: string; publicSlug: string; active: boolean;
+  inviteEmailStatus?: "pending" | "sending" | "accepted" | "failed" | null }[];
   cards: { id: string; profileId: string | null; publicSlug: string; lifecycleStatus: string }[] };
 type PublicBrand = { company: Pick<Company, "name" | "logoUrl" | "theme">; employees: PublicProfileData["profile"][]; links: PublicProfileData["links"] };
 const companyApi = <T,>(path: string, method = "GET", body?: unknown, token?: string) => customerApi<T>(path, method, body, token, "company");
@@ -14,6 +15,7 @@ const accountKey = "oneinfo.customer.token";
 const values = (form: HTMLFormElement) => Object.fromEntries(new FormData(form));
 const messageFor = (error: unknown) => error instanceof Error ? error.message : "Request could not be completed.";
 const themeOptions = <><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option></>;
+const welcomeEmailLabels = { pending: "Welcome email queued", sending: "Sending welcome email", accepted: "Welcome email sent", failed: "Welcome email failed" };
 
 function TeamPage({ title, children }: { title: string; children: ReactNode }) {
   return <main className="card-portal"><section><h1>{title}</h1>{children}</section></main>;
@@ -58,6 +60,7 @@ function CompanyWorkspace() {
   const [busy, setBusy] = useState(false);
   const [editLink, setEditLink] = useState("");
   const [csv, setCsv] = useState("");
+  const [cardFilter, setCardFilter] = useState("all");
   const endpoint = `/me/${selected}`;
   const signOut = () => { sessionStorage.removeItem(accountKey); setToken(""); setCompanies(undefined); setWorkspace(undefined); setSelected(""); setEditLink(""); };
 
@@ -73,7 +76,7 @@ function CompanyWorkspace() {
   useEffect(() => {
     if (!selected || !token) return;
     let current = true;
-    setWorkspace(undefined); setEditLink("");
+    setWorkspace(undefined); setEditLink(""); setCardFilter("all"); setFeedback("");
     companyApi<Workspace>(endpoint, "GET", undefined, token).then(data => { if (current) setWorkspace(data); })
       .catch(error => { if (current) setFeedback(messageFor(error)); });
     return () => { current = false; };
@@ -111,6 +114,10 @@ function CompanyWorkspace() {
     </TeamPage>;
   }
 
+  const deployed = workspace?.cards.filter(card => card.lifecycleStatus === "ACTIVATED").length ?? 0;
+  const visibleCards = workspace?.cards.filter(card => cardFilter === "all" ||
+    (cardFilter === "deployed" ? card.lifecycleStatus === "ACTIVATED" : cardFilter === "unassigned" ? !card.profileId : card.lifecycleStatus === "SUSPENDED")) ?? [];
+
   return <main className="card-portal card-portal-studio"><section className="studio-container">
     <header className="studio-header">
       <div className="studio-header-main">
@@ -131,6 +138,8 @@ function CompanyWorkspace() {
           </label>
         )}
         <button type="button" className="quiet studio-btn-back" disabled={busy} onClick={signOut}>Sign out</button>
+        {workspace && <button type="button" className="quiet studio-btn-back" disabled={busy}
+          onClick={() => void run(async () => "Workspace refreshed.")}>Refresh workspace</button>}
       </div>
     </header>
 
@@ -140,7 +149,9 @@ function CompanyWorkspace() {
       <div className="studio-card"><p>Loading your companies…</p></div>
     ) : companies.length === 0 ? (
       <div className="studio-card"><p>This account has no company workspaces.</p></div>
-    ) : workspace ? (
+    ) : !workspace ? <div className="studio-card"><p role="status">{feedback ? "The workspace could not be opened." : "Loading workspace…"}</p>
+      {feedback && <button type="button" disabled={busy} onClick={() => void run(async () => "Workspace refreshed.")}>Retry workspace</button>}
+    </div> : (
       <div className="studio-workspace-grid">
         <div className="studio-editor-column">
           {/* 1. Branding and profile defaults */}
@@ -174,12 +185,16 @@ function CompanyWorkspace() {
           {/* 2. Import employees */}
           <div className="studio-card">
             <h2>Import employees</h2>
-            <p>CSV headers are name, email and optional headline. Employee account emails stay private.</p>
+            <p>CSV headers are name, email and optional headline. New employees receive a welcome email at the address you enter. Email addresses stay private.</p>
+            <p>{workspace.company.allowEmployeeEdits ? "Welcome emails include a private profile edit link valid for seven days." : "Enable employee profile edits above to include an edit link in welcome emails."}</p>
             <form onSubmit={event => {
               event.preventDefault(); void run(async () => {
                 const employees = readEmployeeCsv(csv);
-                const result = await companyApi<{ added: number; skipped: number }>(`${endpoint}/employees`, "POST", { employees }, token);
-                setCsv(""); return `Imported ${result.added}. Skipped ${result.skipped} already listed.`;
+                const result = await companyApi<{ added: number; skipped: number; queued?: number }>(`${endpoint}/employees`, "POST", { employees }, token);
+                setCsv("");
+                const mail = result.queued ? ` Welcome emails queued for ${result.queued}. Refresh the workspace for status.`
+                  : result.added && result.queued === 0 ? " Employee email is unavailable. You can retry from the employee list when it is configured." : "";
+                return `Imported ${result.added}. Skipped ${result.skipped} already listed.${mail}`;
               });
             }}>
               <label className="studio-upload-label">
@@ -201,7 +216,7 @@ function CompanyWorkspace() {
           {/* 3. Employees list */}
           <div className="studio-card">
             <div className="studio-card-top-row">
-              <h2>Employees</h2>
+              <h2 id="company-employees" tabIndex={-1}>Employees</h2>
               <span className="studio-counter-pill">{workspace.employees.length} members</span>
             </div>
             {editLink && <label className="studio-edit-link-box">Private edit link, valid for seven days<input readOnly value={editLink} onFocus={event => event.currentTarget.select()} /></label>}
@@ -211,6 +226,7 @@ function CompanyWorkspace() {
                   <div className="employee-avatar-circle">{employee.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"}</div>
                   <div className="employee-details">
                     <strong>{employee.name}</strong> · <span className="employee-email-sub">{employee.email}</span> · <span className={`employee-status-tag ${employee.active ? "active" : "inactive"}`}>{employee.active ? "Active" : "Inactive"}</span>
+                    {employee.inviteEmailStatus && <small className="employee-email-sub"> · {welcomeEmailLabels[employee.inviteEmailStatus]}</small>}
                   </div>
                 </div>
                 <div className="employee-actions-row">
@@ -218,6 +234,11 @@ function CompanyWorkspace() {
                     if (employee.active && !confirm(`Deactivate ${employee.name} and their assigned cards?`)) return;
                     void run(async () => { setEditLink(""); await companyApi(`${endpoint}/employees/${employee.id}`, "PATCH", { active: !employee.active }, token); return "Employee status updated."; });
                   }}>{employee.active ? "Deactivate" : "Reactivate"}</button>
+                  {employee.active && employee.inviteEmailStatus !== undefined && <button className="quiet studio-btn-emp" type="button"
+                    disabled={busy || employee.inviteEmailStatus === "pending" || employee.inviteEmailStatus === "sending"} onClick={() => void run(async () => {
+                      await companyApi(`${endpoint}/employees/${employee.id}/welcome-email`, "POST", undefined, token);
+                      return `Welcome email queued for ${employee.name}. Refresh the workspace for status.`;
+                    })}>{employee.inviteEmailStatus === "failed" || employee.inviteEmailStatus === "accepted" ? "Resend welcome email" : "Send welcome email"}</button>}
                   {employee.active && workspace.company.allowEmployeeEdits && <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => void run(async () => {
                     const result = await companyApi<{ path: string }>(`${endpoint}/employees/${employee.id}/edit-link`, "POST", undefined, token);
                     setEditLink(new URL(result.path, location.origin).href); return "Private edit link created. Share it with this employee.";
@@ -230,17 +251,23 @@ function CompanyWorkspace() {
           {/* 4. Company cards */}
           <div className="studio-card">
             <div className="studio-card-top-row">
-              <h2>Company cards</h2>
+              <h2 id="company-cards" tabIndex={-1}>Company cards</h2>
               <span className="studio-counter-pill">{workspace.cards.length} cards</span>
             </div>
-            {workspace.cards.length === 0 && <p className="studio-empty-text">Oneinfo Admin can reserve QC-passed cards for this company.</p>}
+            {workspace.cards.length === 0 ? <p className="studio-empty-text">Ask your Oneinfo Admin to reserve QC-passed cards for {workspace.company.name}, then refresh this workspace to assign them.</p> :
+              <label>Card status<select value={cardFilter} onChange={event => setCardFilter(event.target.value)}>
+                <option value="all">All cards</option><option value="deployed">Deployed</option><option value="unassigned">Unassigned</option><option value="suspended">Suspended</option>
+              </select></label>}
+            {workspace.cards.length > 0 && visibleCards.length === 0 && <p role="status">No cards match this status.</p>}
             <ul className="team-list">
-              {workspace.cards.map(card => <li key={card.id} className="team-card-item">
+              {visibleCards.map(card => <li key={card.id} className="team-card-item">
                 <div className="card-top-meta">
                   <span className="card-slug-mono">💳 {card.publicSlug}</span>
                   <span className={`card-status-pill status-${card.lifecycleStatus.toLowerCase()}`}>{card.lifecycleStatus}</span>
                 </div>
-                {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">NFC link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a></div>}
+                {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">NFC link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a> · <button className="quiet" type="button" disabled={busy} onClick={() => void run(async () => {
+                  await navigator.clipboard.writeText(new URL(`/c/${card.publicSlug}`, location.origin).href); return "Public card link copied.";
+                }, false)}>Copy public link</button></div>}
                 {["QC_PASSED", "ACTIVATED", "SUSPENDED"].includes(card.lifecycleStatus) && <form key={`${card.id}-${card.profileId}`} onSubmit={event => {
                   event.preventDefault(); const employeeId = values(event.currentTarget).employeeId || null;
                   void run(async () => { await companyApi(`${endpoint}/cards/${card.id}`, "PUT", { employeeId }, token); return "Card assignment saved."; });
@@ -264,16 +291,16 @@ function CompanyWorkspace() {
             <div className="company-profile-preview-card">
               {workspace.company.logoUrl && <img className="team-logo company-mockup-logo" src={workspace.company.logoUrl} alt={workspace.company.name} />}
               <h3 className="company-preview-name">{workspace.company.name}</h3>
-              {workspace.company.domain && <span className="company-domain-tag">🌐 {workspace.company.domain}</span>}
+              {workspace.company.domain && <a className="company-domain-tag" href={`https://${workspace.company.domain}/team`} target="_blank" rel="noreferrer">{workspace.company.domain} ↗</a>}
               <div className="company-stats-grid">
-                <div className="company-stat-cell">
+                <a className="company-stat-cell" href="#company-employees">
                   <strong>{workspace.employees.filter(e => e.active).length}</strong>
                   <span>Active staff</span>
-                </div>
-                <div className="company-stat-cell">
-                  <strong>{workspace.cards.length}</strong>
+                </a>
+                <a className="company-stat-cell" href="#company-cards" onClick={() => setCardFilter("deployed")}>
+                  <strong>{deployed}</strong>
                   <span>Cards deployed</span>
-                </div>
+                </a>
               </div>
             </div>
           </div>
@@ -296,7 +323,7 @@ function CompanyWorkspace() {
           <small className="profile-footer">Powered by Arise Studio</small>
         </aside>
       </div>
-    ) : null}
+    )}
   </section></main>;
 }
 
