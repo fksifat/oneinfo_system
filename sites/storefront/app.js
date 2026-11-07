@@ -314,36 +314,88 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     void import("@google/model-viewer").catch(showError);
   }
 
-  async function renderTracking(token) {
+  const arrowSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12h15m-5-5 5 5-5 5"/></svg>`;
+  function trackingPipelineMarkup(order, preview = false) {
+    const cards = order.cards ?? { total: 1, qrGenerated: 0, nfcWritten: 0, qcPassed: 0 };
+    const total = Math.max(1, cards.total || 1);
+    const pastProcessing = Boolean(order.processingAt || order.shippedAt || order.deliveredAt);
+    const pastShipped = Boolean(order.shippedAt || order.deliveredAt);
+    const isDelivered = Boolean(order.deliveredAt) || order.status === "DELIVERED";
+    const isCancelled = order.status === "CANCELLED";
+    const isConfirmed = order.status !== "AWAITING_PAYMENT" && !isCancelled;
+    const qrReady = isConfirmed && (cards.qrGenerated >= total || pastProcessing);
+    const qcReady = isConfirmed && (cards.qcPassed >= total || pastShipped);
+    const fmt = date => date ? escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })) : "";
+    const stages = [
+      ["Received", "Order placed", isConfirmed, fmt(order.createdAt) || "Awaiting order", order.paymentVerifiedAt ? "Payment verified" : "Order confirmed"],
+      ["Card & QR Generated", "Identity allocated", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} QR generated`, "Unique slug & optical QR"],
+      ["NFC & QC Test OK", "Hardware verified", qcReady, `${qcReady ? total : cards.qcPassed}/${total} NFC & QC OK`, "NTAG213 write & read-back"],
+      ["Processing", "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Workstation prep", "Sealed with activation code"],
+      ["Shipped", "Handed to courier", pastShipped, fmt(order.shippedAt) || "Courier handoff", order.courierTrackingId ? `ID: ${escapeHtml(order.courierTrackingId)}` : "Nationwide delivery"],
+      ["Delivered", "In client’s hands", isDelivered, fmt(order.deliveredAt) || "Final handoff", isDelivered ? "Ready to tap & activate" : "Reaching your address"],
+    ];
+    const activeIndex = stages.findIndex(s => !s[2]);
+    const doneCount = stages.filter(s => s[2]).length;
+    const status = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" }[order.status];
+    return `${preview ? `<p class="tracking-preview-banner">Sample live journey · Paste your private tracking link above to follow your order.</p>` : `<div class="tracking-summary"><p>Current status <strong class="tracking-status-badge" data-status="${escapeHtml(order.status)}">${escapeHtml(status || "Unavailable")}</strong></p><span class="tracking-progress-count">${doneCount}/6 stages complete</span></div>`}
+      <div class="tracking-bar" aria-hidden="true"><span style="width:${Math.round(doneCount / 6 * 100)}%"></span></div>
+      ${order.cancellationReason ? `<p class="tracking-cancel">${escapeHtml(order.cancellationReason)}</p>` : ""}
+      ${order.courierTrackingId ? `<p class="tracking-courier">Courier tracking ID <strong>${escapeHtml(order.courierTrackingId)}</strong></p>` : ""}
+      <ol class="tracking-flow">${stages.map(([title, sub, done, meta, note], i) => {
+        const state = isCancelled && !done ? "cancelled" : done ? "done" : i === activeIndex ? "current" : "upcoming";
+        return `<li class="tracking-node" data-state="${state}">
+          <div class="tracking-node-card">
+            <div class="tracking-node-top"><span class="tracking-step-badge">${done ? "✓" : `0${i + 1}`}</span><small>${escapeHtml(sub)}</small></div>
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(note)}</p>
+            <span class="tracking-meta">${meta}</span>
+          </div>
+          ${i < stages.length - 1 ? `<span class="tracking-arrow ${done ? "is-done" : state === "current" ? "is-active" : ""}" aria-hidden="true">${arrowSvg}</span>` : ""}
+        </li>`;
+      }).join("")}</ol>`;
+  }
+
+  let activeTrackingToken = "";
+  async function renderTracking(rawToken, silent = false) {
     const content = $("[data-tracking-content]");
-    content.textContent = "Loading your order status…";
+    const savedToken = /^\/#track\/([a-zA-Z0-9_.-]+)$/.exec(lastReceipt?.trackingPath ?? "")?.[1] ?? "";
+    const token = rawToken || savedToken;
+    activeTrackingToken = token;
+    if (!token) {
+      content.innerHTML = `<form class="tracking-lookup-form"><label>Private tracking link or token<input name="token" placeholder="Paste #track/... link or token" required /></label><button class="button button-primary" type="submit">Track order</button></form>${trackingPipelineMarkup({ status: "RECEIVED", createdAt: new Date().toISOString(), cards: { total: 1, qrGenerated: 1, nfcWritten: 0, qcPassed: 0 } }, true)}`;
+      $(".tracking-lookup-form", content)?.addEventListener("submit", event => {
+        event.preventDefault();
+        const input = event.currentTarget.elements.token.value.trim().split("#track/").pop().replace(/^\/+/, "");
+        if (input) location.hash = `track/${input}`;
+      });
+      return;
+    }
+    if (!silent) content.textContent = "Loading your order status…";
     try {
       const response = await fetch(`${apiUrl}/api/v1/orders/tracking`, { method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ token }), signal: AbortSignal.timeout(7000) });
       if (!response.ok) throw new Error(response.status === 404 ? "This private tracking link is invalid." : "Tracking is temporarily unavailable.");
       const order = await response.json();
-      if (location.hash !== `#track/${token}`) return;
-      const steps = [["Received", order.createdAt], ["Processing", order.processingAt], ["Shipped", order.shippedAt], ["Delivered", order.deliveredAt]];
-      const status = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" }[order.status];
-      content.innerHTML = `<p>Current status <strong>${escapeHtml(status || "Unavailable")}</strong></p>
-        ${order.cancellationReason ? `<p>${escapeHtml(order.cancellationReason)}</p>` : ""}<ol>${steps.map(([label, date]) => `<li>${label}${date ? ` · ${escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" }))}` : ""}</li>`).join("")}</ol>
-        ${order.courierTrackingId ? `<p>Courier tracking ID <strong>${escapeHtml(order.courierTrackingId)}</strong></p>` : ""}`;
-    } catch (error) { if (location.hash === `#track/${token}`) content.textContent = error.message || "Tracking is temporarily unavailable."; }
+      if (activeTrackingToken !== token) return;
+      content.innerHTML = trackingPipelineMarkup(order);
+    } catch (error) { if (activeTrackingToken === token && !silent) content.textContent = error.message || "Tracking is temporarily unavailable."; }
   }
+  window.setInterval(() => { if (activeTrackingToken && !document.hidden && (location.hash === "#track" || location.hash.startsWith("#track/"))) void renderTracking(activeTrackingToken, true); }, 5000);
 
   function renderRoute(focus = false) {
     const order = location.hash === "#order-draft";
     const payment = location.hash === "#arisepay";
     const reviewToken = location.hash.startsWith("#review/") ? location.hash.slice(8) : "";
+    const trackingPage = location.hash === "#track" || location.hash.startsWith("#track/");
     const trackingToken = location.hash.startsWith("#track/") ? location.hash.slice(7) : "";
     const route = productRoute(location.hash);
     document.body.classList.toggle("product-page", Boolean(route));
-    const page = order ? "order-draft" : payment ? "arisepay" : reviewToken ? "review-portal" : trackingToken ? "tracking-portal" : route ? "product-detail" : "";
+    const page = order ? "order-draft" : payment ? "arisepay" : reviewToken ? "review-portal" : trackingPage ? "tracking-portal" : route ? "product-detail" : "";
     $$("#main > section").forEach(section => {
       section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail", "review-portal", "tracking-portal"].includes(section.id);
     });
     if (reviewToken) { document.title = "Your review | Oneinfo"; void renderReviewPortal(reviewToken); return; }
-    if (trackingToken) { document.title = "Track your order | Oneinfo"; void renderTracking(trackingToken); if (focus) $("#tracking-portal-title").focus(); return; }
+    if (trackingPage) { document.title = "Track your order | Oneinfo"; void renderTracking(trackingToken); if (focus) $("#tracking-portal-title").focus(); return; }
     if (payment) {
       if (pendingOrder) {
         location.replace("#order-draft");

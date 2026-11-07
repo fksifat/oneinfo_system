@@ -467,6 +467,8 @@ export type OrderTracking = {
   courierTrackingId?: string | null;
   cancelledAt?: string | null;
   cancellationReason?: string | null;
+  paymentVerifiedAt?: string | null;
+  cards?: { total: number; qrGenerated: number; nfcWritten: number; qcPassed: number };
 };
 export type OrderReceipt = OrderTracking & {
   id: string;

@@ -750,3 +750,55 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .order-coupon .order-coupon-status { padding: 0; }
 .order-coupon-status { margin: 6px 0 0; color: var(--muted); font-size: .78rem; }
 .order-coupon-status:empty { display: none; }
+
+.tracking-portal-card { max-width: 1020px; }
+.tracking-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
+.tracking-live-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 100px; background: var(--ink); color: var(--lime); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.tracking-lookup-form { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; padding: 18px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--cream); }
+.tracking-lookup-form label { display: grid; gap: 6px; font-size: .85rem; font-weight: 700; color: var(--ink); }
+.tracking-lookup-form input { width: 100%; min-width: 0; padding: 11px 13px; border: 1px solid var(--line); border-radius: 7px; background: var(--white); color: var(--ink); font: inherit; }
+.tracking-preview-banner { margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; background: #edf5f1; color: var(--ink); font-size: .85rem; font-weight: 600; }
+.tracking-summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.tracking-summary p { margin: 0; font-size: .95rem; color: var(--ink); }
+.tracking-status-badge { display: inline-block; margin-left: 6px; padding: 4px 10px; border-radius: 100px; background: var(--ink); color: var(--lime); font-size: .72rem; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+.tracking-status-badge[data-status="CANCELLED"] { background: #fbeae8; color: #7f1d1d; }
+.tracking-progress-count { font-size: .78rem; font-weight: 750; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.tracking-bar { height: 8px; margin-bottom: 22px; border-radius: 100px; background: var(--cream); border: 1px solid var(--line); overflow: hidden; }
+.tracking-bar > span { display: block; height: 100%; border-radius: 100px; background: linear-gradient(90deg, var(--ink), var(--teal)); transition: width .55s cubic-bezier(.22, 1, .36, 1); }
+.tracking-courier, .tracking-cancel { margin: 0 0 18px; padding: 12px 16px; border-radius: 10px; background: var(--cream); border: 1px solid var(--line); font-size: .88rem; }
+.tracking-cancel { background: #fbeae8; border-color: #e6b8b3; color: #7f1d1d; }
+.tracking-flow { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 28px; }
+.tracking-node { position: relative; display: flex; align-items: stretch; min-width: 0; }
+.tracking-node-card { flex: 1; min-width: 0; padding: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--cream); color: var(--ink); display: grid; gap: 6px; transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease; }
+.tracking-node-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.tracking-step-badge { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--white); border: 1px solid var(--line); font-size: .72rem; font-weight: 850; color: var(--ink); }
+.tracking-node-top small { font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.tracking-node-card strong { font-size: 1rem; letter-spacing: -.02em; }
+.tracking-node-card p { margin: 0; font-size: .82rem; color: var(--muted); line-height: 1.45; }
+.tracking-meta { margin-top: 4px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: .75rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tracking-node[data-state="done"] .tracking-node-card { background: #edf5f1; border-color: #24554d; }
+.tracking-node[data-state="done"] .tracking-step-badge { background: var(--ink); border-color: var(--ink); color: var(--lime); }
+.tracking-node[data-state="current"] .tracking-node-card { background: var(--ink); border-color: var(--ink); color: var(--white); animation: stagePulse 2.4s ease-in-out infinite; }
+.tracking-node[data-state="current"] .tracking-step-badge { background: var(--lime); border-color: var(--lime); color: var(--ink); }
+.tracking-node[data-state="current"] .tracking-node-top small, .tracking-node[data-state="current"] .tracking-meta { color: var(--lime); border-color: rgba(255, 255, 255, .22); }
+.tracking-node[data-state="current"] .tracking-node-card p { color: #d7e5e0; }
+.tracking-arrow { position: absolute; right: -22px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; display: grid; place-items: center; color: var(--muted); pointer-events: none; z-index: 2; }
+.tracking-arrow svg { width: 18px; height: 18px; animation: arrowSlideX 1.6s ease-in-out infinite; }
+.tracking-arrow.is-done, .tracking-arrow.is-active { color: var(--ink); }
+@media (min-width: 821px) {
+  .tracking-node:nth-child(3) .tracking-arrow { right: auto; left: 50%; top: auto; bottom: -19px; transform: translateX(-50%); }
+  .tracking-node:nth-child(3) .tracking-arrow svg { animation-name: arrowSlideY; transform: rotate(90deg); }
+}
+@keyframes arrowSlideX { 0%, 100% { transform: translateX(-2px); opacity: .65; } 50% { transform: translateX(3px); opacity: 1; } }
+@keyframes arrowSlideY { 0%, 100% { transform: rotate(90deg) translateX(-2px); opacity: .65; } 50% { transform: rotate(90deg) translateX(3px); opacity: 1; } }
+@keyframes stagePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(54, 124, 122, .38); } 50% { box-shadow: 0 0 0 7px rgba(54, 124, 122, 0); } }
+@media (max-width: 820px) {
+  .tracking-flow { grid-template-columns: 1fr; gap: 24px; }
+  .tracking-lookup-form { grid-template-columns: 1fr; }
+  .tracking-arrow { right: auto; left: 50%; top: auto; bottom: -21px; transform: translateX(-50%); }
+  .tracking-arrow svg { animation-name: arrowSlideY; transform: rotate(90deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tracking-bar > span { transition: none; }
+  .tracking-node[data-state="current"] .tracking-node-card, .tracking-arrow svg { animation: none; }
+}
