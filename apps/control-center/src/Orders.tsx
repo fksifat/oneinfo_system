@@ -12,6 +12,15 @@ const path = "/api/v1/orders";
 const searchFields = ["payment", "delivery", "qr"] as const;
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 
+function getInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  if (parts.length >= 2 && first && last) {
+    return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase();
+  }
+  return name.trim().slice(0, 2).toUpperCase() || "CU";
+}
 export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void }) {
   const params = new URLSearchParams(location.search);
   const requestedOrder = params.get("order");
@@ -249,97 +258,257 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
 
   return <div className="store-orders">
     <section className="panel store-orders-list">
-      <div className="panel-head"><div><h2>Received orders</h2><p>Review payments, delivery details, and order items.</p></div><button type="button" className="quiet" disabled={loading} onClick={() => void loadOrders()}>Refresh</button></div>
-      {supportsSearch && <form className="order-filter-form" onSubmit={searchOrders}>
-        <label>Search orders<input type="search" name="query" maxLength={254} defaultValue={requestedOrder ?? ""} placeholder="Order ID, phone or email" /></label>
-        <label>Payment<select name="payment"><option value="">Any</option><option value="PENDING_VERIFICATION">Pending</option><option value="VERIFIED">Verified</option></select></label>
-        <label>Delivery<select name="delivery"><option value="">Any</option>{Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-        <label>QR allocation<select name="qr"><option value="">Any</option><option value="AWAITING_QR">Awaiting QR</option><option value="PARTIAL">Partially assigned</option><option value="ASSIGNED">Assigned</option></select></label>
-        <button type="submit" className="quiet">Apply filters</button>
-      </form>}
+      <div className="panel-head orders-panel-head">
+        <div>
+          <span className="eyebrow">ORDER FULFILLMENT</span>
+          <h2>Received orders</h2>
+          <p>Review customer orders, manage bKash verification, and track hardware dispatch.</p>
+        </div>
+        <button type="button" className="quiet" disabled={loading} onClick={() => void loadOrders()}>
+          {loading ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {supportsSearch && (
+        <div className="orders-filter-container">
+          <form className="order-filter-form" onSubmit={searchOrders}>
+            <label className="filter-field filter-search">
+              <span className="filter-label">Search orders</span>
+              <div className="filter-input-wrap">
+                <span className="filter-search-icon" aria-hidden="true">🔍</span>
+                <input type="search" name="query" maxLength={254} defaultValue={requestedOrder ?? ""} placeholder="Order ID, phone, customer name, email…" />
+              </div>
+            </label>
+            <label className="filter-field">
+              <span className="filter-label">Payment</span>
+              <select name="payment">
+                <option value="">Any</option>
+                <option value="PENDING_VERIFICATION">Pending verification</option>
+                <option value="VERIFIED">Verified</option>
+              </select>
+            </label>
+            <label className="filter-field">
+              <span className="filter-label">Delivery</span>
+              <select name="delivery">
+                <option value="">Any</option>
+                {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className="filter-field">
+              <span className="filter-label">QR allocation</span>
+              <select name="qr">
+                <option value="">Any</option>
+                <option value="AWAITING_QR">Awaiting QR</option>
+                <option value="PARTIAL">Partially assigned</option>
+                <option value="ASSIGNED">Assigned</option>
+              </select>
+            </label>
+            <div className="filter-submit-wrap">
+              <button type="submit" className="button-filter-submit">Apply filters</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {orderError && <p className="store-order-notice is-error" role="alert">{orderError}</p>}
       {orderMessage && <p className="store-order-notice" role="status">{orderMessage}</p>}
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
-      {items.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
-        <summary>
-          <span className="store-order-customer"><strong>{order.customer.name}</strong>{order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && <small>{order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}</small>}<small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
-          <span className="store-order-total">
-            <strong>{bdt(order.totalMinor)}</strong>
-            <small>
-              {order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}
-              {order.paymentStatus === "PENDING_VERIFICATION" && <em className="store-order-status is-pending">Payment pending</em>}
-              {order.paymentStatus === "VERIFIED" && <em className="store-order-status is-paid">Payment verified</em>}
-            </small>
-            <small><em className={`store-order-status ${order.status === "DELIVERED" ? "is-delivered" : "is-pending"}`}>{statusLabels[order.status]}</em></small>
-          </span>
-        </summary>
-        <div className="store-order-content">
-          <OrderTrackingPipeline order={order} compact />
-          <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
-            startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />
-          <OrderPacking order={order} token={token} initiallyOpen={requestedOrder === order.id && requestedTask === "packing"} />
-          <dl>
-            <div><dt>Order ID</dt><dd>{order.id}</dd></div>
-            <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted" : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
-            <div><dt>Client activation</dt><dd>The client claims ownership using the secret code and their account.</dd></div>
-            {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{card.publicSlug}</a> · QC {card.qcStatus}</dd></div>)}
-            <div><dt>Contact</dt><dd>{order.customer.phone}<br />{order.customer.email}</dd></div>
-            <div><dt>Delivery address</dt><dd>{order.deliveryAddress.addressLine}<br />{order.deliveryAddress.district}{order.deliveryAddress.postalCode && ` ${order.deliveryAddress.postalCode}`}</dd></div>
-            <div><dt>Delivery charge</dt><dd>{shippingZoneLabels[order.shippingZone]} · {bdt(order.shippingMinor)}</dd></div>
-            {order.couponCode && <div><dt>Coupon discount</dt><dd>{order.couponCode} · −{bdt(order.discountMinor)}</dd></div>}
-            {order.transactionId && <div><dt>bKash payment</dt><dd>{bdt(order.paymentAmountMinor ?? 0)} · {order.transactionId}<br />
-              {order.paymentStatus === "VERIFIED" ? "Verified" : "Pending verification"}</dd></div>}
-            {order.transactionId && order.paymentMethod === "COD" && <div><dt>Remaining on delivery after verification</dt>
-              <dd>{bdt(order.totalMinor - (order.paymentAmountMinor ?? 0))}</dd></div>}
-            {order.customer.note && <div><dt>Order note</dt><dd>{order.customer.note}</dd></div>}
-            {order.courierTrackingId && <div><dt>Courier tracking ID</dt><dd>{order.courierTrackingId}</dd></div>}
-            {order.trackingPath && <div><dt>Private tracking link</dt><dd><a href={new URL(order.trackingPath, import.meta.env.VITE_STOREFRONT_URL || location.origin).href} target="_blank" rel="noreferrer">Open order tracking</a></dd></div>}
-          </dl>
-          <div className="store-order-actions">
-            {order.trackingPath && order.status === "RECEIVED" && <button className="quiet" type="button" disabled={Boolean(delivering)} onClick={() => void updateFulfillment(order, "PROCESSING")}>Start processing</button>}
-            {order.status !== "CANCELLED" && order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" && <button className="quiet" type="button"
-              disabled={Boolean(verifyingPayment)} onClick={() => void verifyPayment(order)}>
-              {verifyingPayment === order.id ? "Verifying…" : "Verify bKash payment"}
-            </button>}
-            {!["AWAITING_PAYMENT", "CANCELLED"].includes(order.status) && <button className="quiet" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
-              {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
-            </button>}
+
+      <div className="store-orders-stack">
+        {items.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
+          <summary>
+            <div className="store-order-summary-left">
+              <span className="store-order-avatar" aria-hidden="true">{getInitials(order.customer.name)}</span>
+              <span className="store-order-customer">
+                <div className="store-order-title-row">
+                  <strong>{order.customer.name}</strong>
+                  {order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && (
+                    <span className={`order-qr-pill ${order.qrAllocation?.status === "ASSIGNED" ? "is-assigned" : "is-pending"}`}>
+                      <span className="order-qr-dot" aria-hidden="true"></span>
+                      {order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}
+                    </span>
+                  )}
+                </div>
+                <small className="store-order-meta">
+                  <span className="order-meta-phone">{order.customer.phone}</span>
+                  <span className="order-meta-sep" aria-hidden="true">·</span>
+                  <time className="order-meta-date">{new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })}</time>
+                </small>
+              </span>
+            </div>
+
+            <span className="store-order-total">
+              <strong className="order-price-val">{bdt(order.totalMinor)}</strong>
+              <small className="order-badge-row">
+                <span className="order-method-badge">{order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}</span>
+                {order.paymentStatus === "PENDING_VERIFICATION" && <em className="store-order-status is-pending">Payment pending</em>}
+                {order.paymentStatus === "VERIFIED" && <em className="store-order-status is-paid">Payment verified</em>}
+                <em className={`store-order-status ${order.status === "DELIVERED" ? "is-delivered" : order.status === "CANCELLED" ? "is-cancelled" : "is-stage"}`}>{statusLabels[order.status]}</em>
+              </small>
+            </span>
+          </summary>
+
+          <div className="store-order-content">
+            <OrderTrackingPipeline order={order} compact />
+
+            <div className="order-work-panels">
+              <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
+                startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />
+              <OrderPacking order={order} token={token} initiallyOpen={requestedOrder === order.id && requestedTask === "packing"} />
+            </div>
+
+            <div className="order-info-cards">
+              <div className="order-info-card">
+                <div className="order-info-card-head">
+                  <span className="order-card-icon" aria-hidden="true">🆔</span>
+                  <h3>Card & Identity</h3>
+                </div>
+                <dl>
+                  <div><dt>Order ID</dt><dd className="mono-code">{order.id}</dd></div>
+                  <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted" : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
+                  <div><dt>Client activation</dt><dd>The client claims ownership using their secret code and account.</dd></div>
+                  {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="order-slug-link">{card.publicSlug} ↗</a> <span className="qc-badge">QC {card.qcStatus}</span></dd></div>)}
+                </dl>
+              </div>
+
+              <div className="order-info-card">
+                <div className="order-info-card-head">
+                  <span className="order-card-icon" aria-hidden="true">📍</span>
+                  <h3>Recipient & Delivery</h3>
+                </div>
+                <dl>
+                  <div><dt>Contact</dt><dd><strong>{order.customer.phone}</strong><br /><span className="order-contact-email">{order.customer.email}</span></dd></div>
+                  <div><dt>Delivery address</dt><dd>{order.deliveryAddress.addressLine}<br />{order.deliveryAddress.district}{order.deliveryAddress.postalCode && ` ${order.deliveryAddress.postalCode}`}</dd></div>
+                  <div><dt>Delivery zone</dt><dd>{shippingZoneLabels[order.shippingZone]} · {bdt(order.shippingMinor)}</dd></div>
+                  {order.customer.note && <div><dt>Customer note</dt><dd className="order-note-bubble">{order.customer.note}</dd></div>}
+                  {order.courierTrackingId && <div><dt>Courier tracking ID</dt><dd className="mono-code">{order.courierTrackingId}</dd></div>}
+                  {order.trackingPath && <div><dt>Tracking page</dt><dd><a href={new URL(order.trackingPath, import.meta.env.VITE_STOREFRONT_URL || location.origin).href} target="_blank" rel="noreferrer" className="order-external-link">Open order tracking ↗</a></dd></div>}
+                </dl>
+              </div>
+
+              <div className="order-info-card">
+                <div className="order-info-card-head">
+                  <span className="order-card-icon" aria-hidden="true">💳</span>
+                  <h3>Financials & Settlement</h3>
+                </div>
+                <dl>
+                  <div><dt>Payment method</dt><dd><strong>{order.paymentMethod === "BKASH" ? "bKash Digital" : "Cash on Delivery (COD)"}</strong></dd></div>
+                  {order.transactionId && <div><dt>bKash transaction</dt><dd>{bdt(order.paymentAmountMinor ?? 0)} · <code className="mono-code">{order.transactionId}</code><br />
+                    <span className={`order-status-badge ${order.paymentStatus === "VERIFIED" ? "is-verified" : "is-pending"}`}>{order.paymentStatus === "VERIFIED" ? "✓ Verified" : "⏳ Pending verification"}</span></dd></div>}
+                  {order.transactionId && order.paymentMethod === "COD" && <div><dt>Due on delivery</dt>
+                    <dd><strong>{bdt(order.totalMinor - (order.paymentAmountMinor ?? 0))}</strong></dd></div>}
+                  {order.couponCode && <div><dt>Coupon discount</dt><dd className="coupon-tag">{order.couponCode} (−{bdt(order.discountMinor)})</dd></div>}
+                  <div><dt>Total order value</dt><dd><strong className="order-final-price">{bdt(order.totalMinor)}</strong></dd></div>
+                </dl>
+              </div>
+            </div>
+
+            <div className="order-items-block">
+              <div className="order-items-header">
+                <span className="eyebrow">ORDER CONTENTS</span>
+                <span className="order-items-badge">{order.items.reduce((sum, item) => sum + item.quantity, 0)} {order.items.length === 1 ? "card" : "cards"}</span>
+              </div>
+              <ul className="order-items-list">
+                {order.items.map(item => (
+                  <li key={`${item.productId}:${item.variantId}`} className="order-item-row">
+                    <span className="order-item-qty">{item.quantity}×</span>
+                    <div className="order-item-details">
+                      <strong className="order-item-title">{item.name}</strong>
+                      <span className="order-item-variant">{item.variantName}</span>
+                    </div>
+                    <span className="order-item-amount">{bdt(item.unitPriceMinor * item.quantity)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="store-order-actions-bar">
+              <div className="store-order-actions">
+                {order.trackingPath && order.status === "RECEIVED" && (
+                  <button className="button-action button-action-primary" type="button" disabled={Boolean(delivering)} onClick={() => void updateFulfillment(order, "PROCESSING")}>
+                    <span aria-hidden="true">▶</span> Start processing
+                  </button>
+                )}
+                {order.status !== "CANCELLED" && order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" && (
+                  <button className="button-action button-action-verify" type="button" disabled={Boolean(verifyingPayment)} onClick={() => void verifyPayment(order)}>
+                    <span aria-hidden="true">✓</span> {verifyingPayment === order.id ? "Verifying…" : "Verify bKash payment"}
+                  </button>
+                )}
+                {!["AWAITING_PAYMENT", "CANCELLED"].includes(order.status) && (
+                  <button className="button-action button-action-delivered" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
+                    <span aria-hidden="true">★</span> {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
+                  </button>
+                )}
+              </div>
+
+              {order.trackingPath && !["DELIVERED", "CANCELLED", "AWAITING_PAYMENT"].includes(order.status) && order.paymentStatus !== "PENDING_VERIFICATION" && (
+                <form className="order-inline-action-form" onSubmit={event => {
+                  event.preventDefault(); void updateFulfillment(order, "SHIPPED", String(new FormData(event.currentTarget).get("trackingId")));
+                }}>
+                  <label className="order-inline-field">
+                    <span>Courier tracking ID</span>
+                    <input name="trackingId" maxLength={100} required defaultValue={order.courierTrackingId ?? ""} placeholder="Tracking ID…" />
+                  </label>
+                  <button type="submit" className="button-action button-action-ship" disabled={Boolean(delivering)}>
+                    {order.status === "SHIPPED" ? "Update tracking ID" : "Mark shipped"}
+                  </button>
+                </form>
+              )}
+
+              {order.trackingPath && order.status === "DELIVERED" && order.paymentMethod === "COD" && (
+                <form className="order-inline-action-form" onSubmit={event => void saveCod(event, order)}>
+                  <label className="order-inline-field">
+                    <span>Courier collected (৳)</span>
+                    <input name="collected" type="number" min="0" step="0.01" required defaultValue={(order.codCollectedMinor ?? 0) / 100} />
+                  </label>
+                  <label className="order-inline-field">
+                    <span>Courier settled (৳)</span>
+                    <input name="settled" type="number" min="0" step="0.01" required defaultValue={(order.codSettledMinor ?? 0) / 100} />
+                  </label>
+                  <button type="submit" className="button-action button-action-cod" disabled={Boolean(delivering)}>Save COD amounts</button>
+                </form>
+              )}
+            </div>
+
+            {order.cancellationReason && <p className="order-cancellation-notice">Cancellation: {order.cancellationReason}</p>
+            }
+
+            {!["SHIPPED", "DELIVERED", "CANCELLED"].includes(order.status) && (
+              <details className="order-cancel-fold">
+                <summary>Cancel order and release stock</summary>
+                <form className="order-cancel-form" onSubmit={event => {
+                  event.preventDefault(); if (delivering) return;
+                  const data = new FormData(event.currentTarget);
+                  setDelivering(order.id); setOrderError("");
+                  void api<OrderReceipt>(`${path}/admin/${order.id}/cancel`, token, { method: "POST", body: JSON.stringify({ reason: data.get("reason"), refundConfirmed: data.has("refundConfirmed"), cardsRecovered: data.has("cardsRecovered") }) })
+                    .then(updated => setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated, assignedCards: [] } : item)))
+                    .catch(error => setOrderError(error.message)).finally(() => setDelivering(undefined));
+                }}>
+                  <label className="cancel-field-full">
+                    <span>Cancellation reason</span>
+                    <input name="reason" minLength={5} maxLength={500} required placeholder="Provide reason for customer and audit logs…" />
+                  </label>
+                  <label className="order-check-label">
+                    <input type="checkbox" name="refundConfirmed" required={Boolean(order.transactionId)} />
+                    <span>Payment checked and any refund resolved</span>
+                  </label>
+                  <label className="order-check-label">
+                    <input type="checkbox" name="cardsRecovered" />
+                    <span>Any issued physical cards and secret codes have been recovered; invalidate those codes</span>
+                  </label>
+                  <button type="submit" className="button-cancel-order" disabled={Boolean(delivering)}>Cancel order</button>
+                </form>
+              </details>
+            )}
+
+            {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} />}
           </div>
-          {order.trackingPath && !["DELIVERED", "CANCELLED", "AWAITING_PAYMENT"].includes(order.status) && order.paymentStatus !== "PENDING_VERIFICATION" && <form className="order-filter-form" onSubmit={event => {
-            event.preventDefault(); void updateFulfillment(order, "SHIPPED", String(new FormData(event.currentTarget).get("trackingId")));
-          }}>
-            <label>Courier tracking ID<input name="trackingId" maxLength={100} required defaultValue={order.courierTrackingId ?? ""} /></label>
-            <button type="submit" className="quiet" disabled={Boolean(delivering)}>{order.status === "SHIPPED" ? "Update tracking ID" : "Mark shipped"}</button>
-          </form>}
-          {order.trackingPath && order.status === "DELIVERED" && order.paymentMethod === "COD" && <form className="order-filter-form" onSubmit={event => void saveCod(event, order)}>
-            <label>Courier collected (৳)<input name="collected" type="number" min="0" step="0.01" required defaultValue={(order.codCollectedMinor ?? 0) / 100} /></label>
-            <label>Courier settled (৳)<input name="settled" type="number" min="0" step="0.01" required defaultValue={(order.codSettledMinor ?? 0) / 100} /></label>
-            <button type="submit" className="quiet" disabled={Boolean(delivering)}>Save COD amounts</button>
-          </form>}
-          {order.cancellationReason && <p>Cancellation: {order.cancellationReason}</p>}
-          {!["SHIPPED", "DELIVERED", "CANCELLED"].includes(order.status) && <details><summary>Cancel order and release stock</summary>
-            <form className="order-filter-form" onSubmit={event => {
-              event.preventDefault(); if (delivering) return;
-              const data = new FormData(event.currentTarget);
-              setDelivering(order.id); setOrderError("");
-              void api<OrderReceipt>(`${path}/admin/${order.id}/cancel`, token, { method: "POST", body: JSON.stringify({ reason: data.get("reason"), refundConfirmed: data.has("refundConfirmed"), cardsRecovered: data.has("cardsRecovered") }) })
-                .then(updated => setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated, assignedCards: [] } : item)))
-                .catch(error => setOrderError(error.message)).finally(() => setDelivering(undefined));
-            }}>
-              <label>Cancellation reason<input name="reason" minLength={5} maxLength={500} required /></label>
-              <label><input type="checkbox" name="refundConfirmed" required={Boolean(order.transactionId)} /> Payment checked and any refund resolved</label>
-              <label><input type="checkbox" name="cardsRecovered" /> Any issued physical cards and secret codes have been recovered; invalidate those codes</label>
-              <button type="submit" className="quiet" disabled={Boolean(delivering)}>Cancel order</button>
-            </form>
-          </details>}
-          {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} />}
-          <ul>{order.items.map(item => <li key={`${item.productId}:${item.variantId}`}>
-            {item.quantity} × {item.name} · {item.variantName} · {bdt(item.unitPriceMinor * item.quantity)}
-          </li>)}</ul>
-        </div>
-      </details>)}
+        </details>)}
+      </div>
+
       {hasMore && <div className="store-order-pagination"><button className="quiet" type="button" disabled={loading} onClick={() => void loadOrders(items.at(-1)?.id)}>{loading ? "Loading…" : "Load older orders"}</button></div>}
     </section>
+
 
     <dialog ref={settingsDialog} className="store-settings-dialog" onCancel={() => onSettingsOpenChange(false)} onClose={() => onSettingsOpenChange(false)} aria-labelledby="store-settings-title">
     <section className="panel store-order-settings" aria-label="Checkout settings">
