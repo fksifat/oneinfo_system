@@ -51,6 +51,8 @@ export function TeamPortal() {
   return <CompanyWorkspace />;
 }
 
+const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
+
 function CompanyWorkspace() {
   const [token, setToken] = useState(() => sessionStorage.getItem(accountKey) ?? "");
   const [companies, setCompanies] = useState<Company[]>();
@@ -59,8 +61,14 @@ function CompanyWorkspace() {
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
   const [editLink, setEditLink] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
   const [csv, setCsv] = useState("");
   const [cardFilter, setCardFilter] = useState("all");
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeeFilter, setEmployeeFilter] = useState<"all" | "active" | "inactive">("all");
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [logoUrl, setLogoUrl] = useState("");
+
   const endpoint = `/me/${selected}`;
   const signOut = () => { sessionStorage.removeItem(accountKey); setToken(""); setCompanies(undefined); setWorkspace(undefined); setSelected(""); setEditLink(""); };
 
@@ -76,9 +84,13 @@ function CompanyWorkspace() {
   useEffect(() => {
     if (!selected || !token) return;
     let current = true;
-    setWorkspace(undefined); setEditLink(""); setCardFilter("all"); setFeedback("");
-    companyApi<Workspace>(endpoint, "GET", undefined, token).then(data => { if (current) setWorkspace(data); })
-      .catch(error => { if (current) setFeedback(messageFor(error)); });
+    setWorkspace(undefined); setEditLink(""); setCardFilter("all"); setFeedback(""); setEmployeeSearch(""); setEmployeeFilter("all"); setShowQuickAdd(false);
+    companyApi<Workspace>(endpoint, "GET", undefined, token).then(data => {
+      if (current) {
+        setWorkspace(data);
+        setLogoUrl(data.company.logoUrl ?? "");
+      }
+    }).catch(error => { if (current) setFeedback(messageFor(error)); });
     return () => { current = false; };
   }, [selected, token]);
 
@@ -87,7 +99,11 @@ function CompanyWorkspace() {
     setBusy(true); setFeedback("");
     try {
       const result = await action();
-      if (reload) setWorkspace(await companyApi<Workspace>(endpoint, "GET", undefined, token));
+      if (reload) {
+        const fresh = await companyApi<Workspace>(endpoint, "GET", undefined, token);
+        setWorkspace(fresh);
+        setLogoUrl(fresh.company.logoUrl ?? "");
+      }
       setFeedback(result);
     } catch (error) { if ((error as { status?: number }).status === 401) signOut(); setFeedback(messageFor(error)); }
     finally { setBusy(false); }
@@ -101,6 +117,57 @@ function CompanyWorkspace() {
       sessionStorage.setItem(accountKey, accessToken); setToken(accessToken);
       return "Signed in.";
     }, false);
+  }
+
+  async function handleLogoUpload(file: File) {
+    if (busy) return;
+    setBusy(true); setFeedback("");
+    try {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        throw new Error("Choose a JPEG, PNG or WebP image.");
+      }
+      if (file.size > 5 * 1024 * 1024) throw new Error("Choose a logo under 5 MB.");
+      const extension = file.type === "image/webp" ? "webp" : file.type === "image/png" ? "png" : "jpg";
+      const response = await fetch(`${API_URL}/api/v1/product-media/profile/${extension}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/octet-stream" },
+        body: file
+      });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.message ?? "Logo upload failed.");
+      const fullUrl = new URL(data.url, API_URL || window.location.origin).href;
+      setLogoUrl(fullUrl);
+      setFeedback("Logo uploaded successfully. Click 'Save settings' to save your branding.");
+    } catch (err) {
+      setFeedback(messageFor(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function exportRosterCsv() {
+    if (!workspace || workspace.employees.length === 0) return;
+    const headers = ["Name", "Email", "Status", "Public Slug", "Assigned Card"];
+    const rows = workspace.employees.map(e => {
+      const card = workspace.cards.find(c => c.profileId === e.profileId);
+      return [
+        `"${e.name.replace(/"/g, '""')}"`,
+        `"${e.email.replace(/"/g, '""')}"`,
+        `"${e.active ? "Active" : "Inactive"}"`,
+        `"${e.publicSlug || ""}"`,
+        `"${card?.publicSlug || "Unassigned"}"`
+      ].join(",");
+    });
+    const csvContent = [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${workspace.company.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-roster.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   if (!token) {
@@ -117,6 +184,18 @@ function CompanyWorkspace() {
   const deployed = workspace?.cards.filter(card => card.lifecycleStatus === "ACTIVATED").length ?? 0;
   const visibleCards = workspace?.cards.filter(card => cardFilter === "all" ||
     (cardFilter === "deployed" ? card.lifecycleStatus === "ACTIVATED" : cardFilter === "unassigned" ? !card.profileId : card.lifecycleStatus === "SUSPENDED")) ?? [];
+
+  const activeStaffCount = workspace?.employees.filter(e => e.active).length ?? 0;
+  const filteredEmployees = workspace?.employees.filter(employee => {
+    const q = employeeSearch.trim().toLowerCase();
+    const matchesSearch = !q ||
+      employee.name.toLowerCase().includes(q) ||
+      employee.email.toLowerCase().includes(q) ||
+      (employee.publicSlug && employee.publicSlug.toLowerCase().includes(q));
+    const matchesStatus = employeeFilter === "all" ||
+      (employeeFilter === "active" ? employee.active : !employee.active);
+    return matchesSearch && matchesStatus;
+  }) ?? [];
 
   return <main className="card-portal card-portal-studio"><section className="studio-container">
     <header className="studio-header">
@@ -143,6 +222,17 @@ function CompanyWorkspace() {
       </div>
     </header>
 
+    {workspace && (
+      <nav className="studio-quick-nav" aria-label="Workspace sections">
+        <a href="#branding" className="studio-nav-pill">🎨 Branding</a>
+        <a href="#company-employees" className="studio-nav-pill">👥 Team ({workspace.employees.length})</a>
+        <a href="#company-cards" className="studio-nav-pill">💳 NFC Cards ({deployed}/{workspace.cards.length})</a>
+        <a href="#company-leads" className="studio-nav-pill">📬 Shared Contacts</a>
+        <a href="#company-analytics" className="studio-nav-pill">📊 Analytics</a>
+        <a href="#company-security" className="studio-nav-pill">🔒 Security</a>
+      </nav>
+    )}
+
     {feedback && <p role="status" className="status-feedback-banner">{feedback}</p>}
 
     {companies === undefined ? (
@@ -155,7 +245,7 @@ function CompanyWorkspace() {
       <div className="studio-workspace-grid">
         <div className="studio-editor-column">
           {/* 1. Branding and profile defaults */}
-          <div className="studio-card">
+          <div className="studio-card" id="branding">
             <div className="studio-card-top-row">
               <h2>Branding and profile defaults</h2>
               {workspace.company.domain && (
@@ -170,7 +260,31 @@ function CompanyWorkspace() {
             }}>
               <div className="studio-form-grid">
                 <label>Company name<input name="name" required maxLength={120} defaultValue={workspace.company.name} /></label>
-                <label>Logo URL<input name="logoUrl" type="url" defaultValue={workspace.company.logoUrl} placeholder="https://..." /></label>
+                <div className="logo-field-wrapper">
+                  <label>Logo URL
+                    <input name="logoUrl" type="url" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} placeholder="https://..." />
+                  </label>
+                  <div className="logo-upload-row">
+                    <label className="logo-file-btn">
+                      <span>{busy ? "Uploading…" : "📁 Upload logo image"}</span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        disabled={busy}
+                        onChange={event => {
+                          const file = event.target.files?.[0];
+                          if (file) void handleLogoUpload(file);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                    {logoUrl && (
+                      <button type="button" className="quiet logo-clear-btn" onClick={() => setLogoUrl("")}>
+                        Clear logo
+                      </button>
+                    )}
+                  </div>
+                </div>
                 <label>Profile theme<select name="theme" defaultValue={workspace.company.theme}>{themeOptions}</select></label>
                 <label>Profile headline default<input name="headline" maxLength={160} defaultValue={workspace.company.headline} placeholder="e.g. Executive at..." /></label>
               </div>
@@ -182,7 +296,188 @@ function CompanyWorkspace() {
             </form>
           </div>
 
-          {/* 2. Import employees */}
+          {/* 2. Employees list & Quick Add */}
+          <div className="studio-card" id="company-employees">
+            <div className="studio-card-top-row">
+              <h2 id="company-employees" tabIndex={-1}>Employees</h2>
+              <div className="studio-card-header-actions">
+                <button
+                  type="button"
+                  className="studio-btn-pill-action"
+                  onClick={() => setShowQuickAdd(prev => !prev)}
+                >
+                  {showQuickAdd ? "✕ Close quick add" : "+ Quick add member"}
+                </button>
+                <button
+                  type="button"
+                  className="studio-btn-pill-action"
+                  onClick={exportRosterCsv}
+                  title="Download employee directory as CSV"
+                >
+                  📥 Export CSV
+                </button>
+                <span className="studio-counter-pill">{workspace.employees.length} members ({activeStaffCount} active)</span>
+              </div>
+            </div>
+
+            {/* Quick Add Inline Form */}
+            {showQuickAdd && (
+              <form
+                className="quick-add-employee-card"
+                onSubmit={event => {
+                  event.preventDefault();
+                  const input = values(event.currentTarget) as { singleName?: string; singleEmail?: string; singleHeadline?: string };
+                  if (!input.singleName || !input.singleEmail) return;
+                  const newMember = {
+                    name: input.singleName.trim(),
+                    email: input.singleEmail.trim(),
+                    headline: input.singleHeadline?.trim() || undefined
+                  };
+                  void run(async () => {
+                    const result = await companyApi<{ added: number; skipped: number; queued?: number }>(
+                      `${endpoint}/employees`,
+                      "POST",
+                      { employees: [newMember] },
+                      token
+                    );
+                    setShowQuickAdd(false);
+                    const mail = result.queued ? ` Welcome email queued for ${newMember.name}.` : "";
+                    return `Team member ${newMember.name} added.${mail}`;
+                  });
+                }}
+              >
+                <div className="quick-add-header">
+                  <strong>⚡ Quick Add Team Member</strong>
+                  <p>Directly onboard a single colleague without formatting a CSV file.</p>
+                </div>
+                <div className="studio-form-grid">
+                  <label>Full name<input name="singleName" required maxLength={120} placeholder="e.g. Alex Morgan" /></label>
+                  <label>Work email<input name="singleEmail" type="email" required placeholder="alex@company.com" /></label>
+                  <label className="studio-col-span-2">Job headline (optional)<input name="singleHeadline" maxLength={160} placeholder="e.g. Head of Engineering" /></label>
+                </div>
+                <div className="quick-add-footer">
+                  <button className="studio-save-button" disabled={busy}>Add team member</button>
+                  <button type="button" className="quiet" onClick={() => setShowQuickAdd(false)}>Cancel</button>
+                </div>
+              </form>
+            )}
+
+            {/* Live Search and Status Filter */}
+            <div className="team-roster-toolbar">
+              <div className="roster-search-wrap">
+                <span className="roster-search-icon" aria-hidden="true">🔍</span>
+                <input
+                  type="search"
+                  className="roster-search-input"
+                  placeholder="Search roster by name, email, or handle…"
+                  value={employeeSearch}
+                  onChange={e => setEmployeeSearch(e.target.value)}
+                  aria-label="Filter employees"
+                />
+                {employeeSearch && (
+                  <button type="button" className="roster-clear-search" onClick={() => setEmployeeSearch("")} aria-label="Clear search">✕</button>
+                )}
+              </div>
+              <div className="roster-status-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={employeeFilter === "all"}
+                  className={`roster-status-tab ${employeeFilter === "all" ? "active" : ""}`}
+                  onClick={() => setEmployeeFilter("all")}
+                >
+                  All ({workspace.employees.length})
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={employeeFilter === "active"}
+                  className={`roster-status-tab ${employeeFilter === "active" ? "active" : ""}`}
+                  onClick={() => setEmployeeFilter("active")}
+                >
+                  Active ({activeStaffCount})
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={employeeFilter === "inactive"}
+                  className={`roster-status-tab ${employeeFilter === "inactive" ? "active" : ""}`}
+                  onClick={() => setEmployeeFilter("inactive")}
+                >
+                  Inactive ({workspace.employees.length - activeStaffCount})
+                </button>
+              </div>
+            </div>
+
+            {/* Generated Edit Link Box */}
+            {editLink && (
+              <div className="studio-edit-link-card">
+                <div className="studio-edit-link-header">
+                  <span className="studio-edit-link-badge">⚡ 7-DAY ACCESS LINK READY</span>
+                  <p className="studio-edit-link-sub">Share this secure link with the employee so they can customize their public profile.</p>
+                </div>
+                <label className="studio-edit-link-box">
+                  <span>Private edit link, valid for seven days</span>
+                  <div className="studio-link-input-group">
+                    <input readOnly value={editLink} onFocus={event => event.currentTarget.select()} />
+                    <button
+                      type="button"
+                      className="studio-btn-copy"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(editLink);
+                        setCopiedLink(true);
+                        setTimeout(() => setCopiedLink(false), 2500);
+                      }}
+                    >
+                      {copiedLink ? "✓ Copied!" : "📋 Copy link"}
+                    </button>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            {filteredEmployees.length === 0 ? (
+              <p role="status" className="studio-empty-text">No team members match the search query or filter.</p>
+            ) : (
+              <ul className="team-list">
+                {filteredEmployees.map(employee => <li key={employee.id} className="team-employee-item">
+                  <div className="employee-info-col">
+                    <div className="employee-avatar-circle">{employee.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"}</div>
+                    <div className="employee-details">
+                      <div className="employee-title-line">
+                        <strong>{employee.name}</strong> · <span className="employee-email-sub">{employee.email}</span> · <span className={`employee-status-tag ${employee.active ? "active" : "inactive"}`}>{employee.active ? "Active" : "Inactive"}</span>
+                      </div>
+                      <div className="employee-secondary-line">
+                        {employee.publicSlug && (
+                          <a href={`/team?profile=${encodeURIComponent(employee.publicSlug)}`} target="_blank" rel="noreferrer" className="employee-view-link">
+                            Public profile ↗
+                          </a>
+                        )}
+                        {employee.inviteEmailStatus && <small className="employee-email-sub"> · {welcomeEmailLabels[employee.inviteEmailStatus]}</small>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="employee-actions-row">
+                    <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => {
+                      if (employee.active && !confirm(`Deactivate ${employee.name} and their assigned cards?`)) return;
+                      void run(async () => { setEditLink(""); await companyApi(`${endpoint}/employees/${employee.id}`, "PATCH", { active: !employee.active }, token); return "Employee status updated."; });
+                    }}>{employee.active ? "Deactivate" : "Reactivate"}</button>
+                    {employee.active && employee.inviteEmailStatus !== undefined && <button className="quiet studio-btn-emp" type="button"
+                      disabled={busy || employee.inviteEmailStatus === "pending" || employee.inviteEmailStatus === "sending"} onClick={() => void run(async () => {
+                        await companyApi(`${endpoint}/employees/${employee.id}/welcome-email`, "POST", undefined, token);
+                        return `Welcome email queued for ${employee.name}. Refresh the workspace for status.`;
+                      })}>{employee.inviteEmailStatus === "failed" || employee.inviteEmailStatus === "accepted" ? "Resend welcome email" : "Send welcome email"}</button>}
+                    {employee.active && workspace.company.allowEmployeeEdits && <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => void run(async () => {
+                      const result = await companyApi<{ path: string }>(`${endpoint}/employees/${employee.id}/edit-link`, "POST", undefined, token);
+                      setEditLink(new URL(result.path, location.origin).href); return "Private edit link created. Share it with this employee.";
+                    }, false)}>Create edit link</button>}
+                  </div>
+                </li>)}
+              </ul>
+            )}
+          </div>
+
+          {/* 3. Import employees */}
           <div className="studio-card">
             <h2>Import employees</h2>
             <p>CSV headers are name, email and optional headline. New employees receive a welcome email at the address you enter. Email addresses stay private.</p>
@@ -213,46 +508,11 @@ function CompanyWorkspace() {
             </form>
           </div>
 
-          {/* 3. Employees list */}
-          <div className="studio-card">
-            <div className="studio-card-top-row">
-              <h2 id="company-employees" tabIndex={-1}>Employees</h2>
-              <span className="studio-counter-pill">{workspace.employees.length} members</span>
-            </div>
-            {editLink && <label className="studio-edit-link-box">Private edit link, valid for seven days<input readOnly value={editLink} onFocus={event => event.currentTarget.select()} /></label>}
-            <ul className="team-list">
-              {workspace.employees.map(employee => <li key={employee.id} className="team-employee-item">
-                <div className="employee-info-col">
-                  <div className="employee-avatar-circle">{employee.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"}</div>
-                  <div className="employee-details">
-                    <strong>{employee.name}</strong> · <span className="employee-email-sub">{employee.email}</span> · <span className={`employee-status-tag ${employee.active ? "active" : "inactive"}`}>{employee.active ? "Active" : "Inactive"}</span>
-                    {employee.inviteEmailStatus && <small className="employee-email-sub"> · {welcomeEmailLabels[employee.inviteEmailStatus]}</small>}
-                  </div>
-                </div>
-                <div className="employee-actions-row">
-                  <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => {
-                    if (employee.active && !confirm(`Deactivate ${employee.name} and their assigned cards?`)) return;
-                    void run(async () => { setEditLink(""); await companyApi(`${endpoint}/employees/${employee.id}`, "PATCH", { active: !employee.active }, token); return "Employee status updated."; });
-                  }}>{employee.active ? "Deactivate" : "Reactivate"}</button>
-                  {employee.active && employee.inviteEmailStatus !== undefined && <button className="quiet studio-btn-emp" type="button"
-                    disabled={busy || employee.inviteEmailStatus === "pending" || employee.inviteEmailStatus === "sending"} onClick={() => void run(async () => {
-                      await companyApi(`${endpoint}/employees/${employee.id}/welcome-email`, "POST", undefined, token);
-                      return `Welcome email queued for ${employee.name}. Refresh the workspace for status.`;
-                    })}>{employee.inviteEmailStatus === "failed" || employee.inviteEmailStatus === "accepted" ? "Resend welcome email" : "Send welcome email"}</button>}
-                  {employee.active && workspace.company.allowEmployeeEdits && <button className="quiet studio-btn-emp" type="button" disabled={busy} onClick={() => void run(async () => {
-                    const result = await companyApi<{ path: string }>(`${endpoint}/employees/${employee.id}/edit-link`, "POST", undefined, token);
-                    setEditLink(new URL(result.path, location.origin).href); return "Private edit link created. Share it with this employee.";
-                  }, false)}>Create edit link</button>}
-                </div>
-              </li>)}
-            </ul>
-          </div>
-
           {/* 4. Company cards */}
-          <div className="studio-card">
+          <div className="studio-card" id="company-cards">
             <div className="studio-card-top-row">
               <h2 id="company-cards" tabIndex={-1}>Company cards</h2>
-              <span className="studio-counter-pill">{workspace.cards.length} cards</span>
+              <span className="studio-counter-pill">{workspace.cards.length} cards ({deployed} deployed)</span>
             </div>
             {workspace.cards.length === 0 ? <p className="studio-empty-text">Ask your Oneinfo Admin to reserve QC-passed cards for {workspace.company.name}, then refresh this workspace to assign them.</p> :
               <label>Card status<select value={cardFilter} onChange={event => setCardFilter(event.target.value)}>
@@ -260,23 +520,33 @@ function CompanyWorkspace() {
               </select></label>}
             {workspace.cards.length > 0 && visibleCards.length === 0 && <p role="status">No cards match this status.</p>}
             <ul className="team-list">
-              {visibleCards.map(card => <li key={card.id} className="team-card-item">
-                <div className="card-top-meta">
-                  <span className="card-slug-mono">💳 {card.publicSlug}</span>
-                  <span className={`card-status-pill status-${card.lifecycleStatus.toLowerCase()}`}>{card.lifecycleStatus}</span>
-                </div>
-                {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">NFC link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a> · <button className="quiet" type="button" disabled={busy} onClick={() => void run(async () => {
-                  await navigator.clipboard.writeText(new URL(`/c/${card.publicSlug}`, location.origin).href); return "Public card link copied.";
-                }, false)}>Copy public link</button></div>}
-                {["QC_PASSED", "ACTIVATED", "SUSPENDED"].includes(card.lifecycleStatus) && <form key={`${card.id}-${card.profileId}`} onSubmit={event => {
-                  event.preventDefault(); const employeeId = values(event.currentTarget).employeeId || null;
-                  void run(async () => { await companyApi(`${endpoint}/cards/${card.id}`, "PUT", { employeeId }, token); return "Card assignment saved."; });
-                }} className="card-assign-form">
-                  <label className="card-assign-label">Assigned employee<select name="employeeId" defaultValue={workspace.employees.find(item => item.profileId === card.profileId)?.id ?? ""}>
-                    <option value="">Unassigned</option>{workspace.employees.filter(item => item.active || item.profileId === card.profileId).map(item => <option key={item.id} value={item.id} disabled={!item.active}>{item.name}</option>)}</select></label>
-                  <button disabled={busy} className="studio-btn-assign">Save assignment</button>
-                </form>}
-              </li>)}
+              {visibleCards.map(card => {
+                const assignedEmployee = workspace.employees.find(item => item.profileId === card.profileId);
+                return (
+                  <li key={card.id} className="team-card-item">
+                    <div className="card-top-meta">
+                      <span className="card-slug-mono">💳 {card.publicSlug}</span>
+                      <span className={`card-status-pill status-${card.lifecycleStatus.toLowerCase()}`}>{card.lifecycleStatus}</span>
+                    </div>
+                    {assignedEmployee && (
+                      <div className="card-assigned-sub">
+                        <span>👤 Assigned to: <strong>{assignedEmployee.name}</strong> ({assignedEmployee.email})</span>
+                      </div>
+                    )}
+                    {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">NFC link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a> · <button className="quiet" type="button" disabled={busy} onClick={() => void run(async () => {
+                      await navigator.clipboard.writeText(new URL(`/c/${card.publicSlug}`, location.origin).href); return "Public card link copied.";
+                    }, false)}>Copy public link</button></div>}
+                    {["QC_PASSED", "ACTIVATED", "SUSPENDED"].includes(card.lifecycleStatus) && <form key={`${card.id}-${card.profileId}`} onSubmit={event => {
+                      event.preventDefault(); const employeeId = values(event.currentTarget).employeeId || null;
+                      void run(async () => { await companyApi(`${endpoint}/cards/${card.id}`, "PUT", { employeeId }, token); return "Card assignment saved."; });
+                    }} className="card-assign-form">
+                      <label className="card-assign-label">Assigned employee<select name="employeeId" defaultValue={assignedEmployee?.id ?? ""}>
+                        <option value="">Unassigned</option>{workspace.employees.filter(item => item.active || item.profileId === card.profileId).map(item => <option key={item.id} value={item.id} disabled={!item.active}>{item.name}</option>)}</select></label>
+                      <button disabled={busy} className="studio-btn-assign">Save assignment</button>
+                    </form>}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         </div>
@@ -288,13 +558,23 @@ function CompanyWorkspace() {
               <span className="studio-card-tag">ORGANIZATION SNAPSHOT</span>
               <span className="studio-theme-indicator">{workspace.company.theme}</span>
             </div>
-            <div className="company-profile-preview-card">
-              {workspace.company.logoUrl && <img className="team-logo company-mockup-logo" src={workspace.company.logoUrl} alt={workspace.company.name} />}
+            <div className={`company-profile-preview-card preview-theme-${workspace.company.theme.toLowerCase()}`}>
+              <div className="mockup-nfc-chip" aria-hidden="true">
+                <span>⚡ NFC SMART BUSINESS ID</span>
+              </div>
+              {workspace.company.logoUrl ? (
+                <img className="team-logo company-mockup-logo" src={workspace.company.logoUrl} alt={workspace.company.name} />
+              ) : (
+                <div className="company-mockup-monogram">
+                  {workspace.company.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "CO"}
+                </div>
+              )}
               <h3 className="company-preview-name">{workspace.company.name}</h3>
+              {workspace.company.headline && <p className="company-preview-headline">{workspace.company.headline}</p>}
               {workspace.company.domain && <a className="company-domain-tag" href={`https://${workspace.company.domain}/team`} target="_blank" rel="noreferrer">{workspace.company.domain} ↗</a>}
               <div className="company-stats-grid">
                 <a className="company-stat-cell" href="#company-employees">
-                  <strong>{workspace.employees.filter(e => e.active).length}</strong>
+                  <strong>{activeStaffCount}</strong>
                   <span>Active staff</span>
                 </a>
                 <a className="company-stat-cell" href="#company-cards" onClick={() => setCardFilter("deployed")}>
@@ -302,30 +582,37 @@ function CompanyWorkspace() {
                   <span>Cards deployed</span>
                 </a>
               </div>
+              <div className="mockup-footer-row">
+                <span className="mockup-tap-tag">🛜 Tap or scan card to view</span>
+                <a href={workspace.company.domain ? `https://${workspace.company.domain}/team` : "/team"} target="_blank" rel="noreferrer" className="mockup-open-btn">
+                  Directory ↗
+                </a>
+              </div>
             </div>
           </div>
 
           {/* Lead Inbox */}
-          <div className="studio-card studio-side-panel">
+          <div className="studio-card studio-side-panel" id="company-leads">
             <LeadInbox key={`${token}:${selected}`} token={token} companyId={selected} />
           </div>
 
           {/* Profile Analytics */}
-          <div className="studio-card studio-side-panel">
+          <div className="studio-card studio-side-panel" id="company-analytics">
             <ProfileAnalytics key={selected} token={token} companyId={selected} />
           </div>
 
           {/* Account Security */}
-          <div className="studio-card studio-side-panel studio-security-panel">
+          <div className="studio-card studio-side-panel studio-security-panel" id="company-security">
             <AccountSettings token={token} onSignOut={signOut} />
           </div>
 
-          <small className="profile-footer">Powered by Arise Studio</small>
+          <small className="profile-footer">Powered by Arise Studio · Oneinfo Enterprise</small>
         </aside>
       </div>
     )}
   </section></main>;
 }
+
 
 function EmployeeEditor({ secret }: { secret: string }) {
   const [profile, setProfile] = useState<PublicProfileData["profile"]>();
