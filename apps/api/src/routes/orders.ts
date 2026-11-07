@@ -165,7 +165,20 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const id = trackingOrderId(token);
     if (id) {
       const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
-      if (order) return orderTracking(order);
+      if (order) {
+        const allocated = await db.select({ qrStatus: cards.qrStatus, nfcStatus: cards.nfcStatus, qcStatus: cards.qcStatus })
+          .from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
+          .where(eq(orderCardAllocations.orderId, id));
+        return {
+          ...orderTracking(order),
+          cards: {
+            total: order.items.reduce((sum, item) => sum + item.quantity, 0),
+            qrGenerated: allocated.filter(c => c.qrStatus === "GENERATED").length,
+            nfcWritten: allocated.filter(c => c.nfcStatus === "WRITTEN").length,
+            qcPassed: allocated.filter(c => c.qcStatus === "PASSED").length,
+          },
+        };
+      }
     }
     return reply.code(404).send({ message: "This private tracking link is invalid." });
   });

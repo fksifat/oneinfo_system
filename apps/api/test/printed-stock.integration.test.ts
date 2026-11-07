@@ -318,7 +318,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const token = result.trackingPath.split("#track/")[1];
     const track = async (secret: string) => inject("POST", "/api/v1/orders/tracking", { token: secret }, {});
     expect((await track(token.slice(0, -1) + (token.endsWith("a") ? "b" : "a"))).statusCode).toBe(404);
-    expect((await track(token)).json()).toMatchObject({ status: "RECEIVED" });
+    expect((await track(token)).json()).toMatchObject({ status: "RECEIVED", cards: { total: 1, qrGenerated: 0, nfcWritten: 0, qcPassed: 0 } });
     expect((await inject("PUT", `${url}/cod`, { codCollectedMinor: 100, codSettledMinor: 0 })).statusCode).toBe(409);
     const processing = await inject("POST", `${url}/fulfillment`, { status: "PROCESSING" });
     expect(processing.statusCode, processing.body).toBe(200);
