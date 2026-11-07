@@ -12,6 +12,15 @@ const stages = {
   packing: ["Ready to pack", "Open packing checklist"],
 } as const;
 type Stage = keyof typeof stages;
+const stageIcons: Record<Stage, string> = {
+  payment: "💳",
+  print: "🖨️",
+  nfc: "📡",
+  qc: "🔬",
+  qc_failed: "⚠️",
+  packing: "📦",
+};
+
 type Task = { key: string; stage: Stage; units: number; orderId: string | null; cardId: string | null; batchId: string | null;
   label: string; station: string | null; jobStatus: string | null };
 type FollowUp = { cardId: string; publicSlug: string; customer: string; orderId: string; deliveredAt: string };
@@ -75,26 +84,109 @@ export function WorkQueue({ token }: { token: string }) {
     const timer = window.setInterval(() => void load(), 5000);
     return () => { current = false; window.clearInterval(timer); };
   }, [stage, page, token]);
-  return <section className="panel operation-panel"><div className="panel-head"><div><h2>Continue next task</h2><p>Open the card or order at the step that needs work.</p></div></div>
-    <div className="list-toolbar"><label>Work queue<select value={stage} onChange={e => { setStage(e.target.value); setPage(1); }}>
-      <option value="">All open work</option>{Object.entries(stages).map(([key, [label]]) => <option key={key} value={key}>{label}</option>)}
-    </select></label></div>
-    {error && <p className="store-order-notice is-error" role="alert">{error}</p>}
-    {!result && !error && <p className="empty" role="status">Loading work…</p>}
-    {result && !result.items.length && <p className="empty">No cards in this queue.</p>}
-    {result?.items.map(task => {
-      const inOrders = task.orderId && ["payment", "print", "packing"].includes(task.stage);
-      const href = inOrders ? orderLink(task.orderId!, task.stage, task.cardId ?? undefined) : workstationLink(task.batchId!, task.cardId ?? undefined);
-      const reason = task.jobStatus === "RETRYABLE_FAILURE" ? "Previous attempt failed; retry after checking the card."
-        : task.jobStatus === "CLAIMED" ? "Assigned to a workstation." : task.stage === "qc_failed" ? "Card did not pass its last quality check."
-          : task.stage === "payment" ? "Payment must be verified before production." : task.stage === "print" && !task.cardId
-            ? "Card has not been allocated or prepared." : stages[task.stage][0];
-      return <div className="operation-row" key={task.key}><div><strong>{task.label}{task.units > 1 ? ` · ${task.units} cards` : ""}</strong>
-        <small>{reason}{task.station ? ` Station: ${task.station}.` : ""}</small></div>
-        <a href={href} target={inOrders ? undefined : "_blank"} rel={inOrders ? undefined : "noreferrer"}>{stages[task.stage][1]}</a></div>;
-    })}
-    <PageButtons page={page} hasMore={result?.hasMore ?? false} setPage={setPage} />
-  </section>;
+
+  return (
+    <section className="panel operation-panel workqueue-panel">
+      <div className="panel-head workqueue-panel-head">
+        <div>
+          <span className="eyebrow">PRODUCTION WORKFLOW QUEUE</span>
+          <h2>Continue next task</h2>
+          <p>Open the card or order at the step that needs operator action.</p>
+        </div>
+        <span className="workqueue-count-badge">
+          {result?.items ? result.items.length + " tasks ready" : "Live queue"}
+        </span>
+      </div>
+
+      <div className="workqueue-filter-toolbar">
+        <label className="workqueue-filter-label">
+          <span className="filter-kicker">Work queue</span>
+          <div className="workqueue-select-wrap">
+            <span className="filter-glyph" aria-hidden="true">⚡</span>
+            <select
+              value={stage}
+              onChange={e => { setStage(e.target.value); setPage(1); }}
+              aria-label="Filter work queue by stage"
+            >
+              <option value="">All open work</option>
+              {Object.entries(stages).map(([key, [label]]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+        </label>
+      </div>
+
+      {error && <p className="store-order-notice is-error lookup-error-banner" role="alert">{error}</p>}
+      {!result && !error && <p className="workqueue-loading" role="status">Loading live tasks…</p>}
+      {result && !result.items.length && (
+        <div className="workqueue-empty-state">
+          <span className="empty-icon" aria-hidden="true">✓</span>
+          <p>No cards in this queue. Everything in this stage is completed!</p>
+        </div>
+      )}
+
+      <div className="workqueue-cards-list">
+        {result?.items.map(task => {
+          const inOrders = task.orderId && ["payment", "print", "packing"].includes(task.stage);
+          const href = inOrders ? orderLink(task.orderId!, task.stage, task.cardId ?? undefined) : workstationLink(task.batchId!, task.cardId ?? undefined);
+          const reason = task.jobStatus === "RETRYABLE_FAILURE"
+            ? "Previous attempt failed; retry after checking the card."
+            : task.jobStatus === "CLAIMED"
+              ? "Assigned to an active workstation."
+              : task.stage === "qc_failed"
+                ? "Card did not pass its last quality check."
+                : task.stage === "payment"
+                  ? "Payment must be verified before production."
+                  : task.stage === "print" && !task.cardId
+                    ? "Card has not been allocated or prepared."
+                    : stages[task.stage][0];
+
+          const isAlert = task.stage === "qc_failed" || task.jobStatus === "RETRYABLE_FAILURE";
+          const isWarn = task.stage === "payment" || task.stage === "print";
+
+          return (
+            <div className={"workqueue-card-row " + (isAlert ? "is-alert " : isWarn ? "is-warn " : "is-standard ")} key={task.key}>
+              <div className="workqueue-card-main">
+                <div className="workqueue-stage-avatar" aria-hidden="true">
+                  <span>{stageIcons[task.stage] ?? "⚙️"}</span>
+                </div>
+                <div className="workqueue-card-details">
+                  <div className="workqueue-title-line">
+                    <code className="workqueue-slug-code">{task.label}</code>
+                    {task.units > 1 && (
+                      <span className="workqueue-units-pill">{task.units} cards</span>
+                    )}
+                    <span className={"table-status-pill " + (isAlert ? "is-bad" : isWarn ? "is-warn" : "is-good")}>
+                      <span className="status-dot"></span>
+                      {stages[task.stage][0]}
+                    </span>
+                  </div>
+                  <p className="workqueue-reason-text">
+                    {reason}
+                    {task.station ? <span className="workqueue-station-tag"> · Station: {task.station}</span> : ""}
+                  </p>
+                </div>
+              </div>
+
+              <div className="workqueue-action-area">
+                <a
+                  href={href}
+                  target={inOrders ? undefined : "_blank"}
+                  rel={inOrders ? undefined : "noreferrer"}
+                  className="button-task-action"
+                >
+                  {stages[task.stage][1]} <span className="action-glyph">↗</span>
+                </a>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <PageButtons page={page} hasMore={result?.hasMore ?? false} setPage={setPage} />
+    </section>
+  );
 }
 
 function PageButtons({ page, hasMore, setPage }: { page: number; hasMore: boolean; setPage: (page: number) => void }) {
