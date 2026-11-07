@@ -4,18 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Oneinfo NFC and QR smart business cards for professionals and teams in Bangladesh." />
-    <meta name="theme-color" content="#112b2b" />
+    <meta name="theme-color" content="#f7f9fc" />
     <meta property="og:title" content="Oneinfo Smart Business Cards" />
     <meta property="og:description" content="Share your professional profile with one tap or scan." />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preload" href="/assets/fonts/inter-latin-variable.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./home.css" />
     <title>Oneinfo Smart Business Cards</title>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <div class="announcement">
-      <span>Designed in Bangladesh for modern networking</span>
-      <a href="#products">Explore cards <span aria-hidden="true">→</span></a>
+      <span>NFC business cards for professionals and teams</span>
+      <a href="#track">Track your order <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></a>
     </div>
 
     <header class="site-header" id="top">
@@ -23,8 +25,8 @@
         <img class="navbar-logo" src="./assets/oneinfo-logo.svg" alt="Oneinfo" width="848" height="256" />
       </a>
       <nav class="desktop-nav" aria-label="Primary navigation">
-        <a href="#how">How it works</a>
-        <a href="#products">Cards</a>
+        <a href="#products">Shop cards</a>
+        <a href="#nfc-deck">How it works</a>
         <a href="#teams">For teams</a>
         <a href="#faq">FAQ</a>
       </nav>
@@ -38,8 +40,8 @@
         </button>
       </div>
       <nav class="mobile-menu" id="mobile-menu" aria-label="Mobile navigation" hidden>
-        <a href="#how">How it works</a>
-        <a href="#products">Cards</a>
+        <a href="#products">Shop cards</a>
+        <a href="#nfc-deck">How it works</a>
         <a href="#teams">For teams</a>
         <a href="#faq">FAQ</a>
       </nav>
@@ -55,7 +57,7 @@
       </section>
       <section id="order-draft" class="order-page" hidden aria-labelledby="order-title">
         <div class="order-shell">
-          <a class="back-to-products" href="#products">← Back to cards</a>
+          <a class="back-to-products" href="#products"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-left"></use></svg> Back to cards</a>
           <header class="order-heading">
             <h1 id="order-title" tabindex="-1">Checkout</h1>
             <p>Review your cards and delivery total before placing your order.</p>
@@ -71,7 +73,7 @@
             <button class="button button-primary order-resume" type="button">Retry order</button>
           </div>
           <div class="order-details order-saved" hidden>
-            <span aria-hidden="true">✓</span>
+            <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#check"></use></svg></span>
             <h2 tabindex="-1">Order received</h2>
             <p class="order-receipt-payment"></p>
             <p class="order-receipt-email" role="status" hidden></p>
@@ -176,7 +178,7 @@
       </section>
       <section id="arisepay" class="order-page" hidden aria-labelledby="arisepay-title">
         <div class="order-shell arisepay-shell">
-          <a class="back-to-products" href="#order-draft">← Back to checkout</a>
+          <a class="back-to-products" href="#order-draft"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-left"></use></svg> Back to checkout</a>
           <header class="order-heading">
             <h1 id="arisepay-title" tabindex="-1">ArisePay</h1>
             <p>Pay with bKash and submit your transaction ID for verification.</p>
@@ -192,189 +194,199 @@
           <p class="order-unavailable arisepay-unavailable" hidden>Return to checkout and select Pay to start a payment.</p>
         </div>
       </section>
-      <section class="hero section-pad">
-        <div class="hero-copy reveal">
-          <p class="kicker"><span></span> NFC + QR SMART CARD</p>
-          <h1>One card.<br /><em>Every connection.</em></h1>
-          <p class="hero-lede">Share your contact details, portfolio, social links, and business profile with a tap. If NFC is unavailable, the same profile opens from the QR code.</p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="#products">Choose your card</a>
-            <button class="text-link demo-trigger" type="button">See the tap experience <span aria-hidden="true">↗</span></button>
+      <section class="store-hero section-pad" aria-labelledby="intro-title">
+        <div class="store-hero-copy">
+          <p class="section-label kicker"><span></span> SMART NFC &amp; QR HARDWARE</p>
+          <h1 id="intro-title">Smart business cards, reimagined</h1>
+          <p class="intro-description">Share your contact details, portfolio and social profiles with one effortless tap or QR scan. Engineered from premium materials with real-time digital profiles.</p>
+          <div class="intro-actions">
+            <a class="button button-primary" href="#products">Explore collection <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></a>
+            <a class="button button-secondary" href="#nfc-deck"><span class="play-icon" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#play"></use></svg></span> How it works</a>
           </div>
-          <ul class="hero-points" aria-label="Product highlights">
-            <li><span>01</span>No app for the recipient</li>
-            <li><span>02</span>Update your profile later</li>
-            <li><span>03</span>One profile for tap and scan</li>
-          </ul>
+          <div class="intro-assurance"><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>No app needed</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>Instant tap or scan</span><span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>Free lifetime profile</span></div>
         </div>
+        <div class="intro-art hero-3d-stage" id="hero-3d" data-hero-active="black">
+          <div class="hero-3d-viewport">
+            <model-viewer
+              id="hero-model-viewer"
+              class="hero-model"
+              src="/assets/cards-final/black.glb"
+              alt="Interactive 3D model of Oneinfo Smart NFC Card"
+              auto-rotate
+              auto-rotate-delay="800"
+              rotation-per-second="18deg"
+              camera-controls
+              touch-action="none"
+              disable-pan
+              camera-orbit="25deg 75deg 105%"
+              min-camera-orbit="auto 0deg auto"
+              max-camera-orbit="auto 180deg auto"
+              shadow-intensity="1.2"
+              shadow-softness="0.75"
+              exposure="1.05"
+              interaction-prompt="none"
+            >
+              <img
+                slot="poster"
+                class="hero-poster"
+                src="/assets/cards-final/black-studio-final.webp"
+                alt="Oneinfo Matte Black smart card in studio"
+                width="1448"
+                height="1086"
+              />
+            </model-viewer>
 
-        <div class="hero-visual reveal" aria-label="Oneinfo card and profile preview">
-          <div class="signal signal-one"></div>
-          <div class="signal signal-two"></div>
-          <div class="card-scene">
-            <div class="smart-card card-shadow" aria-hidden="true"></div>
-            <div class="smart-card card-front">
-              <div class="card-top"><span class="mini-mark"></span><span>ONEINFO</span></div>
-              <div class="card-person">
-                <strong>FARHAN KABIR</strong>
-                <span>Product Builder</span>
+            <div class="hero-badge hero-badge-top" aria-hidden="true">
+              <span class="hero-3d-tag">360 3D</span>
+              <span>Drag to rotate</span>
+            </div>
+
+            <div class="intro-photo-label hero-badge-bottom">
+              <span class="connection-icon" aria-hidden="true">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#nfc"></use></svg>
+              </span>
+              <div>
+                <strong id="hero-card-title">Matte Black NFC Card</strong>
+                <span id="hero-card-desc">NTAG213 - 13.56 MHz contactless chip</span>
               </div>
-              <div class="nfc-waves" aria-hidden="true"><i></i><i></i><i></i></div>
-              <span class="tap-label">TAP TO CONNECT</span>
+              <button class="hero-flip-btn" id="hero-flip-btn" type="button" aria-label="Flip card to inspect back">
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#refresh"></use></svg>
+              </button>
             </div>
           </div>
-          <div class="phone-preview">
-            <div class="phone-bar"></div>
-            <div class="profile-avatar">FK</div>
-            <strong>Farhan Kabir</strong>
-            <span>Product Builder · Dhaka</span>
-            <div class="profile-actions"><i></i><i></i><i></i></div>
-            <div class="profile-link wide"></div>
-            <div class="profile-link"></div>
+
+          <div class="hero-3d-controls" role="group" aria-label="Select card finish for 3D preview">
+            <button
+              class="hero-slide-btn"
+              type="button"
+              data-card-variant="black"
+              aria-pressed="true"
+              aria-label="View Matte Black card in 3D"
+            >
+              <span class="hero-slide-dot" style="background: #112b2b;"></span>
+              <span class="hero-slide-text">Matte Black</span>
+            </button>
+            <button
+              class="hero-slide-btn"
+              type="button"
+              data-card-variant="light"
+              aria-pressed="false"
+              aria-label="View Minimalist Light card in 3D"
+            >
+              <span class="hero-slide-dot" style="background: #fbfaf5; border: 1px solid rgba(17,43,43,0.3);"></span>
+              <span class="hero-slide-text">Minimalist Light</span>
+            </button>
           </div>
-          <div class="tap-chip"><span class="pulse-dot"></span> Profile opened</div>
         </div>
       </section>
 
-      <section class="proof-strip" aria-label="Oneinfo capabilities">
-        <div><strong>NFC</strong><span>Tap on compatible phones</span></div>
-        <div><strong>QR</strong><span>Scan from any camera</span></div>
-        <div><strong>LIVE</strong><span>Edit details without reprinting</span></div>
-        <div><strong>VCF</strong><span>Save contact in one step</span></div>
+      <section class="connection-strip" aria-label="What comes with your Oneinfo">
+        <p><strong>Card features</strong></p>
+        <div><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8a6 6 0 0 1 0 8M11 5a10 10 0 0 1 0 14M15 2a14 14 0 0 1 0 20" /></svg><span>Tap to connect</span></div>
+        <div><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="6" height="6" rx="1"/><rect x="15" y="3" width="6" height="6" rx="1"/><rect x="3" y="15" width="6" height="6" rx="1"/><path d="M15 15h3v3h3v3h-6zM3 12h6m3-9v6m0 6v6" /></svg><span>Scan to share</span></div>
+        <div><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 3h5v5M21 3l-8 8M21 13v7a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h7" /></svg><span>Update anytime</span></div>
+        <div><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M9 18h6M9 6h6" /></svg><span>Keep it in your wallet</span></div>
       </section>
 
-      <section class="story section-pad" id="how">
-        <div class="section-heading reveal">
-          <p class="kicker"><span></span> HOW IT WORKS</p>
-          <h2>From first tap<br />to saved contact.</h2>
-          <p>Oneinfo keeps the physical card simple and puts the details where they belong: in a profile you can manage.</p>
+      <section class="products section-pad" id="products" aria-labelledby="collection-title">
+        <div class="collection-heading">
+          <div><p class="section-label">Card collection</p><h2 id="collection-title">Choose your card</h2></div>
+          <p>Compare finishes and prices. Every card includes an editable digital profile.</p>
         </div>
-        <div class="steps">
-          <article class="step reveal">
-            <span class="step-number">01</span>
-            <div class="step-visual choose-visual"><i></i><i></i><i></i></div>
-            <h3>Choose your finish</h3>
-            <p>Select a card, add it to your cart, and prepare your order details.</p>
-          </article>
-          <article class="step reveal">
-            <span class="step-number">02</span>
-            <div class="step-visual profile-visual"><i></i><i></i><i></i></div>
-            <h3>Build your profile</h3>
-            <p>Add contact information, links, and the professional details you want to share.</p>
-          </article>
-          <article class="step reveal">
-            <span class="step-number">03</span>
-            <div class="step-visual tap-visual"><i></i><i></i><i></i></div>
-            <h3>Tap or scan</h3>
-            <p>Your card opens the same permanent profile through NFC or its printed QR code.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="products section-pad" id="products">
-        <div class="section-heading products-heading reveal">
-          <div>
-            <p class="kicker"><span></span> THE CARD COLLECTION</p>
-            <h2>Pick the card<br />that feels like you.</h2>
-          </div>
-          <p>Choose your finish. Every card includes the Oneinfo profile experience.</p>
-        </div>
-
         <p id="catalog-status" role="status">Loading cards…</p>
         <button id="catalog-retry" type="button" class="button" hidden>Retry loading cards</button>
         <div class="product-grid" aria-label="Available products"></div>
+        <p class="collection-note"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#check"></use></svg></span> Every card includes NFC, a QR code and a digital profile.</p>
       </section>
 
-      <section class="experience section-pad">
-        <div class="experience-copy reveal">
-          <p class="kicker"><span></span> YOUR DIGITAL PROFILE</p>
-          <h2>Change the details.<br />Keep the card.</h2>
-          <p>Your profile can evolve when your title, number, portfolio, or social links change. The card keeps pointing to the same Oneinfo address.</p>
-          <div class="feature-list">
-            <div><span>↗</span><strong>One link</strong><small>Contact, portfolio, and social links together</small></div>
-            <div><span>⌁</span><strong>Easy sharing</strong><small>Tap, QR scan, or send your profile link</small></div>
-            <div><span>✓</span><strong>Save contact</strong><small>Let people add your details to their phone</small></div>
+      <section class="nfc-deck section-pad" id="nfc-deck" data-mode="tap" aria-labelledby="deck-title">
+        <div class="deck-copy">
+          <p class="section-label">NFC and QR sharing</p>
+          <h2 id="deck-title">Three ways to share</h2>
+          <p>Open the same digital profile by tapping your card, scanning its QR code or sharing your profile link.</p>
+          <div class="deck-modes" role="group" aria-label="Explore ways to share">
+            <button id="deck-tap" type="button" data-deck-mode="tap" aria-pressed="true" aria-controls="deck-panel-tap"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#nfc"></use></svg></span> Tap</button>
+            <button id="deck-scan" type="button" data-deck-mode="scan" aria-pressed="false" aria-controls="deck-panel-scan"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#qr"></use></svg></span> Scan</button>
+            <button id="deck-link" type="button" data-deck-mode="link" aria-pressed="false" aria-controls="deck-panel-link"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span> Link</button>
           </div>
-        </div>
-        <div class="profile-stage reveal">
-          <div class="profile-card-ui">
-            <div class="profile-cover"></div>
-            <div class="avatar-large">AK</div>
-            <h3>Ayesha Karim</h3>
-            <p>Creative Director · Studio North</p>
-            <div class="social-row"><span>in</span><span>ig</span><span>wa</span></div>
-            <button type="button">Save contact</button>
-            <div class="ui-row"><i></i><span>studio-north.com</span></div>
-            <div class="ui-row"><i></i><span>View portfolio</span></div>
+          <div class="deck-panels" aria-live="polite">
+            <div id="deck-panel-tap" data-deck-panel="tap" role="region" aria-labelledby="deck-tap"><h3>Tap your card</h3><p>Hold your card near a compatible phone's NFC reader, then open the notification. Your profile opens in their browser.</p></div>
+            <div id="deck-panel-scan" data-deck-panel="scan" role="region" aria-labelledby="deck-scan" hidden><h3>Scan the QR code</h3><p>No NFC? Open the phone's camera and scan your card's QR code. It leads to the very same profile.</p></div>
+            <div id="deck-panel-link" data-deck-panel="link" role="region" aria-labelledby="deck-link" hidden><h3>Share your profile link</h3><p>Share your profile link in a message, email signature, or social bio. Recipients can open it in their browser.</p></div>
           </div>
-          <span class="floating-note note-one">Profile updated <b>just now</b></span>
-          <span class="floating-note note-two">Same card<br /><b>new role</b></span>
+          <button class="text-link demo-trigger" type="button">Preview NFC sharing <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></button>
+        </div>
+        <div class="deck-stage" aria-label="Illustration of a Oneinfo card connecting to a sample digital profile">
+          <div class="deck-orbit" aria-hidden="true"></div>
+          <div class="deck-card deck-card-back" aria-hidden="true"><img src="/assets/cards-final/light-front.webp" alt="" width="1600" height="1200" loading="lazy" /></div>
+          <div class="deck-card deck-card-front"><img src="/assets/cards-final/black-front.webp" alt="Oneinfo dark card" width="1600" height="1200" loading="lazy" /><span class="deck-card-link">oneinfo / your profile</span></div>
+          <div class="deck-phone" aria-hidden="true">
+            <span class="deck-phone-island"></span><span class="deck-phone-domain">Your Oneinfo profile</span>
+            <span class="deck-avatar">AK</span><strong>Ayesha Karim</strong><span class="deck-role">Designer & creative thinker</span>
+            <span class="deck-sample">Sample profile</span><div class="deck-socials"><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#linkedin"></use></svg></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#globe"></use></svg></span><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></div>
+            <span class="deck-save">Save contact <span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></span><span class="deck-profile-link">My portfolio <span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></span><span class="deck-profile-link">Let's work together <span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></span>
+          </div>
+          <div class="deck-connection"><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#check"></use></svg></span><div><strong>Your digital profile</strong><small>NFC · QR · Shareable link</small></div></div>
         </div>
       </section>
 
-      <section class="comparison section-pad">
-        <div class="section-heading reveal">
-          <p class="kicker"><span></span> A SMARTER HANDOFF</p>
-          <h2>Made to be kept,<br />not handed away.</h2>
-        </div>
-        <div class="comparison-table reveal" role="table" aria-label="Smart card and paper card comparison">
-          <div class="comparison-row header-row" role="row"><span role="columnheader"></span><strong role="columnheader">Oneinfo</strong><strong role="columnheader">Paper cards</strong></div>
-          <div class="comparison-row" role="row"><span role="cell">Share method</span><strong role="cell">Tap, scan, or link</strong><span role="cell">Hand over a card</span></div>
-          <div class="comparison-row" role="row"><span role="cell">Change details</span><strong role="cell">Update the profile</strong><span role="cell">Print again</span></div>
-          <div class="comparison-row" role="row"><span role="cell">Save to phone</span><strong role="cell">One clear action</strong><span role="cell">Manual typing</span></div>
-          <div class="comparison-row" role="row"><span role="cell">How many you carry</span><strong role="cell">One</strong><span role="cell">A stack</span></div>
+      <section class="getting-started section-pad" id="how" aria-labelledby="how-title">
+        <div class="collection-heading"><div><p class="section-label">Getting started</p><h2 id="how-title">Set up your card in three steps</h2></div><p>Choose a card, add your details and start sharing.</p></div>
+        <div class="setup-steps">
+          <article><span class="setup-number">01</span><h3>Choose a card</h3><p>Select a card and colour, then place your order.</p><a href="#products">Shop cards <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></a></article>
+          <article><span class="setup-number">02</span><h3>Set up your profile</h3><p>Activate your card and build a profile with your contact details, work, and links.</p><span class="setup-detail">You can update your details later.</span></article>
+          <article><span class="setup-number">03</span><h3>Tap or scan to share</h3><p>Use NFC or the QR code to open your profile on another phone.</p><span class="setup-detail">Your recipient doesn't need an app.</span></article>
         </div>
       </section>
 
-      <section class="teams section-pad" id="teams">
-        <div class="team-art reveal" aria-hidden="true">
-          <div class="team-card tc-one"><span>ONEINFO</span><strong>SALES</strong></div>
-          <div class="team-card tc-two"><span>ONEINFO</span><strong>DESIGN</strong></div>
-          <div class="team-card tc-three"><span>ONEINFO</span><strong>FOUNDERS</strong></div>
-        </div>
-        <div class="team-copy reveal">
-          <p class="kicker"><span></span> ONEINFO FOR TEAMS</p>
-          <h2>One brand.<br />Every person.</h2>
-          <p>Prepare consistent cards for a team while giving each person their own profile and permanent card identity.</p>
-          <ul><li>Shared visual system across every card</li><li>Individual profiles for each team member</li><li>Batch production with quality checks</li></ul>
-          <button class="button button-light team-trigger" type="button">Request a team quote</button>
+      <section class="profile-intro section-pad" aria-labelledby="profile-intro-title">
+        <div class="profile-intro-image"><img src="/assets/cards-final/lifestyle/black-on-desk.webp" alt="A Oneinfo card ready for the next introduction on a work desk" width="1600" height="1200" loading="lazy" /><span>Reusable NFC card</span></div>
+        <div class="profile-intro-copy"><p class="section-label">Digital profile</p><h2 id="profile-intro-title">Your details in one place</h2><p>Add your contact information, website, portfolio and social links to one profile.</p>
+          <ul class="profile-capabilities"><li><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span><div><strong>Website and social links</strong><p>Share your portfolio, business website and social profiles.</p></div></li><li><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#refresh"></use></svg></span><div><strong>Editable information</strong><p>Update your number, role or links without replacing the card.</p></div></li><li><span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span><div><strong>Save to contacts</strong><p>Recipients can save your contact details from the profile.</p></div></li></ul>
         </div>
       </section>
 
-      <section class="faq section-pad" id="faq">
-        <div class="section-heading reveal">
-          <p class="kicker"><span></span> QUESTIONS, ANSWERED</p>
-          <h2>Good to know<br />before you tap.</h2>
-        </div>
-        <div class="faq-list reveal">
-          <details><summary>Does the other person need an app?<span>+</span></summary><p>No. The profile opens in the phone’s browser. NFC-compatible phones can tap; other phones can scan the printed QR code.</p></details>
-          <details><summary>Can I change my details later?<span>+</span></summary><p>Yes. Your profile can be updated while the permanent public address encoded on the card remains the same.</p></details>
-          <details><summary>Do I give the card away?<span>+</span></summary><p>No. Keep the card and use it repeatedly. The recipient saves your details from the digital profile.</p></details>
-          <details><summary>What happens if a phone has no NFC?<span>+</span></summary><p>Every card also carries a QR code that opens the same profile, so the experience has a reliable fallback.</p></details>
-          <details><summary>Can you make cards for a company team?<span>+</span></summary><p>Yes. The production system is designed around batches, individual card identities, and quality checks. Use the team quote form to describe your quantity and finish.</p></details>
+      <section class="everyday section-pad" aria-labelledby="everyday-title">
+        <div class="collection-heading"><div><p class="section-label">Who it is for</p><h2 id="everyday-title">For work and business</h2></div><p>Share your details with clients, colleagues and new contacts.</p></div>
+        <div class="everyday-grid">
+          <article class="everyday-feature"><img src="/assets/cards-final/lifestyle/handheld.webp" alt="Oneinfo card held ready to share" width="1600" height="1200" loading="lazy" /><div><span>Independent professionals</span><h3>Freelancers and consultants</h3><p>Share your portfolio and contact information with potential clients.</p></div></article>
+          <article class="everyday-note"><span class="everyday-symbol" aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span><div><span>Professional networking</span><h3>Meetings and events</h3><p>Share your details without typing contact information into another phone.</p></div><a href="#nfc-deck">See how sharing works <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></a></article>
         </div>
       </section>
 
-      <section class="final-cta section-pad">
-        <div class="cta-ring" aria-hidden="true"></div>
-        <p class="kicker light"><span></span> READY WHEN YOU ARE</p>
-        <h2>Make the next<br />introduction count.</h2>
-        <a class="button button-lime" href="#products">Choose your Oneinfo card</a>
+      <section class="store-teams section-pad" id="teams" aria-labelledby="teams-title">
+        <div class="store-team-copy"><p class="section-label">Oneinfo for teams</p><h2 id="teams-title">Business cards for your team</h2><p>Order a coordinated set of cards with a separate digital profile for each team member.</p><ul><li>Individual profiles and permanent card links</li><li>A coordinated card set for your team</li><li>Batch production with quality checks</li></ul><button class="button button-light team-trigger" type="button">Request a team quote <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></button></div>
+        <div class="team-stack" aria-label="Illustration of a coordinated Oneinfo team card set"><div class="team-identity team-identity-one"><img src="./assets/oneinfo-logo.svg" alt="Oneinfo" width="848" height="256" /><span>Design team</span><strong>Ayesha Karim</strong></div><div class="team-identity team-identity-two"><img src="./assets/oneinfo-logo.svg" alt="Oneinfo" width="848" height="256" /><span>Partnerships</span><strong>Farhan Kabir</strong></div><div class="team-identity team-identity-three"><img src="./assets/oneinfo-logo.svg" alt="Oneinfo" width="848" height="256" /><span>Company card set</span><strong>Your team name</strong></div><span class="team-stack-caption">Sample team designs</span></div>
       </section>
+
+      <section class="store-faq section-pad" id="faq" aria-labelledby="faq-title">
+        <div><p class="section-label">Help and support</p><h2 id="faq-title">Common questions</h2><p>Learn about phone compatibility, profile updates and team orders.</p></div>
+        <div class="faq-list">
+          <details><summary>What is an NFC business card?<span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></summary><p>It's a reusable card with a small NFC chip. On compatible phones, a tap opens your digital profile. Your Oneinfo card also includes a QR code for camera scanning.</p></details>
+          <details><summary>Does the other person need an app?<span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></summary><p>No. Your profile opens in their phone's browser. They need an internet connection to view it, and can save your contact details from there.</p></details>
+          <details><summary>Will it work with my phone?<span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></summary><p>NFC sharing needs a compatible phone with NFC enabled. The reader position varies by device. If a tap isn't available, the phone's camera can scan your card's QR code.</p></details>
+          <details><summary>Can I update my details later?<span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></summary><p>Yes. Update your digital profile when your number, role, or links change. The address on your physical card stays the same.</p></details>
+          <details><summary>Do I keep the card after sharing?<span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></summary><p>Yes. Keep your Oneinfo and use it for your next introduction. The other person opens the digital profile, so you don't need to hand the card over.</p></details>
+          <details><summary>Can I order cards for my whole team?<span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#plus"></use></svg></span></summary><p>Yes. Use the team enquiry form to tell us about your company and quantity. Oneinfo will contact you using the email you provide.</p></details>
+        </div>
+      </section>
+
+      <section class="store-outro section-pad" aria-labelledby="outro-title"><div><p class="section-label">Order your card</p><h2 id="outro-title">Choose your NFC card</h2></div><div><p>Select a finish, place your order and set up your profile.</p><a class="button button-primary" href="#products">Shop cards <span aria-hidden="true"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-up-right"></use></svg></span></a></div></section>
+
     </main>
 
     <footer class="site-footer">
-      <div class="footer-brand"><a class="brand light-brand" href="#top"><span class="brand-mark"><i></i></span><span>ONEINFO</span></a><p>Smart profiles. Memorable introductions.</p></div>
-      <div><strong>Explore</strong><a href="#how">How it works</a><a href="#products">Cards</a><a href="#teams">Teams</a></div>
+      <div class="footer-brand"><a class="brand light-brand" href="#top" aria-label="Oneinfo home"><img class="navbar-logo" src="./assets/oneinfo-logo.svg" alt="Oneinfo" width="848" height="256" /></a><p>NFC business cards with editable digital profiles.</p></div>
+      <div><strong>Discover</strong><a href="#products">Shop cards</a><a href="#nfc-deck">How it works</a><a href="#how">Getting started</a><a href="#teams">For teams</a></div>
       <div><strong>Support</strong><a href="#faq">FAQ</a><a href="#order-draft">Checkout</a><a href="#track">Track order</a><button class="plain-link policy-trigger" type="button">Ordering note</button></div>
-      <div class="footer-note"><strong>Ordering</strong><p>See your delivery charge at checkout and pay when your order arrives.</p></div>
+      <div class="footer-note"><strong>Ordering and delivery</strong><p>Designed in Bangladesh.<br />Delivery charges and payment options are shown at checkout.</p></div>
       <p class="copyright">© <span id="year"></span> Oneinfo. All rights reserved.</p>
     </footer>
 
     <aside class="cart-drawer" id="cart-drawer" aria-hidden="true">
       <div class="drawer-backdrop"></div>
       <div class="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="cart-title">
-        <div class="drawer-head"><div><h2 id="cart-title">Your cart</h2><span class="cart-item-count" aria-live="polite"></span></div><button class="icon-button cart-close" type="button" aria-label="Close cart">×</button></div>
+        <div class="drawer-head"><div><h2 id="cart-title">Your cart</h2><span class="cart-item-count" aria-live="polite"></span></div><button class="icon-button cart-close" type="button" aria-label="Close cart"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#close"></use></svg></button></div>
         <div class="cart-items" hidden></div>
         <div class="cart-empty"><h3>Your cart is empty</h3><p>Find a Oneinfo card and choose your finish.</p><button class="button cart-shop" type="button">Explore cards</button></div>
         <div class="cart-summary" hidden><div><span>Subtotal</span><strong class="cart-total">৳0</strong></div><small>Delivery is calculated at checkout.</small><button class="button button-primary checkout-trigger" type="button">Continue to checkout</button></div>
@@ -384,22 +396,22 @@
     <div class="modal" id="experience-modal" aria-hidden="true">
       <div class="modal-backdrop"></div>
       <div class="modal-card demo-modal-card" role="dialog" aria-modal="true" aria-labelledby="demo-title">
-        <button class="icon-button modal-close" type="button" aria-label="Close">×</button>
-        <p class="kicker"><span></span> TAP EXPERIENCE</p>
+        <button class="icon-button modal-close" type="button" aria-label="Close"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#close"></use></svg></button>
+        <p class="kicker"><span></span> Try a connection</p>
         <h2 id="demo-title">Nothing to install.</h2>
         <div class="tap-demo">
-          <div class="demo-card"><span>ONEINFO</span><strong>TAP HERE</strong></div>
-          <button class="demo-phone" type="button" aria-label="Tap phone to card"><span class="demo-screen"><i></i><b>Ready to tap</b><small>Click the phone</small></span></button>
+          <div class="demo-card"><img src="./assets/oneinfo-logo.svg" alt="Oneinfo" width="848" height="256" /><strong>Oneinfo NFC card</strong></div>
+          <button class="demo-phone" type="button" aria-label="Tap phone to card"><span class="demo-screen"><i></i><b role="status" aria-live="polite">Ready to tap</b><small>Tap to preview</small></span></button>
         </div>
-        <p class="demo-caption">The NFC chip opens the card’s permanent profile address. QR is available as a fallback.</p>
+        <p class="demo-caption">Select the phone to preview how an NFC card opens a digital profile.</p>
       </div>
     </div>
 
     <div class="modal" id="team-modal" aria-hidden="true">
       <div class="modal-backdrop"></div>
       <div class="modal-card order-modal-card" role="dialog" aria-modal="true" aria-labelledby="team-title">
-        <button class="icon-button modal-close" type="button" aria-label="Close">×</button>
-        <p class="kicker"><span></span> TEAM ENQUIRY</p>
+        <button class="icon-button modal-close" type="button" aria-label="Close"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#close"></use></svg></button>
+        <p class="kicker"><span></span> For your whole team</p>
         <h2 id="team-title">Build a consistent team set.</h2>
         <p>Tell Oneinfo about your team. We will contact you at the email you provide.</p>
         <p id="team-status" role="status" aria-live="polite"></p>
@@ -410,7 +422,7 @@
           <label>Estimated quantity<input name="quantity" type="number" min="2" value="10" required /></label>
           <button class="button button-primary" type="submit">Send enquiry</button>
         </form>
-        <div class="order-success" hidden><span>✓</span><h3>Enquiry received</h3><p>Your team enquiry has been sent to Oneinfo.</p><button class="button modal-close-button" type="button">Done</button></div>
+        <div class="order-success" hidden><span><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#check"></use></svg></span><h3>Enquiry received</h3><p>Your team enquiry has been sent to Oneinfo.</p><button class="button modal-close-button" type="button">Done</button></div>
       </div>
     </div>
 

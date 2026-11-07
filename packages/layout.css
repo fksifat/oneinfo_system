@@ -1,9 +1,72 @@
-/* Shared bounds for Oneinfo's storefront and operator applications. */
+/* Shared bounds, unified typography, theme tokens and motion for Oneinfo */
 :root {
+  /* Layout bounds */
   --page-max-width: 1280px;
   --workspace-max-width: 1440px;
   --product-media-ratio: 4 / 3;
   --product-media-max-width: 640px;
   --page-gutter: clamp(20px, 4vw, 48px);
   --page-inset: max(var(--page-gutter), calc((100% - var(--page-max-width)) / 2));
+
+  /* Unified Typography */
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Unified Theme Palette (Tactile Architect) */
+  --ink: #112b2b;
+  --ink-2: #183b3a;
+  --ink-surface: #102d42;
+  --ink-hover: #183b3a;
+  --ink-deep: #0d2433;
+  --lime: #b9f56a;
+  --lime-soft: #d7f4dd;
+  --accent: #27849a;
+  --accent-hover: #1e6d80;
+  --interactive: #27849a;
+  --interactive-hover: #1e6d80;
+  --paper: #fbfaf5;
+  --cream: #f4f0e5;
+  --surface: #ffffff;
+  --surface-alt: #f4f0e5;
+  --muted: #64716d;
+  --line: rgba(17, 43, 43, 0.12);
+  --line-strong: rgba(17, 43, 43, 0.22);
+
+  /* Status Colors */
+  --success: #50bb81;
+  --success-bg: #daf3e4;
+  --success-text: #237548;
+  --warning: #e9ad55;
+  --warning-bg: #fef8ee;
+  --danger: #8d352a;
+  --danger-bg: #fff2ee;
+  --danger-border: #ebc7bf;
+
+  /* Shapes & Radii */
+  --radius-xs: 7px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 9999px;
+
+  /* Elevation Shadows */
+  --shadow-subtle: 0 2px 8px rgba(17, 43, 43, 0.04);
+  --shadow-card: 0 4px 18px rgba(17, 43, 43, 0.06);
+  --shadow-hover: 0 14px 34px rgba(17, 43, 43, 0.10);
+  --shadow-elevated: 0 24px 60px rgba(17, 43, 43, 0.14);
+  --shadow-card-float: 0 24px 80px rgba(17, 43, 43, 0.13);
+
+  /* Motion Design Tokens (Premium Motion Archetype) */
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-premium: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out-back: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-entrance: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-exit: cubic-bezier(0.7, 0, 0.84, 0);
+
+  --dur-instant: 120ms;
+  --dur-fast: 180ms;
+  --dur-normal: 260ms;
+  --dur-smooth: 380ms;
+  --dur-flow: 500ms;
 }

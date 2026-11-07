@@ -1,9 +1,16 @@
 import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
+import { initializeNfcDeck } from "./nfc-deck.mjs";
+import { initializeHero3D } from "./hero-3d.mjs";
+import logoUrl from "./assets/oneinfo-logo.svg";
 
 (function () {
   "use strict";
 
+  initializeNfcDeck(document.querySelector(".nfc-deck"));
+  initializeHero3D(document.querySelector("#hero-3d"));
+
+  const icon = name => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#${name}"></use></svg>`;
   const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const storageKey = "oneinfo.storefront.cart";
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
@@ -148,7 +155,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
               <span>Qty ${item.quantity}</span>
             </div>
             <div class="cart-item-actions">
-              ${removable ? `<button class="remove-item" type="button" aria-label="Remove ${escapeHtml(item.name)} ${escapeHtml(item.variantName)}">×</button>` : ""}
+              ${removable ? `<button class="remove-item" type="button" aria-label="Remove ${escapeHtml(item.name)} ${escapeHtml(item.variantName)}">${icon("close")}</button>` : ""}
               <strong>${money.format(item.priceMinor * item.quantity / 100)}</strong>
             </div>
           </div>`;
@@ -234,7 +241,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const percent = discountPercent(v);
       const sale = v.salePriceMinor !== null;
       const quantity = quantities.get(p.id) ?? 1;
-      const illustration = `<div class="mini-product-card ${v.appearance}-card" style="background:${escapeHtml(v.colorHex)}"><span>ONEINFO</span><strong>YOUR NAME</strong><small>SMART BUSINESS CARD</small></div>`;
+      const illustration = `<div class="mini-product-card ${v.appearance}-card" style="background:${escapeHtml(v.colorHex)}"><img class="mini-product-logo" src="${logoUrl}" alt="" /><strong>${escapeHtml(p.name)}</strong><small>NFC + QR smart card</small></div>`;
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}<div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
           <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
@@ -243,7 +250,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
           ${detail && media.length ? `<p class="gallery-error" role="status" hidden>Media could not load. Choose another item or check the URL.</p>` : ""}
 
         </div>
-        ${thumbnails.length ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(imageSource(m.url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : '<span>▶</span>'}</button>`).join("")}</div>` : ""}
+        ${thumbnails.length ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(imageSource(m.url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<span>${icon("play")}</span>`}</button>`).join("")}</div>` : ""}
         ${model ? `<section class="gallery-model-card" aria-label="Interactive 3D view">
           <header><h2>3D View</h2><span>${escapeHtml(model.variant.name)}</span></header>
           <div class="gallery-model-stage" data-appearance="${escapeHtml(model.variant.appearance)}">
@@ -256,8 +263,9 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         ${detail ? `</div><div class="product-details-copy">` : ""}
         <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((v.priceMinor - variantPrice(v)) / 100)}</span>` : ''}</div></div>
         <div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>
-        ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>−</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>+</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(variantPrice(v) * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
-        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">+</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">+</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">+</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">↗</span></a></div></div>` : ""}</article>`;
+        ${!detail ? `<div class="product-card-footer"><span>NFC + QR smart card</span><span class="product-card-action">View card ${icon("arrow-right")}</span></div>` : ""}
+        ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(variantPrice(v) * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
+        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
   function reviewsMarkup(product) {
@@ -284,7 +292,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const data = await response.json();
       summary.textContent = data.count ? `${data.average.toFixed(1)} out of 5 · ${data.count} ${data.count === 1 ? "review" : "reviews"}` : "No public reviews yet for this finish. Verified cardholders receive an invitation after delivery.";
       list.innerHTML = data.items.length
-        ? data.items.map(review => `<article class="review-card"><div class="review-stars" aria-label="${review.rating} out of 5 stars">${"★".repeat(review.rating)}${"☆".repeat(5-review.rating)}</div><h3>${escapeHtml(review.title)}</h3><p>${escapeHtml(review.body)}</p><small>${escapeHtml(review.displayName)} · Verified buyer · ${new Date(review.createdAt).toLocaleDateString("en-BD")}</small></article>`).join("")
+        ? data.items.map(review => `<article class="review-card"><div class="review-stars" aria-label="${review.rating} out of 5 stars">${icon("star-filled").repeat(review.rating)}${icon("star").repeat(5-review.rating)}</div><h3>${escapeHtml(review.title)}</h3><p>${escapeHtml(review.body)}</p><small>${escapeHtml(review.displayName)} · Verified buyer · ${new Date(review.createdAt).toLocaleDateString("en-BD")}</small></article>`).join("")
         : `<p class="review-empty">No reviews published yet. Every review comes from a confirmed, delivered order.</p>`;
     } catch { summary.textContent = "Reviews could not load. Please try again later."; }
   }
@@ -292,7 +300,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   async function renderReviewPortal(token) {
     const host = $("#review-portal");
     host.hidden = false;
-    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a><div class="review-portal-card"><p class="eyebrow">VERIFIED PURCHASE</p><h1 id="review-portal-title">Your Oneinfo review</h1><p class="review-portal-lead">Share your experience with products from your delivered order. Edits return to moderation before publishing.</p><div data-review-portal-content role="status">Checking your private review link…</div></div>`;
+    host.innerHTML = `<a class="back-to-products" href="#products">${icon("arrow-left")} Back to cards</a><div class="review-portal-card"><p class="eyebrow">VERIFIED PURCHASE</p><h1 id="review-portal-title">Your Oneinfo review</h1><p class="review-portal-lead">Share your experience with products from your delivered order. Edits return to moderation before publishing.</p><div data-review-portal-content role="status">Checking your private review link…</div></div>`;
     const content = $(`[data-review-portal-content]`, host);
     try {
       const response = await fetch(`${apiUrl}/api/v1/reviews/portal`, { method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({token}), signal:AbortSignal.timeout(7000) });
@@ -345,7 +353,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
         const state = isCancelled && !done ? "cancelled" : done ? "done" : i === activeIndex ? "current" : "upcoming";
         return `<li class="tracking-node" data-state="${state}">
           <div class="tracking-node-card">
-            <div class="tracking-node-top"><span class="tracking-step-badge">${done ? "✓" : `0${i + 1}`}</span><small>${escapeHtml(sub)}</small></div>
+            <div class="tracking-node-top"><span class="tracking-step-badge">${done ? icon("check") : `0${i + 1}`}</span><small>${escapeHtml(sub)}</small></div>
             <strong>${escapeHtml(title)}</strong>
             <p>${escapeHtml(note)}</p>
             <span class="tracking-meta">${meta}</span>
@@ -422,7 +430,8 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     }
     if (!route) {
       document.title = "Oneinfo Smart Business Cards";
-      if (focus) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior:"instant" });
+      if (focus && location.hash === "#top") window.scrollTo({ top: 0, behavior: "instant" });
+      else if (focus) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior:"instant" });
       return;
     }
     const product = products.find(p => p.slug === route.slug);
@@ -435,7 +444,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     const addFocused = focused?.closest("#product-detail") && focused.classList.contains("add-to-cart");
     const quantityFocused = focused?.closest("#product-detail") ? focused.dataset.quantityStep : null;
     const openDisclosures = new Map($$(".purchase-disclosure", host).map(el => [el.dataset.disclosure, el.open]));
-    host.innerHTML = `<a class="back-to-products" href="#products">← Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup(product) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
+    host.innerHTML = `<a class="back-to-products" href="#products">${icon("arrow-left")} Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup(product) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
     if (product) void loadProductReviews(product, host);
     if (!catalogReady) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
     document.title = product ? `${product.name} | Oneinfo` : "Product | Oneinfo";
@@ -560,7 +569,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       if (!before || variantPrice(before) !== variantPrice(variant)) { toast("The price changed. Please review it before adding to cart."); return; }
       const nextCart = addCartVariant(cart, product, variant, quantity);
       save(storageKey, nextCart); cart = nextCart; renderCart();
-      toast(`${quantity} × ${product.name} · ${variant.name} added to cart`);
+      toast(`${quantity} x ${product.name} · ${variant.name} added to cart`);
     } catch (error) { toast(error instanceof RangeError ? error.message : "Could not save the cart. Please try again."); }
     finally { addingToCart = false; renderRoute(); }
   }
@@ -594,6 +603,8 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 
   $(".demo-trigger").addEventListener("click", () => openModal("experience-modal"));
   $(".demo-phone").addEventListener("click", (event) => {
+    $("b", event.currentTarget).textContent = "Profile opened";
+    $("small", event.currentTarget).textContent = "Connected with Oneinfo";
     event.currentTarget.classList.remove("tapped");
     requestAnimationFrame(() => event.currentTarget.classList.add("tapped"));
   });
@@ -697,7 +708,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     $(".order-receipt-shipping").textContent = money.format(lastReceipt.shippingMinor / 100);
     $(".order-receipt-coupon").hidden = !lastReceipt.couponCode;
     $(".order-receipt-coupon dd").textContent = lastReceipt.couponCode
-      ? `${lastReceipt.couponCode} · −${money.format(lastReceipt.discountMinor / 100)}` : "";
+      ? `${lastReceipt.couponCode} · -${money.format(lastReceipt.discountMinor / 100)}` : "";
     $(".order-receipt-total").textContent = money.format(lastReceipt.totalMinor / 100);
     const advance = lastReceipt.paymentAmountMinor ?? 0;
     const pending = lastReceipt.paymentStatus === "PENDING_VERIFICATION";
@@ -718,7 +729,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
     const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
     $(".order-discount").hidden = !appliedCoupon;
-    $(".order-discount strong").textContent = `−${money.format(discount / 100)}`;
+    $(".order-discount strong").textContent = `-${money.format(discount / 100)}`;
     $(".order-remove-coupon").hidden = !appliedCoupon;
     $(".order-shipping-zone").textContent = zone ? ` (${shippingZoneLabels[zone]})` : "";
     $(".order-shipping-price").textContent = !zone ? "–"
@@ -1089,23 +1100,6 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     const modal = $(".modal.open");
     if (modal) closeModal(modal);
     else if ($(".cart-drawer.open")) closeCart();
-  });
-
-  const observer = "IntersectionObserver" in window
-    ? new IntersectionObserver(
-        (entries) => entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("visible");
-            observer.unobserve(entry.target);
-          }
-        }),
-        { threshold: 0.12 },
-      )
-    : null;
-
-  $$(".reveal").forEach((element) => {
-    if (observer) observer.observe(element);
-    else element.classList.add("visible");
   });
 
   $("#year").textContent = String(new Date().getFullYear());
