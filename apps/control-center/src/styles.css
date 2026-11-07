@@ -3960,3 +3960,394 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   text-decoration: none;
   border-color: var(--interactive);
 }
+
+/* Companies & Team Workspaces Premium Styling */
+.team-admin-container {
+  padding: 24px;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 24px;
+}
+.team-admin-header {
+  margin: 18px 0 20px;
+}
+.team-admin-header h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 4px 0 6px;
+}
+.team-admin-header p {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  margin: 0;
+  line-height: 1.6;
+  max-width: 680px;
+}
+.workspace-signin-link {
+  color: var(--interactive);
+  font-weight: 700;
+  text-decoration: none;
+  margin-left: 4px;
+}
+.workspace-signin-link:hover {
+  text-decoration: underline;
+}
+.status-feedback-banner {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--success-bg);
+  border: 1px solid rgba(80, 187, 129, 0.3);
+  color: var(--success-text);
+  font-size: 0.84rem;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+.workspace-creator-card {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 22px;
+  margin-bottom: 28px;
+}
+.creator-card-header {
+  margin-bottom: 16px;
+}
+.creator-card-header h3 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 3px 0 0;
+}
+.creator-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.creator-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.field-kicker {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.creator-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.field-glyph {
+  position: absolute;
+  left: 12px;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  opacity: 0.7;
+}
+.creator-input-wrap input {
+  width: 100%;
+  padding: 10px 12px 10px 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  font-size: 0.86rem;
+  color: var(--ink);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.creator-input-wrap input:focus {
+  border-color: var(--interactive);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(39, 132, 154, 0.15);
+}
+.button-create-workspace {
+  padding: 11px 24px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.button-create-workspace:hover:not(:disabled) {
+  background: var(--ink-hover);
+}
+
+.registered-workspaces-section {
+  margin-top: 10px;
+}
+.workspaces-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.workspaces-section-header h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+.workspaces-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.workspaces-empty-text {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  padding: 16px 0;
+}
+.team-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.company-tile-card {
+  padding: 20px;
+  border-radius: var(--radius-sm);
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.company-tile-card:hover {
+  border-color: var(--interactive);
+  transform: translateY(-2px);
+}
+.company-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.company-avatar-glyph {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+.company-tile-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.company-tile-meta h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0;
+}
+.company-owner-email {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+.company-tile-domain-status {
+  display: flex;
+  align-items: center;
+}
+.company-tile-actions-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border-light);
+  padding-top: 12px;
+}
+.micro-manage-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--surface-alt);
+  padding: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.micro-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.micro-kicker {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.micro-form-label input {
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.button-micro-action {
+  padding: 6px 12px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: 4px;
+  background: var(--ink);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.button-micro-action:hover:not(:disabled) {
+  background: var(--ink-hover);
+}
+
+.team-enquiries-panel {
+  padding: 18px 24px;
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.team-enquiries-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  gap: 14px;
+  flex-wrap: wrap;
+  list-style: none;
+}
+.team-enquiries-summary::-webkit-details-marker {
+  display: none;
+}
+.team-enquiries-content {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.enquiries-search-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.enquiries-search-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 240px;
+}
+.enquiries-search-label .search-glyph {
+  position: absolute;
+  left: 12px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  pointer-events: none;
+  opacity: 0.7;
+}
+.enquiries-search-label input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  font-size: 0.84rem;
+}
+.button-enquiries-search {
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  background: var(--ink);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+}
+.enquiries-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.enquiry-card {
+  padding: 14px 16px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.enquiry-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.enquiry-company-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.enquiry-cards-pill {
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--interactive);
+}
+.enquiry-time {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+.enquiry-contact-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+.enquiry-email-link {
+  color: var(--interactive);
+  text-decoration: none;
+}
+.enquiry-email-link:hover {
+  text-decoration: underline;
+}
+.enquiries-empty {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 8px 0;
+  margin: 0;
+}

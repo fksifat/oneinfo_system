@@ -209,38 +209,193 @@ export function TeamAdmin({ token }: { token: string }) {
     if (!input.domain) delete input.domain;
     const body = field === "domain" ? { domain: input.domain || null } : input;
     setBusy(true); setMessage("");
-    try { const result = await api<{ invited?: boolean }>(route, token, { method, body: JSON.stringify(body) }); if (field !== "domain") form.reset(); await read(); setMessage(result.invited ? "Invitation emailed to the owner. They can create their account and workspace using that link within 72 hours." : "Company updated."); }
-    catch (error) { setMessage(messageFor(error)); }
-    finally { setBusy(false); }
+    try {
+      const result = await api<{ invited?: boolean }>(route, token, { method, body: JSON.stringify(body) });
+      if (field !== "domain") form.reset();
+      await read();
+      setMessage(result.invited ? "Invitation emailed to the owner. They can create their account and workspace using that link within 72 hours." : "Company updated.");
+    } catch (error) {
+      setMessage(messageFor(error));
+    } finally {
+      setBusy(false);
+    }
   }
-  return <section className="panel team-admin"><TeamEnquiries token={token} /><h2>Company workspaces</h2>
-    <p>Create a workspace for an existing account, or email an invitation to a new owner. The owner can sign in at <a href="/team?manage=1">Company workspace</a>.</p>
-    {message && <p role="status">{message}</p>}
-    <form onSubmit={event => void submit(event, path, "POST")}>
-      <label>Company name<input name="name" required maxLength={120} /></label><label>Owner email<input name="ownerEmail" type="email" required /></label>
-      <label>Custom domain (optional)<input name="domain" placeholder="cards.company.com" /></label><button disabled={busy}>Create workspace</button>
-    </form>
-    <ul className="team-list">{items.map(company => <li key={company.id}><h3>{company.name}</h3><p>{company.ownerEmail}</p>
-      <form onSubmit={event => void submit(event, `${path}/${company.id}/domain`, "PUT", "domain")}><label>Domain<input name="domain" defaultValue={company.domain ?? ""} /></label><button disabled={busy}>Save domain</button></form>
-      <form onSubmit={event => void submit(event, `${path}/${company.id}/cards`, "POST", "cardSlug")}><label>Available card slug<input name="cardSlug" required maxLength={64} /></label><button disabled={busy}>Reserve card for company</button></form>
-    </li>)}</ul>
-  </section>;
+  return (
+    <section className="panel team-admin-container">
+      <TeamEnquiries token={token} />
+
+      <div className="team-admin-header">
+        <span className="eyebrow">ORGANIZATION MANAGEMENT</span>
+        <h2>Company workspaces</h2>
+        <p>
+          Create a workspace for an existing account, or email an invitation to a new owner. The owner can sign in at{" "}
+          <a href="/team?manage=1" className="workspace-signin-link">Company workspace ↗</a>.
+        </p>
+      </div>
+
+      {message && <p role="status" className="status-feedback-banner">{message}</p>}
+
+      <div className="workspace-creator-card">
+        <div className="creator-card-header">
+          <span className="control-kicker">NEW WORKSPACE REGISTRATION</span>
+          <h3>Register new organization</h3>
+        </div>
+        <form className="workspace-creator-form" onSubmit={event => void submit(event, path, "POST")}>
+          <div className="creator-fields-grid">
+            <label className="creator-field-label">
+              <span className="field-kicker">Company name</span>
+              <div className="creator-input-wrap">
+                <span className="field-glyph" aria-hidden="true">🏢</span>
+                <input name="name" required maxLength={120} placeholder="e.g. Acme Corporation" />
+              </div>
+            </label>
+            <label className="creator-field-label">
+              <span className="field-kicker">Owner email</span>
+              <div className="creator-input-wrap">
+                <span className="field-glyph" aria-hidden="true">✉️</span>
+                <input name="ownerEmail" type="email" required placeholder="owner@company.com" />
+              </div>
+            </label>
+            <label className="creator-field-label">
+              <span className="field-kicker">Custom domain (optional)</span>
+              <div className="creator-input-wrap">
+                <span className="field-glyph" aria-hidden="true">🌐</span>
+                <input name="domain" placeholder="cards.company.com" />
+              </div>
+            </label>
+          </div>
+          <button className="button-create-workspace" disabled={busy}>
+            {busy ? "Registering…" : "Create workspace"}
+          </button>
+        </form>
+      </div>
+
+      <div className="registered-workspaces-section">
+        <div className="workspaces-section-header">
+          <h3>Registered workspaces</h3>
+          <span className="workspaces-count-badge">{items.length} organizations</span>
+        </div>
+
+        {items.length === 0 ? (
+          <p className="workspaces-empty-text">No company workspaces registered yet. Create the first organization above.</p>
+        ) : (
+          <div className="team-cards-grid">
+            {items.map(company => (
+              <div className="company-tile-card" key={company.id}>
+                <div className="company-tile-head">
+                  <div className="company-avatar-glyph" aria-hidden="true">
+                    <span>🏢</span>
+                  </div>
+                  <div className="company-tile-meta">
+                    <h4>{company.name}</h4>
+                    <p className="company-owner-email">{company.ownerEmail}</p>
+                  </div>
+                </div>
+
+                <div className="company-tile-domain-status">
+                  {company.domain ? (
+                    <span className="table-status-pill is-good">
+                      <span className="status-dot"></span>
+                      {company.domain}
+                    </span>
+                  ) : (
+                    <span className="table-status-pill is-neutral">
+                      <span className="status-dot"></span>
+                      No custom domain
+                    </span>
+                  )}
+                </div>
+
+                <div className="company-tile-actions-area">
+                  <form className="micro-manage-form" onSubmit={event => void submit(event, `${path}/${company.id}/domain`, "PUT", "domain")}>
+                    <label className="micro-form-label">
+                      <span className="micro-kicker">Domain</span>
+                      <input name="domain" defaultValue={company.domain ?? ""} placeholder="cards.company.com" />
+                    </label>
+                    <button className="button-micro-action" disabled={busy}>Save domain</button>
+                  </form>
+
+                  <form className="micro-manage-form" onSubmit={event => void submit(event, `${path}/${company.id}/cards`, "POST", "cardSlug")}>
+                    <label className="micro-form-label">
+                      <span className="micro-kicker">Available card slug</span>
+                      <input name="cardSlug" required maxLength={64} placeholder="e.g. Card-Slug-123" />
+                    </label>
+                    <button className="button-micro-action" disabled={busy}>Reserve card for company</button>
+                  </form>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
 }
 
 function TeamEnquiries({ token }: { token: string }) {
   const [items, setItems] = useState<{ id: string; name: string; email: string; company: string; quantity: string; createdAt: string }[]>([]);
   const [page, setPage] = useState(1), [query, setQuery] = useState("");
   const [more, setMore] = useState(false), [error, setError] = useState("");
+  const [open, setOpen] = useState(false);
   useEffect(() => {
+    if (!open) return;
     let active = true;
     api<{ items: typeof items; hasMore: boolean }>(`/api/v1/company/admin/enquiries?page=${page}&query=${encodeURIComponent(query)}`, token)
       .then(result => { if (active) { setItems(result.items); setMore(result.hasMore); setError(""); } }).catch(reason => { if (active) setError(messageFor(reason)); });
     return () => { active = false; };
-  }, [token, page, query]);
-  return <details><summary>Team enquiries</summary>
-    <form className="list-toolbar" onSubmit={event => { event.preventDefault(); setPage(1); setQuery(String(new FormData(event.currentTarget).get("query") ?? "")); }}><label>Search enquiries<input name="query" type="search" maxLength={120} /></label><button>Search</button></form>
-    {error && <p role="alert">{error}</p>}{!items.length && !error && <p>No enquiries on this page.</p>}
-    <ul>{items.map(item => <li key={item.id}><strong>{item.company}</strong> · {item.quantity} cards<p>{item.name} · <a href={`mailto:${item.email}`}>{item.email}</a> · {new Date(item.createdAt).toLocaleString()}</p></li>)}</ul>
-    <nav className="list-toolbar" aria-label="Enquiry pages"><button className="quiet" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page}</span><button className="quiet" disabled={!more} onClick={() => setPage(value => value + 1)}>Next</button></nav>
-  </details>;
+  }, [token, page, query, open]);
+  return (
+    <details className="team-enquiries-panel" onToggle={e => setOpen(e.currentTarget.open)}>
+      <summary className="team-enquiries-summary">
+        <div className="summary-left">
+          <span className="summary-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+          <div className="summary-titles">
+            <span className="eyebrow">B2B INQUIRY QUEUE</span>
+            <strong className="summary-title">Team enquiries</strong>
+          </div>
+        </div>
+        <span className="summary-badge">
+          {items.length ? items.length + " incoming leads" : "Expand leads queue"}
+        </span>
+      </summary>
+      <div className="team-enquiries-content">
+        <form className="list-toolbar enquiries-search-toolbar" onSubmit={event => { event.preventDefault(); setPage(1); setQuery(String(new FormData(event.currentTarget).get("query") ?? "")); }}>
+          <label className="enquiries-search-label">
+            <span className="search-glyph" aria-hidden="true">🔍</span>
+            <input name="query" type="search" maxLength={120} placeholder="Search enquiries by company or contact..." />
+          </label>
+          <button type="submit" className="button-enquiries-search">Search</button>
+        </form>
+        {error && <p role="alert" className="lookup-error-banner">{error}</p>}
+        {!items.length && !error && <p className="enquiries-empty">No enquiries found on this page.</p>}
+        <div className="enquiries-cards-grid">
+          {items.map(item => (
+            <div className="enquiry-card" key={item.id}>
+              <div className="enquiry-card-head">
+                <div className="enquiry-company-meta">
+                  <strong>{item.company}</strong>
+                  <span className="enquiry-cards-pill">{item.quantity} cards</span>
+                </div>
+                <small className="enquiry-time">{new Date(item.createdAt).toLocaleDateString("en-BD")}</small>
+              </div>
+              <div className="enquiry-contact-row">
+                <span className="enquiry-contact-name">{item.name}</span>
+                <span className="enquiry-sep">·</span>
+                <a href={"mailto:" + item.email} className="enquiry-email-link">{item.email}</a>
+              </div>
+            </div>
+          ))}
+        </div>
+        <nav className="list-pagination-bar" aria-label="Enquiry pages">
+          <button className="pagination-button" disabled={page === 1} onClick={() => setPage(value => value - 1)}>
+            Previous
+          </button>
+          <span className="pagination-indicator">Page {page}</span>
+          <button className="pagination-button" disabled={!more} onClick={() => setPage(value => value + 1)}>
+            Next
+          </button>
+        </nav>
+      </div>
+    </details>
+  );
 }
