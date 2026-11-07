@@ -145,7 +145,17 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       deliveryAddress: { district: "Dhaka", dhakaArea: "city", addressLine: "Test address" }, shippingMinor: 6000,
       items: [{ productId, variantId, quantity, unitPriceMinor: 50000 }] };
   }
-  const order = (quantity = 1) => request("/api/v1/orders", orderPayload(quantity));
+  async function legacyOrder(payload: object) {
+    const placed = await request("/api/v1/orders", payload);
+    const { allocatePendingOrders } = await import("../src/domain/printed-stock.js");
+    await client.db.transaction(async tx => {
+      await tx.update(schema.storeOrders).set({ invoiceNumber: null }).where(eq(schema.storeOrders.id, placed.id));
+      await allocatePendingOrders(tx);
+    });
+    const admin = await request("/api/v1/orders/admin", { query: placed.id });
+    return { ...placed, ...admin.items[0] };
+  }
+  const order = (quantity = 1) => legacyOrder(orderPayload(quantity));
 
   it("keeps work counts, card lookup, reprints and packing in sync", async () => {
     const placed = await order(2);
@@ -186,7 +196,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   it("prepares and confirms ordered cards individually without duplicating assigned stock or QR artifacts", async () => {
     const [essential] = await client.db.select().from(schema.products).where(eq(schema.products.slug, "oneinfo-essential"));
     const variant = essential!.variants[0]!;
-    const buy = (quantity: number) => request("/api/v1/orders", {
+    const buy = (quantity: number) => legacyOrder({
       ...orderPayload(quantity), items: [{ productId: essential!.id, variantId: variant.id, quantity, unitPriceMinor: variant.salePriceMinor ?? variant.priceMinor }],
     });
     const print = (id: string, unitIndex: number, action: "prepare" | "confirm") =>
@@ -690,15 +700,86 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(cards.every(card => card.inventoryStatus === "RESERVED" && card.lifecycleStatus === "IN_PRODUCTION" && card.qcStatus === "PENDING")).toBe(true);
   });
 
-  it("serializes competing checkouts and idempotent retries without sharing a QR", async () => {
-    await confirm((await batch(1)).id);
+  it("issues one invoice per checkout and leaves prepared stock available", async () => {
+    const card = await readyForClaim();
     const input = orderPayload();
-    const results = await Promise.all([request("/api/v1/orders", input), request("/api/v1/orders", input), order()]);
+    const results = await Promise.all([request("/api/v1/orders", input), request("/api/v1/orders", input), request("/api/v1/orders", orderPayload())]);
     expect(results[0].id).toBe(results[1].id);
+    expect(results[0].invoiceNumber).toMatch(/^\d{8}-[A-Z0-9]{6}$/);
+    expect(results[0].invoiceNumber).toBe(results[1].invoiceNumber);
+    expect(results[0].invoiceNumber).not.toBe(results[2].invoiceNumber);
     expect(await client.db.select().from(schema.storeOrders)).toHaveLength(2);
-    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(1);
-    const admin = (await request("/api/v1/orders/admin")).items;
-    expect(admin.map((item: any) => item.qrAllocation.assigned).sort()).toEqual([0, 1]);
+    expect((await confirm((await batch(1)).id)).assigned).toBe(0);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
+    const admin = await request("/api/v1/orders/admin", { query: results[0].invoiceNumber.toLowerCase() });
+    expect(admin.items).toEqual([expect.objectContaining({ id: results[0].id, assignedCards: [] })]);
+    expect((await request("/api/v1/admin/tasks?stage=packing")).items).toHaveLength(2);
+    expect((await client.db.select().from(schema.cards).where(eq(schema.cards.id, card.id)))[0]?.inventoryStatus).toBe("SALEABLE");
+    const { nextInvoiceNumber } = await import("../src/domain/order-invoice.js");
+    expect(await client.db.transaction(tx => nextInvoiceNumber(tx, new Date("2026-11-07T18:00:00Z")))).toMatch(/^20261108-/);
+  });
+
+  it("packs available stock once and claims delivered cards with a link bound to the invoice and order email", async () => {
+    const first = await readyForClaim(), second = await readyForClaim(), replacement = await readyForClaim();
+    const payload = orderPayload(2);
+    payload.customer.email = "invoice-activation@example.com";
+    const placed = await request("/api/v1/orders", payload);
+    const other = await request("/api/v1/orders", orderPayload());
+    const post = (url: string, payload: object, auth = headers) => app.inject({ method: "POST", url, headers: auth, payload });
+    const pack = (id: string, scans: string[], replace?: string[]) => post(`/api/v1/orders/admin/${id}/packing-check`, { scans, replace });
+    const ship = () => post(`/api/v1/orders/admin/${placed.id}/fulfillment`, { status: "SHIPPED", trackingId: "INVOICE-TEST" });
+    const deliver = () => post(`/api/v1/reviews/admin/orders/${placed.id}/deliver`, {});
+    const scans = [qrUrl(first.canonicalUrl), second.publicSlug];
+    expect((await ship()).statusCode).toBe(409);
+    expect((await deliver()).statusCode).toBe(409);
+    expect((await pack(placed.id, [first.publicSlug, scans[0]!])).statusCode).toBe(409);
+    expect((await pack(placed.id, [first.publicSlug, "unknown-card"])).statusCode).toBe(409);
+    await client.db.update(schema.cardBatches).set({ productVariantId: randomUUID() }).where(eq(schema.cardBatches.id, first.batchId));
+    expect((await pack(placed.id, scans)).json().message).toContain("different variant");
+    await client.db.update(schema.cardBatches).set({ productVariantId: variantId }).where(eq(schema.cardBatches.id, first.batchId));
+    const packed = await Promise.all([pack(placed.id, scans), pack(placed.id, scans)]);
+    expect(packed.map(result => result.json())).toEqual([{ checked: 2 }, { checked: 2 }]);
+    expect((await pack(other.id, [first.publicSlug])).statusCode).toBe(409);
+    expect((await request("/api/v1/admin/tasks?stage=packing")).items).toEqual([expect.objectContaining({ orderId: other.id })]);
+    const next = [replacement.publicSlug, second.publicSlug];
+    expect((await pack(placed.id, next, [replacement.id, second.id])).statusCode).toBe(409);
+    await client.db.update(schema.cards).set({ qcStatus: "FAILED" }).where(eq(schema.cards.id, first.id));
+    expect((await pack(placed.id, next, [first.id, second.id])).json()).toEqual({ checked: 2 });
+    expect((await client.db.select().from(schema.cards).where(eq(schema.cards.id, first.id)))[0]?.inventoryStatus).toBe("NOT_READY");
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(2);
+
+    const emailCalls = () => vi.mocked(fetch).mock.calls.map(([, init]) => JSON.parse(String(init?.body ?? "{}")))
+      .filter(email => email.subject === "Activate your Oneinfo card");
+    const emailLink = (slug: string, invoiceNumber = placed.invoiceNumber) => post(`/api/v1/customer/cards/${slug}/invoice-activation`, { invoiceNumber }, {});
+    const exchange = (slug: string, claimToken: string) => post(`/api/v1/customer/cards/${slug}/invoice-claim`, { claimToken }, {});
+    expect((await emailLink(replacement.publicSlug)).statusCode).toBe(200);
+    expect(emailCalls()).toHaveLength(0);
+    expect((await ship()).statusCode).toBe(200);
+    expect((await pack(placed.id, next)).statusCode).toBe(409);
+    expect((await deliver()).statusCode).toBe(200);
+    const mismatch = await emailLink(replacement.publicSlug, other.invoiceNumber);
+    const match = await emailLink(replacement.publicSlug, placed.invoiceNumber.toLowerCase());
+    expect(match.json()).toEqual(mismatch.json());
+    expect(emailCalls()).toHaveLength(1);
+    expect(emailCalls()[0].to).toEqual([payload.customer.email]);
+    const getToken = (email: { text: string }) => /#invoice-claim\/([\w.-]+)/.exec(email.text)![1]!;
+    const claimToken = getToken(emailCalls()[0]);
+    const { SignJWT } = await import("jose");
+    const { config } = await import("../src/config.js");
+    const expired = await new SignJWT({ orderId: placed.id }).setProtectedHeader({ alg: "HS256" }).setIssuer("oneinfo-customer-api")
+      .setAudience("oneinfo-card-claim").setSubject(replacement.id).setExpirationTime(1).sign(new TextEncoder().encode(config.JWT_SECRET));
+    expect((await exchange(replacement.publicSlug, expired)).statusCode).toBe(401);
+    expect((await exchange(second.publicSlug, claimToken)).statusCode).toBe(401);
+    expect((await exchange(replacement.publicSlug, claimToken)).json()).toEqual({ email: payload.customer.email });
+    expect((await signup(claimToken, "someone-else@example.com")).statusCode).toBe(403);
+    const created = await signup(claimToken, payload.customer.email);
+    expect(created.statusCode, created.body).toBe(201);
+    expect((await exchange(replacement.publicSlug, claimToken)).statusCode).toBe(401);
+    expect((await signup(claimToken, payload.customer.email)).statusCode).toBe(409);
+    await emailLink(second.publicSlug);
+    const secondToken = getToken(emailCalls()[1]);
+    expect((await post("/api/v1/customer/claim", { claimToken: secondToken, profile: publicDetails }, { authorization: `Bearer ${created.json().accessToken}` })).statusCode).toBe(200);
+    expect((await request(`/api/v1/customer/cards/${second.publicSlug}`)).status).toBe("PROFILE");
   });
 
   it("paginates all confirmed QR codes without skipping equal timestamps", async () => {

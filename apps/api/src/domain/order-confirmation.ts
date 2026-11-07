@@ -30,6 +30,7 @@ export async function sendOrderConfirmation(order: StoreOrder, created: boolean,
   const text = [
     "Oneinfo received your order.",
     `Order ID: ${order.id}`,
+    ...(order.invoiceNumber ? [`Invoice: ${order.invoiceNumber}`, "Keep this invoice number. After delivery, scan the card and use it to request an activation email."] : []),
     "",
     ...lines,
     "",
@@ -89,6 +90,7 @@ function renderOrderEmail(order: StoreOrder, totals: ReadonlyArray<readonly [str
   </tr>`).join("");
   const address = [order.deliveryAddress.addressLine, order.deliveryAddress.district, order.deliveryAddress.postalCode].filter(Boolean).join(", ");
   return renderOneinfoEmail(order, "ORDER RECEIVED", "Thanks for your order.", "we’ve received your Oneinfo order.", `
+  ${order.invoiceNumber ? `<p><strong>Invoice ${escapeHtml(order.invoiceNumber)}</strong><br>After delivery, scan your card and enter this invoice number to request an activation email.</p>` : ""}
   <h2 style="margin:0;font-size:19px">Order summary</h2>
   <table aria-label="Order items" width="100%" cellspacing="0" cellpadding="0">${items}</table>
   <table aria-label="Order totals" width="100%" cellspacing="0" cellpadding="0" style="margin:12px 0 18px">${amounts}</table>

@@ -330,14 +330,14 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const isDelivered = Boolean(order.deliveredAt) || order.status === "DELIVERED";
     const isCancelled = order.status === "CANCELLED";
     const isConfirmed = order.status !== "AWAITING_PAYMENT" && !isCancelled;
-    const qrReady = isConfirmed && (cards.qrGenerated >= total || pastProcessing);
+    const qrReady = isConfirmed && (cards.qrGenerated >= total || (!order.invoiceNumber && pastProcessing));
     const qcReady = isConfirmed && (cards.qcPassed >= total || pastShipped);
     const fmt = date => date ? escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })) : "";
     const stages = [
       ["Received", "Order placed", isConfirmed, fmt(order.createdAt) || "Awaiting order", order.paymentVerifiedAt ? "Payment verified" : "Order confirmed"],
-      ["Card & QR Generated", "Identity allocated", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} QR generated`, "Unique slug & optical QR"],
+      [order.invoiceNumber ? "Cards packed" : "Card & QR Generated", order.invoiceNumber ? "Ready stock" : "Identity allocated", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "QR generated"}`, order.invoiceNumber ? "Linked during packing" : "Unique slug & optical QR"],
       ["NFC & QC Test OK", "Hardware verified", qcReady, `${qcReady ? total : cards.qcPassed}/${total} NFC & QC OK`, "NTAG213 write & read-back"],
-      ["Processing", "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Workstation prep", "Sealed with activation code"],
+      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Workstation prep", order.invoiceNumber ? "Activate by invoice after delivery" : "Sealed with activation code"],
       ["Shipped", "Handed to courier", pastShipped, fmt(order.shippedAt) || "Courier handoff", order.courierTrackingId ? `ID: ${escapeHtml(order.courierTrackingId)}` : "Nationwide delivery"],
       ["Delivered", "In client’s hands", isDelivered, fmt(order.deliveredAt) || "Final handoff", isDelivered ? "Ready to tap & activate" : "Reaching your address"],
     ];
@@ -346,6 +346,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const status = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" }[order.status];
     return `${preview ? `<p class="tracking-preview-banner">Sample live journey · Paste your private tracking link above to follow your order.</p>` : `<div class="tracking-summary"><p>Current status <strong class="tracking-status-badge" data-status="${escapeHtml(order.status)}">${escapeHtml(status || "Unavailable")}</strong></p><span class="tracking-progress-count">${doneCount}/6 stages complete</span></div>`}
       <div class="tracking-bar" aria-hidden="true"><span style="width:${Math.round(doneCount / 6 * 100)}%"></span></div>
+      ${order.invoiceNumber ? `<p class="tracking-courier">Invoice number <strong>${escapeHtml(order.invoiceNumber)}</strong></p>` : ""}
       ${order.cancellationReason ? `<p class="tracking-cancel">${escapeHtml(order.cancellationReason)}</p>` : ""}
       ${order.courierTrackingId ? `<p class="tracking-courier">Courier tracking ID <strong>${escapeHtml(order.courierTrackingId)}</strong></p>` : ""}
       <ol class="tracking-flow">${stages.map(([title, sub, done, meta, note], i) => {
@@ -696,6 +697,9 @@ import logoUrl from "./assets/oneinfo-logo.svg";
   function showReceiptDetails() {
     if (!lastReceipt) return;
     $(".order-receipt-id").textContent = lastReceipt.id;
+    $(".order-receipt-invoice").hidden = !lastReceipt.invoiceNumber;
+    $(".order-receipt-invoice dd").textContent = lastReceipt.invoiceNumber ?? "";
+    $(".order-receipt-activation").hidden = !lastReceipt.invoiceNumber;
     const tracking = $(".order-receipt-tracking");
     const trackingPath = typeof lastReceipt.trackingPath === "string" && /^\/#track\/[a-zA-Z0-9_.-]+$/.test(lastReceipt.trackingPath) ? lastReceipt.trackingPath : "";
     tracking.hidden = !trackingPath;

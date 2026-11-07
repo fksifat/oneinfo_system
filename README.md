@@ -244,6 +244,14 @@ compose.yaml                Local PostgreSQL service
 
 ## Client activation, signup and public card profiles
 
+New storefront orders get a Dhaka-date invoice such as `20261108-K7T9MX`. Checkout reserves catalog quantities. Physical cards stay in shared stock until packing.
+
+1. Prepare stock in batches. Confirm printing, write NFC and pass phone QC. Keep physical finishes separated, especially for generic batches that have no variant ID.
+2. In Admin → **Orders** → **Pack from ready stock**, verify any required advance and scan the actual cards going into the package, one per ordered unit. Confirm the pack before shipping. To replace a card before shipping, use **Repack cards** and rescan the final contents.
+3. After delivery, the customer scans or taps each card, enters the invoice number from their receipt and opens the verification link sent to the order email. The link is card-specific and expires after 15 minutes. The customer creates an account or signs in using the order email, then saves their profile. One invoice can activate each card packed for that order once.
+
+Apply migration `0018_order_invoices` before deploying the API and frontend. Invoice activation uses the configured transactional email provider and `STOREFRONT_URL`. Existing orders and separately issued cards continue to use their legacy secret-code flow below.
+
 1. Generate a normal Oneinfo QR batch, print/confirm it, write the same link to NFC, and finish phone QC.
 2. In Admin → **Cards & inventory**, use **Generate secret code** on a QC-passed card. Copy the code or select **Print private slip** and give that slip to the client with their card. Code generation requires an administrator or inventory manager. The plaintext code is shown once and is never stored; if it is lost, **Replace secret code** invalidates the previous code and unfinished signup grants.
 3. On first QR/NFC scan, `/c/<card-id>` asks for the secret code. Validating it opens the signup page for 15 minutes. The client creates an email/password account, enters their public details and links, and selects **Create account & save profile**. Existing account holders can sign in and claim the card using their saved/updated profile.
@@ -255,7 +263,7 @@ Use **Upload photo** during signup or under **Manage this card → Public profil
 
 For local testing, generated URLs default to `http://127.0.0.1:5174/c`; run `npm run dev:control` along with the local API/console. The launcher's ADB connection and `npm run android:usb` forward ports 3001 and 5174 for a connected test phone. These loopback URLs work only on the workstation or a phone with the tunnel; before printing real client cards, set `PUBLIC_CARD_BASE_URL` to your hosted HTTPS customer site ending in `/c`, set its `VITE_API_URL`/API CORS origins, and serve SPA fallbacks for `/c/*`. Existing printed links remain unchanged; keep their domain/routing alive. This change does not deploy the customer site or alter existing saved QR links.
 
-Activation codes are 80-bit random values stored only as card-bound SHA-256 hashes; passwords use salted scrypt. Public authentication and checkout limits use PostgreSQL transaction locks. Customer sessions last eight hours; activation grants last 15 minutes and code rotation invalidates them. Email verification and password recovery are not included. External/custom QR links keep their own destination and are not allocated as claimable stock unless their exact previous owned base URL is explicitly configured as an alias.
+Legacy activation codes are 80-bit random values stored only as card-bound SHA-256 hashes. Passwords use salted scrypt. Public authentication and checkout limits use PostgreSQL transaction locks. Customer sessions last eight hours. Activation grants last 15 minutes, and legacy code rotation invalidates its previous grants. External/custom QR links keep their own destination and are only eligible for claimable stock if their exact previous owned base URL is configured as an alias.
 
 ## Production work still required
 

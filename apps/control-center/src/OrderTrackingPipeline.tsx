@@ -19,17 +19,17 @@ export function OrderTrackingPipeline({ order, compact = false }: { order: Store
   const isDelivered = Boolean(order.deliveredAt) || order.status === "DELIVERED";
   const isCancelled = order.status === "CANCELLED";
   const isConfirmed = order.status !== "AWAITING_PAYMENT" && !isCancelled;
-  const qrReady = isConfirmed && (cards.qrGenerated >= total || pastProcessing);
+  const qrReady = isConfirmed && (cards.qrGenerated >= total || (!order.invoiceNumber && pastProcessing));
   const qcReady = isConfirmed && (cards.qcPassed >= total || pastShipped);
 
   const fmt = (date?: string | null) =>
     date ? new Intl.DateTimeFormat("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" }).format(new Date(date)) : "";
 
   const stages = [
-    { title: "Received", sub: "Order placed", done: isConfirmed, meta: fmt(order.createdAt) || "Awaiting order", note: order.paymentStatus === "VERIFIED" ? "bKash verified" : order.paymentMethod === "COD" ? "COD confirmed" : "Order received" },
-    { title: "Card & QR Generated", sub: "Identity allocated", done: qrReady, meta: `${qrReady ? total : cards.qrGenerated}/${total} QR ready`, note: order.assignedCards?.length ? `${order.assignedCards.length} cards assigned` : "Optical QR code" },
+    { title: "Received", sub: "Order placed", done: isConfirmed, meta: fmt(order.createdAt) || "Awaiting order", note: order.paymentStatus === "VERIFIED" ? "bKash verified" : order.paymentStatus === "PENDING_VERIFICATION" ? "Payment needs verification" : "Order received" },
+    { title: order.invoiceNumber ? "Cards packed" : "Card & QR Generated", sub: order.invoiceNumber ? "Packed from ready stock" : "Identity allocated", done: qrReady, meta: `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "QR ready"}`, note: order.invoiceNumber ? "QRs linked during packing" : order.assignedCards?.length ? `${order.assignedCards.length} cards assigned` : "Optical QR code" },
     { title: "NFC & QC Test OK", sub: "Hardware verified", done: qcReady, meta: `${qcReady ? total : cards.qcPassed}/${total} QC passed`, note: "NTAG213 write & read-back" },
-    { title: "Processing", sub: "Packed for dispatch", done: pastProcessing, meta: fmt(order.processingAt) || "Workstation prep", note: "Card sealed with secret code" },
+    { title: "Processing", sub: order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", done: pastProcessing, meta: fmt(order.processingAt) || "Workstation prep", note: order.invoiceNumber ? "Activation by invoice after delivery" : "Card sealed with secret code" },
     { title: "Shipped", sub: "Handed to courier", done: pastShipped, meta: fmt(order.shippedAt) || "Courier handoff", note: order.courierTrackingId ? `Tracking: ${order.courierTrackingId}` : "Nationwide dispatch" },
     { title: "Delivered", sub: "In client’s hands", done: isDelivered, meta: fmt(order.deliveredAt) || "Delivered", note: isDelivered ? "Card ready for tap & activate" : "Awaiting delivery" },
   ];

@@ -23,6 +23,7 @@ export function registerOrderPrint(app: FastifyInstance) {
       await lockPrintedStock(tx);
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
+      if (order.invoiceNumber) conflict("Pick ready cards from stock and scan them in the packing checklist.");
       const line = order.items[lineIndex];
       if (!line || unitIndex >= line.quantity) conflict("This card is not part of the order.");
       const [allocated] = await tx.select({ card: cards, batch: cardBatches }).from(orderCardAllocations)

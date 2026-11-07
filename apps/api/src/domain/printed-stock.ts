@@ -35,7 +35,8 @@ export async function reserveCardForOrder(tx: Transaction, orderId: string, card
 export async function allocatePendingOrders(tx: Transaction) {
   await lockPrintedStock(tx);
   const waiting = await tx.select().from(storeOrders).where(sql`
-    ${storeOrders.cancelledAt} is null and not ${storeOrders.awaitingPayment} and
+    ${storeOrders.invoiceNumber} is null and ${storeOrders.cancelledAt} is null
+    and ${storeOrders.shippedAt} is null and ${storeOrders.deliveredAt} is null and not ${storeOrders.awaitingPayment} and
     (select count(*) from ${orderCardAllocations} a where a.order_id = ${storeOrders.id}) <
     (select coalesce(sum((item->>'quantity')::integer), 0) from jsonb_array_elements(${storeOrders.items}) item)
   `).orderBy(asc(storeOrders.createdAt), asc(storeOrders.id)).for("update");

@@ -9,7 +9,7 @@ const stages = {
   nfc: ["NFC to write", "Write NFC"],
   qc: ["QC to complete", "Run QC"],
   qc_failed: ["Failed QC", "Review failed QC"],
-  packing: ["Ready to pack", "Open packing checklist"],
+  packing: ["Needs packing", "Open packing checklist"],
 } as const;
 type Stage = keyof typeof stages;
 const stageIcons: Record<Stage, string> = {

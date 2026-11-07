@@ -12,6 +12,8 @@ import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardActivationSecrets, cardBatches, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
 import { registerOrderPrint } from "./order-print.js";
+import { nextInvoiceNumber } from "../domain/order-invoice.js";
+import { assertInvoicePacked, packInvoiceOrder, packedCards } from "../domain/order-packing.js";
 import { qrUrl } from "../domain/card-urls.js";
 import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
@@ -47,16 +49,21 @@ export const orderRoutes: FastifyPluginAsync = async app => {
   app.post("/admin/:id/packing-check", { bodyLimit: 524288 }, async request => {
     const operator = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    const { scans } = parseBody(z.object({ scans: z.array(z.string().trim().min(1).max(2048)).max(4950) }), request.body);
+    const { scans, replace } = parseBody(z.object({ scans: z.array(z.string().trim().min(1).max(2048)).max(4950),
+      replace: z.array(z.uuid()).max(4950).optional() }), request.body);
     return db.transaction(async tx => {
       await lockPrintedStock(tx);
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
       if (order.cancelledAt || order.awaitingPayment || order.shippedAt || order.deliveredAt) conflict("Packing is available for open orders only.");
       if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) conflict("Verify payment before packing.");
-      const assigned = await tx.select({ card: cards, printed: cardBatches.printConfirmedAt }).from(orderCardAllocations)
-        .innerJoin(cards, eq(cards.id, orderCardAllocations.cardId)).innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
-        .where(eq(orderCardAllocations.orderId, id)).for("update", { of: cards });
+      if (order.invoiceNumber) {
+        const { checked, cardIds } = await packInvoiceOrder(tx, order, scans, replace);
+        await tx.insert(auditLogs).values({ actorId: operator.operatorId, action: "ORDER_PACKING_CHECKED", targetType: "store_order",
+          targetId: id, requestId: request.id, metadata: { cardIds } });
+        return { checked };
+      }
+      const assigned = await packedCards(tx, id);
       const required = order.items.reduce((sum, item) => sum + item.quantity, 0);
       if (assigned.length !== required || assigned.some(({ card, printed }) => !printed || card.qcStatus !== "PASSED" ||
           card.nfcStatus !== "WRITTEN" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus))) {
@@ -168,7 +175,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       for (const { card } of allocated) {
         const [secret] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
         if (card.profileId || card.customerAccountId || card.companyId || !["IN_PRODUCTION", "QC_PASSED"].includes(card.lifecycleStatus)) conflict("An allocated card has been issued. Recover it and revoke its activation code before cancelling.");
-        if ((secret || card.inventoryStatus === "DISPATCHED") && !cardsRecovered) conflict("Confirm that issued cards and secret codes were recovered before releasing stock.");
+        if ((order.invoiceNumber || secret || card.inventoryStatus === "DISPATCHED") && !cardsRecovered) conflict("Confirm the packed or issued cards have been recovered before releasing stock.");
         if (secret) await tx.delete(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
       }
       const catalog = await tx.select().from(products).where(inArray(products.id, order.items.map(item => item.productId))).orderBy(asc(products.id)).for("update");
@@ -223,6 +230,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         return { order: existing, shipped: false };
       }
       if (input.status === "SHIPPED" && existing.paymentAmountMinor > 0 && !existing.paymentVerifiedAt) conflict("Verify the bKash payment before shipping.");
+      if (input.status === "SHIPPED") await assertInvoicePacked(tx, existing);
       const now = new Date();
       const [updated] = await tx.update(storeOrders).set(input.status === "PROCESSING" ? { processingAt: now }
         : { processingAt: existing.processingAt ?? now, shippedAt: existing.shippedAt ?? now, courierTrackingId: input.trackingId })
@@ -288,7 +296,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const phone = query && digits && /^[+\d(). -]+$/.test(query) ? sql`or position(${digits} in regexp_replace(${storeOrders.customer}->>'phone', '[^0-9]', '', 'g')) > 0` : sql``;
     const rows = await db.select().from(storeOrders)
       .where(and(beforeId ? sql`(${storeOrders.createdAt}, ${storeOrders.id}) < (${before})` : undefined,
-        query ? sql`(position(lower(${query}) in lower(${storeOrders.id}::text)) > 0 or position(lower(${query}) in lower(${storeOrders.customer}->>'email')) > 0 ${phone})` : undefined,
+        query ? sql`(position(lower(${query}) in lower(${storeOrders.id}::text)) > 0 or position(upper(${query}) in coalesce(${storeOrders.invoiceNumber}, '')) > 0 or position(lower(${query}) in lower(${storeOrders.customer}->>'email')) > 0 ${phone})` : undefined,
         payment ? sql`${storeOrders.paymentAmountMinor} > 0 and ${storeOrders.paymentVerifiedAt} is ${payment === "VERIFIED" ? sql`not null` : sql`null`}` : undefined,
         delivery ? sql`(${state}) = ${delivery}` : undefined,
         qr ? sql`(case when ${assigned} >= ${required} then 'ASSIGNED' when ${assigned} > 0 then 'PARTIAL' else 'AWAITING_QR' end) = ${qr}` : undefined))
@@ -331,8 +339,8 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         if (!input.payment?.transactionId) conflict("Enter your bKash transaction ID.");
         const [duplicate] = await tx.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.transactionId, input.payment.transactionId));
         if (duplicate) conflict("This bKash transaction ID is already linked to an order.");
-        const [completed] = await tx.update(storeOrders).set({ transactionId: input.payment.transactionId, requestHash, awaitingPayment: false }).where(eq(storeOrders.id, previous.id)).returning();
-        await allocatePendingOrders(tx);
+        const [completed] = await tx.update(storeOrders).set({ transactionId: input.payment.transactionId, requestHash, awaitingPayment: false,
+          invoiceNumber: await nextInvoiceNumber(tx) }).where(eq(storeOrders.id, previous.id)).returning();
         await queueOrderEmail(tx, previous.id, "confirmation");
         return { order: completed!, created: true };
       }
@@ -374,11 +382,13 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       const transactionId = input.payment?.transactionId ?? null;
       if (!reserving && paymentAmountMinor > 0 && !transactionId) conflict("Enter your bKash transaction ID.");
       if (paymentAmountMinor === 0 && transactionId) conflict("No bKash payment is required for this order.");
+      const awaitingPayment = reserving && paymentAmountMinor > 0;
       const [order] = await tx.insert(storeOrders).values({
         requestId, requestHash, customer: input.customer, deliveryAddress: input.deliveryAddress,
         stockReservations: items.filter(line => catalog.find(product => product.id === line.productId)?.variants.find(variant => variant.id === line.variantId)?.stockQuantity !== undefined).map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
         items, shippingZone: zone, subtotalMinor, shippingMinor, couponCode: input.coupon?.code, discountMinor,
-        paymentMethod, paymentAmountMinor, transactionId, awaitingPayment: reserving && paymentAmountMinor > 0,
+        paymentMethod, paymentAmountMinor, transactionId, awaitingPayment,
+        invoiceNumber: awaitingPayment ? null : await nextInvoiceNumber(tx),
       }).onConflictDoNothing({ target: storeOrders.transactionId }).returning();
       if (!order) conflict("This bKash transaction ID is already linked to an order.");
       for (const product of catalog) {
@@ -388,7 +398,6 @@ export const orderRoutes: FastifyPluginAsync = async app => {
           ? { ...variant, stockQuantity: variant.stockQuantity - (quantities.get(variant.id) ?? 0) } : variant);
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
       }
-      await allocatePendingOrders(tx);
       if (!order.awaitingPayment) await queueOrderEmail(tx, order.id, "confirmation");
       return { order, created: true };
     }).catch(error => {

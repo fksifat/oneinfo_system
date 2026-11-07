@@ -16,7 +16,7 @@ const queue = sql`with work as (
     when c.qc_status = 'FAILED' then 'qc_failed'
     when c.nfc_status <> 'WRITTEN' then 'nfc'
     when c.qc_status <> 'PASSED' then 'qc'
-    when o.id is not null and (
+    when o.id is not null and o.invoice_number is null and (
       select count(*) from ${orderCardAllocations} p
       join ${cards} pc on pc.id = p.card_id
       join ${cardBatches} pb on pb.id = pc.batch_id
@@ -41,8 +41,9 @@ const queue = sql`with work as (
   where c.lifecycle_status not in ('SUSPENDED','RETIRED')
     and (o.id is null or (o.cancelled_at is null and o.shipped_at is null and o.delivered_at is null and not o.awaiting_payment))
   union all
-  select o.id::text, case when o.payment_amount_minor > 0 and o.payment_verified_at is null then 'payment' else 'print' end,
-    missing.units, o.id, null::uuid, null::uuid, 'Order ' || left(o.id::text, 8), null, null, o.created_at
+  select o.id::text, case when o.payment_amount_minor > 0 and o.payment_verified_at is null then 'payment'
+    when o.invoice_number is not null then 'packing' else 'print' end,
+    missing.units, o.id, null::uuid, null::uuid, coalesce(o.invoice_number, 'Order ' || left(o.id::text, 8)), null, null, o.created_at
   from ${storeOrders} o cross join lateral (
     select (select coalesce(sum((item->>'quantity')::int),0)::int from jsonb_array_elements(o.items) item)
       - (select count(*)::int from ${orderCardAllocations} a where a.order_id = o.id) as units

@@ -8,7 +8,7 @@ import { ProfilePhoto } from "./ProfilePhoto.js";
 
 type Draft = z.infer<typeof CustomerProfileSchema>;
 type CardResponse = { status: "PROFILE"; canShareContact?: boolean; crmEnabled?: boolean; profile: PublicProfileData["profile"]; links: PublicProfileData["links"] } |
-  { status: "ACTIVATION_REQUIRED" | "UNAVAILABLE" };
+  { status: "ACTIVATION_REQUIRED"; activationMethod?: "SECRET" | "INVOICE" } | { status: "UNAVAILABLE" };
 const emptyProfile: Draft = { displayName: "", headline: "", company: "", bio: "", phone: "", email: "", website: "", avatarUrl: "", theme: "MIDNIGHT", links: [], profileMode: "BUSINESS", modeContent: {} };
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
 
@@ -31,6 +31,8 @@ export function CardPortal({ slug }: { slug: string }) {
   const [mode, setMode] = useState(initialMode);
   const [card, setCard] = useState<CardResponse>();
   const [secretCode, setSecretCode] = useState("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [activationMessage, setActivationMessage] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [profile, setProfile] = useState<Draft>(emptyProfile);
@@ -74,6 +76,25 @@ export function CardPortal({ slug }: { slug: string }) {
     return () => { disposed = true; window.removeEventListener("popstate", pop); };
   }, [slug]);
 
+  useEffect(() => {
+    function openInvoiceLink() {
+      const match = /^#invoice-claim\/([a-zA-Z0-9_.-]{1,2048})$/.exec(location.hash);
+      if (!match?.[1]) return;
+      const claimToken = match[1];
+      window.history.replaceState(null, "", `${location.pathname}${location.search}`);
+      setBusy(true); setError("");
+      void customerApi<{ email: string }>(`/cards/${encodeURIComponent(slug)}/invoice-claim`, "POST", { claimToken })
+        .then(result => {
+          sessionStorage.setItem(claimKey, claimToken);
+          setClaimToken(claimToken); setEmail(result.email); navigate("signup");
+        })
+        .catch(e => setError(e.message)).finally(() => setBusy(false));
+    }
+    openInvoiceLink();
+    window.addEventListener("hashchange", openInvoiceLink);
+    return () => window.removeEventListener("hashchange", openInvoiceLink);
+  }, [slug]);
+
   async function run(action: () => Promise<void>) {
     if (busy) return;
     setBusy(true); setError("");
@@ -88,7 +109,7 @@ export function CardPortal({ slug }: { slug: string }) {
   function remember(accessToken: string) { sessionStorage.setItem("oneinfo.customer.token", accessToken); setToken(accessToken); setPassword(""); }
   async function loadOwner(accessToken: string) {
     const owner = await customerApi<{ email: string; profile: Draft; cards: { publicSlug: string }[] }>("/me", "GET", undefined, accessToken);
-    if (!claimToken && !owner.cards.some(card => card.publicSlug === slug)) throw new Error("Your account does not own this card. Use its secret code to claim an unactivated card.");
+    if (!claimToken && !owner.cards.some(card => card.publicSlug === slug)) throw new Error("Your account does not own this card. Start activation to claim an unactivated card.");
     setEmail(owner.email); setProfile({ ...emptyProfile, ...owner.profile }); navigate("details");
   }
   useEffect(() => {
@@ -104,6 +125,10 @@ export function CardPortal({ slug }: { slug: string }) {
     if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Enter the secret code supplied with your card.");
     const result = await customerApi<{ claimToken: string }>(`/cards/${encodeURIComponent(slug)}/activate`, "POST", parsed.data);
     sessionStorage.setItem(claimKey, result.claimToken); setClaimToken(result.claimToken); setSecretCode(""); navigate("signup");
+  }); };
+  const activateInvoice = (event: FormEvent) => { event.preventDefault(); void run(async () => {
+    const result = await customerApi<{ message: string }>(`/cards/${encodeURIComponent(slug)}/invoice-activation`, "POST", { invoiceNumber });
+    setActivationMessage(result.message);
   }); };
   const login = (event: FormEvent) => { event.preventDefault(); void run(async () => {
     const result = await customerApi<{ accessToken: string }>("/login", "POST", { email, password });
@@ -134,17 +159,23 @@ export function CardPortal({ slug }: { slug: string }) {
   </div><ProfileView data={card} onActivity={card.canShareContact ? track : undefined} contactAction={card.canShareContact && <ShareContact key={slug} crmEnabled={Boolean(card.crmEnabled)}
     send={input => customerApi(`/cards/${encodeURIComponent(slug)}/contact-leads`, "POST", { ...input, source })} />} /></>;
 
-  const isEditor = mode === "details" || (mode === "signup" && Boolean(claimToken)) || Boolean(claimToken) || (mode === "signup");
+  const isEditor = mode === "details" || (mode === "signup" && Boolean(claimToken));
+  const invoiceActivation = card.status === "ACTIVATION_REQUIRED" && card.activationMethod === "INVOICE";
 
   if (!isEditor) {
     return <main className="card-portal"><section>
       <p className="eyebrow">ONEINFO · YOUR DIGITAL CARD</p>
       {mode !== "public" && <button type="button" className="quiet" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>}
       {mode === "public" || (mode === "signup" && !claimToken) ? <>
-        <h1>Activate your card</h1><p>Enter the private secret code supplied with your card. Then create your account and save your public profile.</p>
+        <h1>Activate your card</h1><p>{invoiceActivation ? "Enter the invoice number from your order. After delivery we’ll send a verification link to your order email." : "Enter the private secret code supplied with your card. Then create your account and save your public profile."}</p>
         {claimToken && <button type="button" className="quiet" onClick={() => navigate("signup")}>Continue account setup</button>}
-        <form onSubmit={activate}><label>Secret code<input autoComplete="off" spellCheck={false} autoCapitalize="characters" required maxLength={64} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={secretCode} onChange={event => setSecretCode(event.target.value)} /></label>
-          <button disabled={busy}>{busy ? "Checking…" : "Activate & continue"}</button></form>
+        {invoiceActivation ? <form onSubmit={activateInvoice}><label>Invoice number
+          <input autoComplete="off" spellCheck={false} autoCapitalize="characters" required maxLength={15} pattern="[0-9]{8}-[A-Za-z0-9]{6}"
+            placeholder="20261108-K7T9MX" value={invoiceNumber} onChange={event => { setInvoiceNumber(event.target.value.toUpperCase()); setActivationMessage(""); }} /></label>
+          <button disabled={busy}>{busy ? "Checking…" : "Send verification link"}</button></form>
+          : <form onSubmit={activate}><label>Secret code<input autoComplete="off" spellCheck={false} autoCapitalize="characters" required maxLength={64} placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" value={secretCode} onChange={event => setSecretCode(event.target.value)} /></label>
+          <button disabled={busy}>{busy ? "Checking…" : "Activate & continue"}</button></form>}
+        {activationMessage && <p role="status">{activationMessage}</p>}
       </> : <>
         <h1>Sign in</h1><p>{claimToken ? "Sign in to link this card to your existing profile." : "Sign in to manage your card and public details."}</p>
         <form onSubmit={login}><label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
@@ -167,7 +198,7 @@ export function CardPortal({ slug }: { slug: string }) {
         <p className="portal-privacy">The profile details below will be visible to anyone who scans your QR or NFC. Your password and account email stay private; use Public email only if you want to share it.</p>
       </div>
       <div className="studio-header-actions">
-        {mode !== "public" && <button type="button" className="quiet studio-btn-back" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>}
+        <button type="button" className="quiet studio-btn-back" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>
       </div>
     </header>
 

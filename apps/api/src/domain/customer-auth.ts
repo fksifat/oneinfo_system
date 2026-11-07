@@ -38,12 +38,19 @@ export function issueClaimToken(cardId: string, version: string) {
     .setAudience("oneinfo-card-claim").setSubject(cardId).setIssuedAt().setExpirationTime("15m").sign(key);
 }
 
+export function issueInvoiceClaimToken(cardId: string, orderId: string) {
+  return new SignJWT({ orderId }).setProtectedHeader({ alg: "HS256" }).setIssuer(issuer)
+    .setAudience("oneinfo-card-claim").setSubject(cardId).setIssuedAt().setExpirationTime("15m").sign(key);
+}
+
 export async function readClaimToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, key, { issuer, audience: "oneinfo-card-claim", algorithms: ["HS256"] });
-    return { cardId: z.uuid().parse(payload.sub), version: z.uuid().parse(payload.version) };
+    const cardId = z.uuid().parse(payload.sub);
+    return payload.orderId ? { cardId, orderId: z.uuid().parse(payload.orderId) }
+      : { cardId, version: z.uuid().parse(payload.version) };
   } catch {
-    throw Object.assign(new Error("Activation expired. Scan your card and enter its secret code again."), { statusCode: 401 });
+    throw Object.assign(new Error("Activation expired. Scan your card and start activation again."), { statusCode: 401 });
   }
 }
 

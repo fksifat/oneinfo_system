@@ -19,6 +19,7 @@ export function trackingOrderId(token: string) {
 
 export function orderTracking(order: typeof storeOrders.$inferSelect): OrderTracking {
   return {
+    invoiceNumber: order.invoiceNumber,
     status: order.cancelledAt ? "CANCELLED" : order.awaitingPayment ? "AWAITING_PAYMENT" : order.deliveredAt ? "DELIVERED" : order.shippedAt ? "SHIPPED" : order.processingAt ? "PROCESSING" : "RECEIVED",
     createdAt: order.createdAt.toISOString(), paymentVerifiedAt: order.paymentVerifiedAt?.toISOString() ?? null, processingAt: order.processingAt?.toISOString() ?? null,
     shippedAt: order.shippedAt?.toISOString() ?? null, deliveredAt: order.deliveredAt?.toISOString() ?? null,

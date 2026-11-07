@@ -462,6 +462,7 @@ export const AdminOrderSearchSchema = z.object({
 });
 export type AdminOrderSearch = z.infer<typeof AdminOrderSearchSchema>;
 export type OrderTracking = {
+  invoiceNumber?: string | null;
   status: typeof orderStatuses[number];
   createdAt: string;
   processingAt?: string | null;
