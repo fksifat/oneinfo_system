@@ -8,5 +8,8 @@ test('Vercel proxies compatibility API URLs to the single VPS backend',()=>{
   assert.equal(config.rewrites.find(rule=>rule.source==='/api/v1/:path*').destination,'https://api.oneinfo.online/api/v1/:path*');
   assert.equal(config.rewrites.find(rule=>rule.source==='/health').destination,'https://api.oneinfo.online/health');
   assert.equal(existsSync(new URL('../api/index.ts',import.meta.url)),false);
-  assert.ok(readFileSync(new URL('../.vercelignore',import.meta.url),'utf8').split('\n').includes('api'));
+  assert.ok(readFileSync(new URL('../.vercelignore',import.meta.url),'utf8').split(/\r?\n/).includes('api'));
+  const names = config.rewrites.find(rule => rule.source === '/:handle([a-zA-Z0-9]{1,64})');
+  assert.equal(names.destination, '/dashboard/index.html');
+  assert.ok(config.rewrites.indexOf(names) > config.rewrites.findIndex(rule => rule.source === '/admin'));
 });

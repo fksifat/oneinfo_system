@@ -16,7 +16,7 @@ export async function lockPrintedStock(tx: Transaction) {
 
 export function printedStockAvailable() {
   return and(isNotNull(cardBatches.printConfirmedAt), eq(cards.qrStatus, "GENERATED"), isNull(cards.profileId), isNull(cards.companyId),
-    sql`${cards.canonicalUrl} in (${sql.join(managedCardBases().map(base => sql`${base} || '/' || ${cards.publicSlug}`), sql`, `)})`,
+    sql`${cards.canonicalUrl} in (${sql.join(managedCardBases().flatMap(base => [sql`${base} || '/' || ${cards.publicSlug}`, sql`${base} || '/' || ${cards.publicSlug} || '?source=nfc'`]), sql`, `)})`,
     inArray(cards.inventoryStatus, ["NOT_READY", "SALEABLE"]), inArray(cards.lifecycleStatus, ["IN_PRODUCTION", "QC_PASSED"]),
     inArray(cards.qcStatus, ["PENDING", "PASSED"]),
     sql`not exists (select 1 from ${cardActivationSecrets} s where s.card_id = ${cards.id})`,

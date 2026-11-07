@@ -116,7 +116,8 @@ const device = await request("/api/v1/local-nfc/devices/pair", {
 const deviceHeaders = { "x-oneinfo-device-token": device.deviceToken };
 
 async function verifyPair(scannedValue, target = card) {
-  const payload = JSON.stringify({ scanId: randomUUID(), scannedValue: target.canonicalUrl });
+  const scannedQr = target === card ? target.canonicalUrl.replace(/\?source=nfc$/, "?source=qr") : target.canonicalUrl;
+  const payload = JSON.stringify({ scanId: randomUUID(), scannedValue: scannedQr });
   const created = await fetch(`${baseUrl}/api/v1/local-nfc/device/verification-from-qr`, {
     method: "POST", headers: { ...deviceHeaders, "content-type": "application/json" }, body: payload,
   });
@@ -186,6 +187,9 @@ await request(
 
 const publicProfile = await request(`/api/v1/profiles/public/${profile.publicSlug}`);
 const cardProfile = await request(`/api/v1/profiles/card/${card.publicSlug}`);
+const namedProfile = await request(`/api/v1/profiles/handle/${profile.handle}`);
+assert.equal(namedProfile.cardSlug, card.publicSlug);
+assert.equal(namedProfile.profile.id, publicProfile.profile.id);
 const history = await request(`/api/v1/production/cards/${card.id}/history`, {}, credentials);
 if (history.card.inventoryStatus !== "RESERVED") throw new Error("Assigned card must not remain in saleable inventory");
 if (history.card.lifecycleStatus !== "ACTIVATED") throw new Error("Assigned card was not activated");

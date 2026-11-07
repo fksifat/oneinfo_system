@@ -1,3 +1,4 @@
+import { AccountSettings } from "./AccountAccess.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ActivateCardSchema, CustomerProfileSchema, type ContactLead } from "@oneinfo/contracts";
 import { ProfileView, ShareContact, type PublicProfileData } from "./ProfileView.js";
@@ -49,6 +50,11 @@ export function CardPortal({ slug }: { slug: string }) {
     trackedView.current = key;
     track("VIEW");
   }, [slug, source, mode, card]);
+  useEffect(() => {
+    if (mode === "public" && card?.status === "PROFILE" && card.profile.handle) {
+      window.history.replaceState(null, "", `/${card.profile.handle}${location.search}`);
+    }
+  }, [mode, card]);
   const navigate = (next: string) => {
     setMode(next);
     window.history.pushState(null, "", `${base}${next === "public" ? "" : next === "details" ? "/edit" : `/${next}`}`);
@@ -139,7 +145,7 @@ export function CardPortal({ slug }: { slug: string }) {
     </> : mode === "login" ? <>
       <h1>Sign in</h1><p>{claimToken ? "Sign in to link this card to your existing profile." : "Sign in to manage your card and public details."}</p>
       <form onSubmit={login}><label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
-        <label>Password<input type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /></label><button disabled={busy}>Sign in</button></form>
+        <label>Password<input type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /></label><button disabled={busy}>Sign in</button></form><a href="/team#recover">Forgot password?</a>
       {claimToken && <button className="quiet" disabled={busy} onClick={() => navigate("signup")}>Create a new account</button>}
     </> : <>
       <h1>{mode === "signup" ? "Create your account" : claimToken ? "Set up your card" : "Edit your public profile"}</h1>
@@ -177,7 +183,7 @@ export function CardPortal({ slug }: { slug: string }) {
         </div>)}<button type="button" className="quiet" disabled={profile.links.length >= 12} onClick={() => update("links", [...profile.links, { label: "", url: "", sortOrder: profile.links.length, active: true }])}>Add link</button></fieldset>
         <button disabled={busy || photoBusy}>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
       </form>{mode === "signup" && <button className="quiet" disabled={busy} onClick={() => navigate("login")}>Already have an account? Sign in</button>}
-      {mode === "details" && !claimToken && <><ProfileAnalytics token={token} base={base} />
+      {mode === "details" && !claimToken && <><AccountSettings token={token} onSignOut={() => { sessionStorage.removeItem("oneinfo.customer.token"); setToken(""); navigate("login"); }} /><ProfileAnalytics token={token} base={base} />
         <p><a href="/team?manage=1">Company workspace</a></p></>}
     </>}
     {error && <p className="portal-error" role="alert">{error}</p>}
@@ -202,7 +208,7 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
     {items?.length === 0 && <p>No activity recorded yet.</p>}
     {!!items?.length && <ul>{items.map(item => <li key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}>
       <strong>{item.label ?? ({ VIEW: "Profile views", SAVE: "Contact-save clicks", LINK: "Website clicks", LEAD: "Leads" }[item.event] ?? item.event)} · {item.total}</strong>
-      <span>{item.campaign || item.mode} · {item.source}</span>
+      <span>{item.campaign || item.mode} · {item.source === "DIRECT" ? "Direct / untagged" : item.source}</span>
     </li>)}</ul>}
   </section>;
 }

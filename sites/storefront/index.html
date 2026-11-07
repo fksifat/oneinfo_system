@@ -401,15 +401,16 @@
         <button class="icon-button modal-close" type="button" aria-label="Close">×</button>
         <p class="kicker"><span></span> TEAM ENQUIRY</p>
         <h2 id="team-title">Build a consistent team set.</h2>
-        <p>Team enquiries are saved as drafts on this device.</p>
+        <p>Tell Oneinfo about your team. We will contact you at the email you provide.</p>
+        <p id="team-status" role="status" aria-live="polite"></p>
         <form id="team-form">
           <label>Company or team<input name="company" required /></label>
           <label>Contact name<input name="name" required /></label>
           <label>Work email<input name="email" type="email" required /></label>
           <label>Estimated quantity<input name="quantity" type="number" min="2" value="10" required /></label>
-          <button class="button button-primary" type="submit">Save enquiry draft</button>
+          <button class="button button-primary" type="submit">Send enquiry</button>
         </form>
-        <div class="order-success" hidden><span>✓</span><h3>Enquiry draft saved</h3><p>Your team enquiry is saved on this device.</p><button class="button modal-close-button" type="button">Done</button></div>
+        <div class="order-success" hidden><span>✓</span><h3>Enquiry received</h3><p>Your team enquiry has been sent to Oneinfo.</p><button class="button modal-close-button" type="button">Done</button></div>
       </div>
     </div>
 

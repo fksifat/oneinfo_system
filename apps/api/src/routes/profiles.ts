@@ -1,13 +1,15 @@
+import { adminPage } from "../domain/admin-page.js";
+import { ensureProfileHandle } from "../domain/profile-handles.js";
 import type { FastifyPluginAsync } from "fastify";
 import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
+import { auditLogs, cardBatches, customerAccounts, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
 import { parseBody, sendCreated } from "../http.js";
 
 export const publicProfileFields = {
-  id: customerProfiles.id, publicSlug: customerProfiles.publicSlug, displayName: customerProfiles.displayName,
+  id: customerProfiles.id, handle: customerProfiles.handle, publicSlug: customerProfiles.publicSlug, displayName: customerProfiles.displayName,
   headline: customerProfiles.headline, company: customerProfiles.company, bio: customerProfiles.bio,
   phone: customerProfiles.phone, email: customerProfiles.email, website: customerProfiles.website,
   avatarUrl: customerProfiles.avatarUrl, theme: customerProfiles.theme, profileMode: customerProfiles.profileMode, modeContent: customerProfiles.modeContent,
@@ -26,6 +28,24 @@ async function profileWithLinks(profileId: string) {
 }
 
 export const profileRoutes: FastifyPluginAsync = async (app) => {
+  app.get("/handle/:handle", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { handle } = request.params as { handle: string };
+    if (!/^[a-zA-Z0-9]{1,64}$/.test(handle)) return reply.code(404).send({ message: "Profile not found" });
+    const [profile] = await db.select(publicProfileFields).from(customerProfiles)
+      .where(and(sql`lower(${customerProfiles.handle}) = lower(${handle})`, eq(customerProfiles.published, true)));
+    if (!profile) return reply.code(404).send({ message: "Profile not found" });
+    const linked = await db.select({ publicSlug: cards.publicSlug, lifecycleStatus: cards.lifecycleStatus, qcStatus: cards.qcStatus, confirmed: cardBatches.printConfirmedAt }).from(cards)
+      .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.profileId, profile.id)).orderBy(asc(cards.createdAt), asc(cards.id));
+    const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && card.qcStatus === "PASSED" && card.confirmed);
+    if (linked.length && !active) return reply.code(404).send({ message: "Profile unavailable" });
+    const [owner] = await db.select({ active: customerAccounts.active }).from(customerAccounts).where(eq(customerAccounts.profileId, profile.id));
+    if (owner && !owner.active) return reply.code(404).send({ message: "Profile unavailable" });
+    const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder }).from(profileLinks)
+      .where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
+    return { profile, links, cardSlug: active?.publicSlug ?? null };
+  });
+
   app.get("/public/:slug/contact.vcf", async (request, reply) => {
     const { slug } = request.params as { slug: string };
     const [profile] = await db.select(publicProfileFields).from(customerProfiles)
@@ -70,8 +90,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/", async (request) => {
     await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);
-    const profiles = await db.select().from(customerProfiles).orderBy(asc(customerProfiles.displayName)).limit(500);
-    return { items: profiles, count: profiles.length };
+    const { page, query } = adminPage(request.query);
+    const profiles = await db.select().from(customerProfiles).where(sql`position(lower(${query}) in lower(${customerProfiles.displayName} || ' ' || ${customerProfiles.company} || ' ' || ${customerProfiles.publicSlug} || ' ' || coalesce(${customerProfiles.handle}, '') || ' ' || ${customerProfiles.email})) > 0`).orderBy(asc(customerProfiles.displayName), asc(customerProfiles.id)).limit(101).offset((page - 1) * 100);
+    return { items: profiles.slice(0, 100), hasMore: profiles.length > 100 };
   });
 
   app.get("/:profileId", async (request) => {
@@ -90,6 +111,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
         .values({ ...profileData, ownerOperatorId: operator.operatorId })
         .returning();
       if (!created) throw new Error("Profile could not be created");
+      await ensureProfileHandle(tx, created.id, created.displayName);
       if (links.length) {
         await tx.insert(profileLinks).values(links.map((link) => ({ ...link, profileId: created.id })));
       }
@@ -108,7 +130,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   app.patch("/:profileId", async (request) => {
     const operator = await requireOperator(request, ["SUPER_ADMIN"]);
     const { profileId } = request.params as { profileId: string };
-    const input = parseBody(UpdateProfileSchema, request.body);
+    const parsed = parseBody(UpdateProfileSchema, request.body);
+    // Zod defaults belong to creation; a PATCH must only update supplied fields.
+    const input = Object.fromEntries(Object.entries(parsed).filter(([key]) => Object.hasOwn(request.body as object, key))) as typeof parsed;
     const { links, ...profileData } = input;
     const [existing] = await db.select().from(customerProfiles).where(eq(customerProfiles.id, profileId)).limit(1);
     if (!existing) throw Object.assign(new Error("Profile not found"), { statusCode: 404 });

@@ -173,13 +173,14 @@ try {
       const target=detail.cards[1];
       await set('.card-search input','no matching card');await set('.card-search select','passed');
       await evaluate(`location.hash='tools'`);await until(`!!document.querySelector('.tool-editor')`);
-      await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:target.canonicalUrl},deviceHeaders);
+      const scannedQr=target.canonicalUrl.replace(/\?source=nfc$/,'?source=qr');
+      await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:scannedQr},deviceHeaders);
       await until(`location.hash==='#production'&&document.querySelector('.batch-toolbar select').value===${JSON.stringify(scannedBatch.id)}&&document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(target.publicSlug)})`);
       assert.equal(await evaluate(`document.querySelector('.card-search input').value`),'');
       assert.equal(await evaluate(`document.querySelector('.card-search select').value`),'all');
       await evaluate(`document.querySelector('.production-card-list button').click()`);await delay(2500);
       assert.equal(await evaluate(`document.querySelector('.selected-production-card').textContent.includes(${JSON.stringify(detail.cards[0].publicSlug)})`),true);
-      await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:target.canonicalUrl},deviceHeaders);
+      await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:scannedQr},deviceHeaders);
       await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(target.publicSlug)})`);
       for(const item of detail.cards)await connection.db.delete(schema.cardEvents).where(eq(schema.cardEvents.cardId,item.id));
       await set('.batch-toolbar select',batch.id);await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
@@ -220,7 +221,11 @@ try {
       await set('#order-form input[name=name]','UI Checkout Buyer');await set('#order-phone','01712345678');await set('#order-email','checkout-ui@example.com');await set('#order-form [name=addressLine]','UI test address, Dhaka');await set('#order-form [name=district]','Dhaka');
       await evaluate(`document.querySelector('.order-coupon-toggle').click()`);await set('#order-coupon-form [name=code]','UICHECK');await evaluate(`document.querySelector('#order-coupon-form').requestSubmit()`);await until(`document.querySelector('.order-coupon-status').textContent.includes('15')`);
       await evaluate(`document.querySelector('[name=paymentMethod][value=BKASH]').click();document.querySelector('#order-form').requestSubmit()`);await until(`location.hash==='#arisepay'&&!document.querySelector('#arisepay-form').hidden`);await inspect('storefront-payment-'+width);
+      const [reservation]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.awaitingPayment,true));
+      assert.ok(reservation,'Checkout must reserve stock before displaying payment instructions');
       await set('#arisepay-transaction','UICHECK123456');await click('Submit payment for verification');await until(`!document.querySelector('.order-saved').hidden`);await inspect('storefront-order-receipt-'+width);console.log('Storefront coupon/bKash submission/order receipt PASS (test transaction, no payment sent)');
+      const [finalized]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,reservation.id));
+      assert.equal(finalized.awaitingPayment,false);
     }
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
@@ -243,6 +248,9 @@ try {
   await fill('Full name', 'Browser Test Owner'); await fill('Headline', 'Profile verified in browser');
   await uploadPhoto();
   await click('Create account & save profile');
+  await until(`document.querySelector('h1')?.textContent === 'Browser Test Owner'`);
+  await until(`location.pathname === '/BrowserTestOwner'`);
+  await reload();
   await until(`document.querySelector('h1')?.textContent === 'Browser Test Owner'`);
   assert.equal(await evaluate(`document.body.innerText.includes('browser-owner@example.com')`), false);
   await until(`document.querySelector('.public-avatar img')?.naturalWidth === 600`);

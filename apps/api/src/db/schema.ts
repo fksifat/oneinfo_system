@@ -91,6 +91,7 @@ export const customerProfiles = pgTable(
   "customer_profiles",
   {
     id: uuid("id").primaryKey().$defaultFn(randomUUID),
+    handle: varchar("handle", { length: 64 }),
     ownerOperatorId: uuid("owner_operator_id").references(() => operators.id, { onDelete: "set null" }),
     publicSlug: varchar("public_slug", { length: 64 }).notNull(),
     displayName: varchar("display_name", { length: 120 }).notNull(),
@@ -109,6 +110,7 @@ export const customerProfiles = pgTable(
   },
   (table) => [
     uniqueIndex("customer_profiles_slug_unique").on(table.publicSlug),
+    uniqueIndex("customer_profiles_handle_unique").on(sql`lower(${table.handle})`),
     index("customer_profiles_owner_idx").on(table.ownerOperatorId),
   ],
 );
@@ -454,7 +456,7 @@ export const storeOrders = pgTable("store_orders", {
   codCollectedMinor: bigint("cod_collected_minor", { mode: "number" }),
   codSettledMinor: bigint("cod_settled_minor", { mode: "number" }),
   deliveredAt: timestamp("delivered_at", { withTimezone: true }),
-  stockReservations: jsonb("stock_reservations").$type<Array<{ productId: string; variantId: string; quantity: number }>>().notNull().default([]),
+  stockReservations: jsonb("stock_reservations").$type<Array<{ productId: string; variantId: string; quantity: number }>>(),
   awaitingPayment: boolean("awaiting_payment").notNull().default(false),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   cancellationReason: text("cancellation_reason"),

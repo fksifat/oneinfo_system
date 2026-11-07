@@ -10,7 +10,8 @@
     { "source": "/admin", "destination": "/dashboard/index.html" },
     { "source": "/admin/:path*", "destination": "/dashboard/index.html" },
     { "source": "/team", "destination": "/dashboard/index.html" },
-    { "source": "/c/:path*", "destination": "/dashboard/index.html" }
+    { "source": "/c/:path*", "destination": "/dashboard/index.html" },
+    { "source": "/:handle([a-zA-Z0-9]{1,64})", "destination": "/dashboard/index.html" }
   ],
   "headers": [
     { "source": "/(.*)", "headers": [

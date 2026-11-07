@@ -1,3 +1,4 @@
+import { adminPage } from "../domain/admin-page.js";
 import type { FastifyPluginAsync } from "fastify";
 import { and, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -80,11 +81,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return { items: items.slice(0, 100), count: Math.min(items.length, 100), hasMore: items.length > 100 };
   });
 
-  app.get("/batches", async () => {
-    const items = await db.select().from(cardBatches).where(isNotNull(cardBatches.printConfirmedAt)).orderBy(desc(cardBatches.createdAt)).limit(200);
+  app.get("/batches", async request => {
+    const { page, query } = adminPage(request.query);
+    const rows = await db.select().from(cardBatches).where(and(isNotNull(cardBatches.printConfirmedAt), sql`position(lower(${query}) in lower(${cardBatches.batchCode} || ' ' || ${cardBatches.productVariantId})) > 0`)).orderBy(desc(cardBatches.createdAt), desc(cardBatches.id)).limit(101).offset((page - 1) * 100);
+    const items = rows.slice(0, 100);
     const batchCards = items.length ? await db.select({ batchId: cards.batchId, qrStatus: cards.qrStatus, nfcStatus: cards.nfcStatus, qcStatus: cards.qcStatus })
       .from(cards).where(inArray(cards.batchId, items.map((batch) => batch.id))) : [];
-    return { items: items.map((batch) => ({ ...batch, ...productionBatchSummary(batchCards.filter((card) => card.batchId === batch.id)) })), count: items.length };
+    return { items: items.map((batch) => ({ ...batch, ...productionBatchSummary(batchCards.filter((card) => card.batchId === batch.id)) })), count: items.length, hasMore: rows.length > 100 };
   });
 
   app.get("/stations", async () => {
@@ -117,8 +120,22 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return safeStation;
   });
 
-  app.get("/audit-logs", async () => {
-    const items = await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(300);
-    return { items, count: items.length };
+  app.post("/stations/:stationId/recover-jobs", async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { stationId } = parseBody(z.object({ stationId: z.uuid() }), request.params);
+    return db.transaction(async tx => {
+      const [station] = await tx.update(productionStations).set({ status: "REVOKED", updatedAt: new Date() }).where(eq(productionStations.id, stationId)).returning();
+      if (!station) throw Object.assign(new Error("Station not found"), { statusCode: 404 });
+      const recovered = await tx.update(productionJobs).set({ status: "QUEUED", assignedStationId: null, claimedBy: null, claimIdempotencyKey: null, claimedAt: null, leaseExpiresAt: null, updatedAt: new Date() })
+        .where(and(eq(productionJobs.assignedStationId, stationId), inArray(productionJobs.status, ["QUEUED", "CLAIMED", "RETRYABLE_FAILURE"]))).returning({ id: productionJobs.id });
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STATION_JOBS_RECOVERED", targetType: "production_station", targetId: stationId, metadata: { jobIds: recovered.map(job => job.id) } });
+      return { recovered: recovered.length };
+    });
+  });
+
+  app.get("/audit-logs", async request => {
+    const { page, query } = adminPage(request.query);
+    const items = await db.select().from(auditLogs).where(sql`position(lower(${query}) in lower(${auditLogs.action} || ' ' || ${auditLogs.targetType} || ' ' || ${auditLogs.targetId})) > 0`).orderBy(desc(auditLogs.createdAt), desc(auditLogs.id)).limit(101).offset((page - 1) * 100);
+    return { items: items.slice(0, 100), hasMore: items.length > 100 };
   });
 };

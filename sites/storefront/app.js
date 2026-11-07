@@ -324,9 +324,9 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       const order = await response.json();
       if (location.hash !== `#track/${token}`) return;
       const steps = [["Received", order.createdAt], ["Processing", order.processingAt], ["Shipped", order.shippedAt], ["Delivered", order.deliveredAt]];
-      const status = { RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" }[order.status];
+      const status = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" }[order.status];
       content.innerHTML = `<p>Current status <strong>${escapeHtml(status || "Unavailable")}</strong></p>
-        <ol>${steps.map(([label, date]) => `<li>${label}${date ? ` · ${escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" }))}` : ""}</li>`).join("")}</ol>
+        ${order.cancellationReason ? `<p>${escapeHtml(order.cancellationReason)}</p>` : ""}<ol>${steps.map(([label, date]) => `<li>${label}${date ? ` · ${escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" }))}` : ""}</li>`).join("")}</ol>
         ${order.courierTrackingId ? `<p>Courier tracking ID <strong>${escapeHtml(order.courierTrackingId)}</strong></p>` : ""}`;
     } catch (error) { if (location.hash === `#track/${token}`) content.textContent = error.message || "Tracking is temporarily unavailable."; }
   }
@@ -613,9 +613,9 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   }
 
   function renderArisepay() {
-    arisepayForm.hidden = !arisepayDraft;
-    $(".arisepay-unavailable").hidden = Boolean(arisepayDraft);
-    if (!arisepayDraft) return;
+    arisepayForm.hidden = !arisepayDraft?.reserved;
+    $(".arisepay-unavailable").hidden = Boolean(arisepayDraft?.reserved);
+    if (!arisepayDraft?.reserved) return;
     const { payment } = arisepayDraft.request;
     $(".arisepay-amount-label").textContent = payment.method === "COD" ? "COD advance" : "Amount to pay";
     $(".arisepay-amount").textContent = money.format(payment.amountMinor / 100);
@@ -738,6 +738,12 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
       });
       const result = await response.json();
       if (!response.ok) {
+        if (request.payment?.transactionId) {
+          if (location.hash === "#arisepay") location.replace("#order-draft");
+          renderOrder();
+          $(".order-recovery p").textContent = `${result.message || "We could not confirm your order."} Your transaction reference is saved. Do not pay again. Contact Oneinfo if retry does not work.`;
+          return;
+        }
         if (response.status === 400 || response.status === 409) {
           localStorage.removeItem(pendingOrderKey);
           pendingOrder = null;
@@ -908,7 +914,7 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
   });
   arisepayForm.addEventListener("submit", async event => {
     event.preventDefault();
-    if (!arisepayDraft || placingOrder || pendingOrder) return;
+    if (!arisepayDraft?.reserved || placingOrder || pendingOrder) return;
     const field = arisepayForm.elements.transactionId;
     const showError = message => {
       arisepayError.textContent = message;
@@ -956,13 +962,30 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     const amountMinor = paymentDueNow(subtotal + request.shippingMinor - discount, method.data, paymentSettings.codAdvanceTaka);
     request.payment = { method: method.data, amountMinor };
     if (amountMinor > 0) {
-      const draft = { request, bkashNumber: paymentSettings.bkashNumber, coupon: appliedCoupon };
+      const previous = arisepayDraft?.request;
+      if (previous && JSON.stringify({ ...previous, requestId: "" }) === JSON.stringify({ ...request, requestId: "" })) request.requestId = previous.requestId;
+      const draft = { request, bkashNumber: paymentSettings.bkashNumber, coupon: appliedCoupon, reserved: false };
       try {
         sessionStorage.setItem(arisepayKey, JSON.stringify(draft));
       } catch {
         return setOrderMessage("Allow browser storage and try again.");
       }
       arisepayDraft = draft;
+      placingOrder = orderSubmit.disabled = true;
+      setOrderMessage("Checking stock and reserving your order before payment…");
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/orders/reserve`, {
+          method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(12000),
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || "Could not reserve your order. Try again before paying.");
+        if (!result.id || result.status !== "AWAITING_PAYMENT") throw new Error("Could not confirm the reservation. Do not pay; contact Oneinfo.");
+        draft.reserved = true;
+        sessionStorage.setItem(arisepayKey, JSON.stringify(draft));
+      } catch (error) {
+        setOrderMessage(error instanceof Error ? error.message : "Could not reserve your order. Try again before paying.");
+        return;
+      } finally { placingOrder = orderSubmit.disabled = false; }
       arisepayForm.reset();
       arisepayError.hidden = true;
       arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
@@ -972,13 +995,23 @@ import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
     await placeOrder(request, setOrderMessage);
   });
 
-  $("#team-form").addEventListener("submit", (event) => {
+  $("#team-form").addEventListener("submit", async event => {
     event.preventDefault();
-    const form = event.currentTarget;
-    save(teamDraftKey, { request: formToObject(form), savedAt: new Date().toISOString() });
-    form.hidden = true;
-    $(".order-success", form.parentElement).hidden = false;
-    toast("Team request saved locally");
+    const form = event.currentTarget, button = $('button[type="submit"]', form), status = $("#team-status");
+    if (button.disabled) return;
+    button.disabled = true; status.textContent = "Sending your enquiry…";
+    try {
+      const input = formToObject(form), previous = load(teamDraftKey, null);
+      const requestId = previous?.requestId && JSON.stringify(previous.request) === JSON.stringify(input) ? previous.requestId : crypto.randomUUID();
+      save(teamDraftKey, { request: input, requestId });
+      const response = await fetch(`${apiUrl}/api/v1/company/enquiries`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...input, requestId }), signal: AbortSignal.timeout(12000) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Could not send. Try again.");
+      localStorage.removeItem(teamDraftKey);
+      form.hidden = true; status.textContent = "";
+      $(".order-success", form.parentElement).hidden = false;
+    } catch (error) { status.textContent = error.message || "Could not send. Your details are saved; try again."; }
+    finally { button.disabled = false; }
   });
 
   const menuTrigger = $(".menu-trigger");

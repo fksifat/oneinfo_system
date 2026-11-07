@@ -1,13 +1,16 @@
+import { adminPage } from "../domain/admin-page.js";
+import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import { ensureProfileHandle } from "../domain/profile-handles.js";
 import { createAccountLink, sendAccountLink } from "../domain/account-tokens.js";
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
-import { and, asc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, sql, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 import { CreateProfileSchema } from "@oneinfo/contracts";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
 import { isManagedCardUrl } from "../domain/card-urls.js";
 import { db } from "../db/client.js";
-import { cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
+import { teamEnquiries, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
 import { requireCustomer } from "../domain/customer-auth.js";
 import { parseBody, sendCreated } from "../http.js";
 import { publicProfileFields } from "./profiles.js";
@@ -32,6 +35,22 @@ async function ownCompany(tx: Transaction, companyId: string, accountId: string)
 
 export const companyRoutes: FastifyPluginAsync = async app => {
   app.addHook("onRequest", async (_request, reply) => { reply.header("Cache-Control", "no-store"); });
+
+  app.post("/enquiries", { bodyLimit: 4096 }, async (request, reply) => {
+    const input = parseBody(z.object({ requestId: z.uuid(), name, email, company: name, quantity: z.coerce.number().int().min(2).max(100000) }), request.body);
+    const [existing] = await db.select().from(teamEnquiries).where(eq(teamEnquiries.requestId, input.requestId));
+    if (existing) return { saved: true };
+    if (!await allowAuthAttempt(`team-enquiry:${request.ip}`, 5, 3600_000)) fail("Too many enquiries. Please try again later.", 429);
+    await db.insert(teamEnquiries).values({ ...input, quantity: String(input.quantity) }).onConflictDoNothing();
+    return sendCreated(reply, { saved: true });
+  });
+
+  app.get("/admin/enquiries", async request => {
+    await requireOperator(request, ["SUPER_ADMIN"]);
+    const { page, query } = adminPage(request.query);
+    const items = await db.select().from(teamEnquiries).where(sql`position(lower(${query}) in lower(${teamEnquiries.name} || ' ' || ${teamEnquiries.company} || ' ' || ${teamEnquiries.email})) > 0`).orderBy(desc(teamEnquiries.createdAt), desc(teamEnquiries.id)).limit(101).offset((page - 1) * 100);
+    return { items: items.slice(0, 100), hasMore: items.length > 100 };
+  });
 
   app.get("/admin", async request => {
     await requireOperator(request, ["SUPER_ADMIN"]);
@@ -134,6 +153,7 @@ export const companyRoutes: FastifyPluginAsync = async app => {
         const [profile] = await tx.insert(customerProfiles).values({ publicSlug: `team-${randomBytes(12).toString("hex")}`, displayName: employee.name,
           headline: employee.headline || company.headline, company: company.name, bio: company.bio, theme: company.theme, published: true }).returning({ id: customerProfiles.id });
         if (!profile) throw new Error("Employee profile creation failed");
+        await ensureProfileHandle(tx, profile.id, employee.name);
         await tx.insert(companyEmployees).values({ companyId, profileId: profile.id, email: employee.email });
         added++;
       }

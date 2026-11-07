@@ -256,7 +256,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
       {items.map(order => <details className="store-order" key={order.id}>
         <summary>
-          <span className="store-order-customer"><strong>{order.customer.name}</strong><small>{order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}</small><small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
+          <span className="store-order-customer"><strong>{order.customer.name}</strong>{order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && <small>{order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}</small>}<small>{order.customer.phone} · {new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka" })}</small></span>
           <span className="store-order-total">
             <strong>{bdt(order.totalMinor)}</strong>
             <small>
@@ -270,7 +270,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
         <div className="store-order-content">
           <dl>
             <div><dt>Order ID</dt><dd>{order.id}</dd></div>
-            <div><dt>QR allocation</dt><dd>{order.qrAllocation?.assigned ?? 0} assigned · {order.qrAllocation?.pending ?? 0} awaiting printed stock</dd></div>
+            <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted" : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
             <div><dt>Client activation</dt><dd>The client claims ownership using the secret code and their account.</dd></div>
             {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer">{card.publicSlug}</a> · QC {card.qcStatus}</dd></div>)}
             <div><dt>Contact</dt><dd>{order.customer.phone}<br />{order.customer.email}</dd></div>
@@ -287,15 +287,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
           </dl>
           <div className="store-order-actions">
             {order.trackingPath && order.status === "RECEIVED" && <button className="quiet" type="button" disabled={Boolean(delivering)} onClick={() => void updateFulfillment(order, "PROCESSING")}>Start processing</button>}
-            {order.paymentStatus === "PENDING_VERIFICATION" && <button className="quiet" type="button"
+            {order.status !== "CANCELLED" && order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" && <button className="quiet" type="button"
               disabled={Boolean(verifyingPayment)} onClick={() => void verifyPayment(order)}>
               {verifyingPayment === order.id ? "Verifying…" : "Verify bKash payment"}
             </button>}
-            <button className="quiet" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
+            {!["AWAITING_PAYMENT", "CANCELLED"].includes(order.status) && <button className="quiet" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
               {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
-            </button>
+            </button>}
           </div>
-          {order.trackingPath && order.status !== "DELIVERED" && order.paymentStatus !== "PENDING_VERIFICATION" && <form className="order-filter-form" onSubmit={event => {
+          {order.trackingPath && !["DELIVERED", "CANCELLED", "AWAITING_PAYMENT"].includes(order.status) && order.paymentStatus !== "PENDING_VERIFICATION" && <form className="order-filter-form" onSubmit={event => {
             event.preventDefault(); void updateFulfillment(order, "SHIPPED", String(new FormData(event.currentTarget).get("trackingId")));
           }}>
             <label>Courier tracking ID<input name="trackingId" maxLength={100} required defaultValue={order.courierTrackingId ?? ""} /></label>
@@ -306,6 +306,22 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
             <label>Courier settled (৳)<input name="settled" type="number" min="0" step="0.01" required defaultValue={(order.codSettledMinor ?? 0) / 100} /></label>
             <button type="submit" className="quiet" disabled={Boolean(delivering)}>Save COD amounts</button>
           </form>}
+          {order.cancellationReason && <p>Cancellation: {order.cancellationReason}</p>}
+          {!["SHIPPED", "DELIVERED", "CANCELLED"].includes(order.status) && <details><summary>Cancel order and release stock</summary>
+            <form className="order-filter-form" onSubmit={event => {
+              event.preventDefault(); if (delivering) return;
+              const data = new FormData(event.currentTarget);
+              setDelivering(order.id); setOrderError("");
+              void api<OrderReceipt>(`${path}/admin/${order.id}/cancel`, token, { method: "POST", body: JSON.stringify({ reason: data.get("reason"), refundConfirmed: data.has("refundConfirmed"), cardsRecovered: data.has("cardsRecovered") }) })
+                .then(updated => setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated, assignedCards: [] } : item)))
+                .catch(error => setOrderError(error.message)).finally(() => setDelivering(undefined));
+            }}>
+              <label>Cancellation reason<input name="reason" minLength={5} maxLength={500} required /></label>
+              <label><input type="checkbox" name="refundConfirmed" required={Boolean(order.transactionId)} /> Payment checked and any refund resolved</label>
+              <label><input type="checkbox" name="cardsRecovered" /> Any issued physical cards and secret codes have been recovered; invalidate those codes</label>
+              <button type="submit" className="quiet" disabled={Boolean(delivering)}>Cancel order</button>
+            </form>
+          </details>}
           {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} />}
           <ul>{order.items.map(item => <li key={`${item.productId}:${item.variantId}`}>
             {item.quantity} × {item.name} · {item.variantName} · {bdt(item.unitPriceMinor * item.quantity)}
@@ -370,7 +386,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   </div>;
 }
 
-type EmailAttempt = { id: string; kind: "confirmation" | "payment" | "shipping" | "delivery"; status: "accepted" | "failed"; createdAt: string };
+type EmailAttempt = { id: string; kind: "confirmation" | "payment" | "shipping" | "delivery"; status: "accepted" | "failed" | "pending" | "sending"; createdAt: string };
 
 function OrderEmailHistory({ orderId, token }: { orderId: string; token: string }) {
   const [items, setItems] = useState<EmailAttempt[]>();
@@ -395,7 +411,7 @@ function OrderEmailHistory({ orderId, token }: { orderId: string; token: string 
     {message && <p role="alert">{message}</p>}
     {items?.length === 0 && <p>No email attempts recorded for this order.</p>}
     {!!items?.length && <ul>{items.map((item, index) => <li key={item.id}>
-      {item.kind} · {item.status === "accepted" ? "Accepted by email service" : "Send failed"} · {new Date(item.createdAt).toLocaleString()}
+      {item.kind} · {item.status === "accepted" ? "Accepted by email service" : item.status === "failed" ? "Send failed or interrupted" : item.status === "pending" ? "Queued" : "Sending"} · {new Date(item.createdAt).toLocaleString()}
       {item.status === "failed" && items.findIndex(attempt => attempt.kind === item.kind) === index &&
         <button type="button" className="quiet" disabled={busy} onClick={() => void refresh(item.kind)}>Retry {item.kind}</button>}
     </li>)}</ul>}

@@ -1,3 +1,4 @@
+import { ensureProfileHandle } from "../domain/profile-handles.js";
 import { randomBytes } from "node:crypto";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
@@ -56,6 +57,7 @@ export const accountRecoveryRoutes: FastifyPluginAsync = async app => {
         if (!passwordHash || !input.displayName) throw fail("Enter your name and a new password.");
         if (account) throw fail("An account already exists. Sign in and ask Admin to create your workspace.", 409);
         const [profile] = await tx.insert(customerProfiles).values({ publicSlug: `client-${randomBytes(12).toString("hex")}`, displayName: input.displayName, published: false }).returning();
+        await ensureProfileHandle(tx, profile!.id, input.displayName);
         const [owner] = await tx.insert(customerAccounts).values({ email: link.email, passwordHash, profileId: profile!.id, emailVerifiedAt: new Date() }).returning();
         await tx.insert(companies).values({ name: link.details.name!, ownerAccountId: owner!.id, domain: link.details.domain || null });
       } else {

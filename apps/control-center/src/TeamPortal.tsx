@@ -1,3 +1,4 @@
+import { AccountAccess, AccountSettings } from "./AccountAccess.js";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api } from "./api.js";
 import { customerApi, LeadInbox, ProfileAnalytics } from "./CardPortal.js";
@@ -19,6 +20,8 @@ function TeamPage({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function TeamPortal() {
+  const [accountHash, setAccountHash] = useState(location.hash);
+  useEffect(() => { const changed = () => setAccountHash(location.hash); window.addEventListener("hashchange", changed); return () => window.removeEventListener("hashchange", changed); }, []);
   const query = new URLSearchParams(location.search);
   const manage = query.has("manage");
   const secret = location.hash.startsWith("#edit/") ? location.hash.slice(6) : "";
@@ -32,6 +35,7 @@ export function TeamPortal() {
       .catch(() => { if (!controller.signal.aborted) setBrand(null); });
     return () => controller.abort();
   }, [manage, secret, profileSlug]);
+  if (accountHash === "#recover" || accountHash.startsWith("#account/")) return <AccountAccess key={accountHash} secret={accountHash.startsWith("#account/") ? accountHash.slice(9) : undefined} />;
   if (secret) return <EmployeeEditor secret={secret} />;
   if (!manage && brand === undefined) return <TeamPage title="Company portal"><p role="status">Loading…</p></TeamPage>;
   if (brand) {
@@ -101,9 +105,9 @@ function CompanyWorkspace() {
     {!token ? <form onSubmit={login}>
       <label>Account email<input name="email" type="email" autoComplete="username" required /></label>
       <label>Password<input name="password" type="password" autoComplete="current-password" required /></label>
-      <button disabled={busy}>Sign in</button>
+      <button disabled={busy}>Sign in</button><a href="/team#recover">Forgot password?</a>
     </form> : <>
-      <button type="button" className="quiet" disabled={busy} onClick={signOut}>Sign out</button>
+      <button type="button" className="quiet" disabled={busy} onClick={signOut}>Sign out</button><AccountSettings token={token} onSignOut={signOut} />
       {companies === undefined ? <p>Loading your companies…</p> : companies.length === 0 ? <p>This account has no company workspaces.</p> :
         <label>Company<select value={selected} disabled={busy} onChange={event => setSelected(event.target.value)}>{companies.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>}
       {workspace && <>
@@ -205,12 +209,12 @@ export function TeamAdmin({ token }: { token: string }) {
     if (!input.domain) delete input.domain;
     const body = field === "domain" ? { domain: input.domain || null } : input;
     setBusy(true); setMessage("");
-    try { await api(route, token, { method, body: JSON.stringify(body) }); if (field !== "domain") form.reset(); await read(); setMessage("Company updated."); }
+    try { const result = await api<{ invited?: boolean }>(route, token, { method, body: JSON.stringify(body) }); if (field !== "domain") form.reset(); await read(); setMessage(result.invited ? "Invitation emailed to the owner. They can create their account and workspace using that link within 72 hours." : "Company updated."); }
     catch (error) { setMessage(messageFor(error)); }
     finally { setBusy(false); }
   }
-  return <section className="panel team-admin"><h2>Company workspaces</h2>
-    <p>Create a workspace for an existing Oneinfo customer account. The owner can sign in at <a href="/team?manage=1">Company workspace</a>.</p>
+  return <section className="panel team-admin"><TeamEnquiries token={token} /><h2>Company workspaces</h2>
+    <p>Create a workspace for an existing account, or email an invitation to a new owner. The owner can sign in at <a href="/team?manage=1">Company workspace</a>.</p>
     {message && <p role="status">{message}</p>}
     <form onSubmit={event => void submit(event, path, "POST")}>
       <label>Company name<input name="name" required maxLength={120} /></label><label>Owner email<input name="ownerEmail" type="email" required /></label>
@@ -221,4 +225,22 @@ export function TeamAdmin({ token }: { token: string }) {
       <form onSubmit={event => void submit(event, `${path}/${company.id}/cards`, "POST", "cardSlug")}><label>Available card slug<input name="cardSlug" required maxLength={64} /></label><button disabled={busy}>Reserve card for company</button></form>
     </li>)}</ul>
   </section>;
+}
+
+function TeamEnquiries({ token }: { token: string }) {
+  const [items, setItems] = useState<{ id: string; name: string; email: string; company: string; quantity: string; createdAt: string }[]>([]);
+  const [page, setPage] = useState(1), [query, setQuery] = useState("");
+  const [more, setMore] = useState(false), [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    api<{ items: typeof items; hasMore: boolean }>(`/api/v1/company/admin/enquiries?page=${page}&query=${encodeURIComponent(query)}`, token)
+      .then(result => { if (active) { setItems(result.items); setMore(result.hasMore); setError(""); } }).catch(reason => { if (active) setError(messageFor(reason)); });
+    return () => { active = false; };
+  }, [token, page, query]);
+  return <details><summary>Team enquiries</summary>
+    <form className="list-toolbar" onSubmit={event => { event.preventDefault(); setPage(1); setQuery(String(new FormData(event.currentTarget).get("query") ?? "")); }}><label>Search enquiries<input name="query" type="search" maxLength={120} /></label><button>Search</button></form>
+    {error && <p role="alert">{error}</p>}{!items.length && !error && <p>No enquiries on this page.</p>}
+    <ul>{items.map(item => <li key={item.id}><strong>{item.company}</strong> · {item.quantity} cards<p>{item.name} · <a href={`mailto:${item.email}`}>{item.email}</a> · {new Date(item.createdAt).toLocaleString()}</p></li>)}</ul>
+    <nav className="list-toolbar" aria-label="Enquiry pages"><button className="quiet" disabled={page === 1} onClick={() => setPage(value => value - 1)}>Previous</button><span>Page {page}</span><button className="quiet" disabled={!more} onClick={() => setPage(value => value + 1)}>Next</button></nav>
+  </details>;
 }

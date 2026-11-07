@@ -44,6 +44,14 @@ try {
           assert.ok(tables.rows.some(row => row.tablename === name), `Missing reconciled table: ${name}`);
         }
         assert.equal((await fixture.query('SELECT count(*) FROM products')).rows[0].count, before);
+        await fixture.query(`INSERT INTO customer_profiles (id, public_slug, display_name, created_at)
+          VALUES (gen_random_uuid(), 'existing-one', 'Sushmoy Nandi', '2024-01-01'),
+                 (gen_random_uuid(), 'existing-two', 'sushmoy nandi', '2024-01-02'),
+                 (gen_random_uuid(), 'existing-three', 'Admin', '2024-01-03')`);
+        const handleMigration = readFileSync(`${root}apps/api/drizzle/0017_profile_handles.sql`, "utf8");
+        await fixture.query(handleMigration.split("--> statement-breakpoint").find(statement => statement.trimStart().startsWith("DO $$")));
+        const handles = await fixture.query("SELECT handle FROM customer_profiles ORDER BY created_at");
+        assert.deepEqual(handles.rows.map(row => row.handle), ["SushmoyNandi", "sushmoynandi2", "AdminProfile"]);
         console.log("PASS: fresh migrations, local branch reconciliation and repeated migration preserve catalog data.");
       } finally { await fixture.end(); }
     }
