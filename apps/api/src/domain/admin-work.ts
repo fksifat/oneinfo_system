@@ -16,7 +16,13 @@ const queue = sql`with work as (
     when c.qc_status = 'FAILED' then 'qc_failed'
     when c.nfc_status <> 'WRITTEN' then 'nfc'
     when c.qc_status <> 'PASSED' then 'qc'
-    when o.id is not null then 'packing'
+    when o.id is not null and (
+      select count(*) from ${orderCardAllocations} p
+      join ${cards} pc on pc.id = p.card_id
+      join ${cardBatches} pb on pb.id = pc.batch_id
+      where p.order_id = o.id and pb.print_confirmed_at is not null and pc.nfc_status = 'WRITTEN'
+        and pc.qc_status = 'PASSED' and pc.lifecycle_status in ('QC_PASSED','ACTIVATED')
+    ) = (select sum((item->>'quantity')::int) from jsonb_array_elements(o.items) item) then 'packing'
   end as stage, 1 as units, o.id as "orderId", c.id as "cardId", b.id as "batchId",
     c.public_slug as label, j.station, j.job_status as "jobStatus", c.created_at
   from ${cards} c join ${cardBatches} b on b.id = c.batch_id

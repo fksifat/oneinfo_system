@@ -117,6 +117,17 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const pairing = await request("/api/v1/local-nfc/pairings", {});
     const paired = (await app.inject({ method: "POST", url: "/api/v1/local-nfc/devices/pair", payload: { pairingCode: pairing.pairingCode, deviceName: "Scan selection test" } })).json();
     const deviceHeaders = { "x-oneinfo-device-token": paired.deviceToken };
+    const [expected] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, first.id));
+    const [different] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, second.id));
+    await request("/api/v1/local-nfc/expected-card", { cardId: expected!.id });
+    const wrongScan = { scanId: randomUUID(), scannedValue: qrUrl(different!.canonicalUrl) };
+    for (const action of ["resolve-qr", "verification-from-qr"]) {
+      const rejected = await app.inject({ method: "POST", url: `/api/v1/local-nfc/device/${action}`, headers: deviceHeaders, payload: wrongScan });
+      expect(rejected.statusCode).toBe(409);
+      expect(rejected.json().message).toContain("Wrong card");
+    }
+    expect((await request("/api/v1/local-nfc/latest-qr-scan")).scan).toBeNull();
+    await request("/api/v1/local-nfc/expected-card", { cardId: null });
     for (const created of [first, second]) {
       const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
       const scanId = randomUUID();
@@ -135,6 +146,42 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       items: [{ productId, variantId, quantity, unitPriceMinor: 50000 }] };
   }
   const order = (quantity = 1) => request("/api/v1/orders", orderPayload(quantity));
+
+  it("keeps work counts, card lookup, reprints and packing in sync", async () => {
+    const placed = await order(2);
+    expect((await request("/api/v1/admin/overview")).attention).toMatchObject({ print: 2 });
+    expect((await request("/api/v1/admin/tasks?stage=print")).items).toEqual([expect.objectContaining({ orderId: placed.id, units: 2 })]);
+    const created = await batch(2);
+    await confirm(created.id);
+    const [first, second] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+    expect(await request("/api/v1/admin/cards/lookup", { value: qrUrl(first!.canonicalUrl) })).toMatchObject({
+      id: first!.id, batchId: created.id, orderId: placed.id, inventoryStatus: "RESERVED",
+    });
+    expect((await app.inject({ method: "POST", url: "/api/v1/admin/cards/lookup", payload: { value: first!.publicSlug } })).statusCode).toBe(401);
+    const reprint = await request(`/api/v1/admin/batches/${created.id}/reprint`);
+    const artifacts = await client.db.select().from(schema.qrArtifacts);
+    expect(reprint.items).toContainEqual(expect.objectContaining({ id: first!.id, imageData: artifacts.find(item => item.cardId === first!.id)!.imageData }));
+    expect(artifacts).toHaveLength(2);
+    const pack = (scans: string[]) => app.inject({ method: "POST", url: `/api/v1/orders/admin/${placed.id}/packing-check`, headers, payload: { scans } });
+    expect((await pack([first!.publicSlug, second!.publicSlug])).statusCode).toBe(409);
+    await client.db.update(schema.cards).set({ qcStatus: "PASSED", nfcStatus: "WRITTEN", lifecycleStatus: "QC_PASSED" }).where(eq(schema.cards.id, first!.id));
+    expect((await request("/api/v1/admin/tasks?stage=packing")).items).toHaveLength(0);
+    await client.db.update(schema.cards).set({ qcStatus: "PASSED", nfcStatus: "WRITTEN", lifecycleStatus: "QC_PASSED" }).where(eq(schema.cards.id, second!.id));
+    expect((await request("/api/v1/admin/overview")).attention).toMatchObject({ packing: 2 });
+    expect((await pack([first!.publicSlug, qrUrl(first!.canonicalUrl)])).statusCode).toBe(409);
+    expect((await pack([first!.publicSlug, "wrong-card"])).statusCode).toBe(409);
+    expect((await pack([first!.publicSlug, qrUrl(second!.canonicalUrl)])).json()).toEqual({ checked: 2 });
+    await client.db.update(schema.storeOrders).set({ deliveredAt: new Date() }).where(eq(schema.storeOrders.id, placed.id));
+    expect((await request("/api/v1/admin/activation-follow-up")).items).toHaveLength(2);
+    expect((await request("/api/v1/admin/stations")).items).toContainEqual(expect.objectContaining({ online: true }));
+    const [review] = await client.db.insert(schema.storeReviews).values({
+      orderId: placed.id, productId, displayName: "Buyer", rating: 2, title: "Needs follow-up", body: "The package arrived late.",
+    }).returning();
+    expect((await request("/api/v1/reviews/admin?inbox=low")).items).toContainEqual(expect.objectContaining({ id: review!.id, seen: false }));
+    await request(`/api/v1/reviews/admin/${review!.id}/seen`, {});
+    expect((await request("/api/v1/reviews/admin?inbox=new")).items).not.toContainEqual(expect.objectContaining({ id: review!.id }));
+    expect((await request("/api/v1/reviews/admin?inbox=seen")).items).toContainEqual(expect.objectContaining({ id: review!.id, seen: true }));
+  });
 
   it("prepares and confirms ordered cards individually without duplicating assigned stock or QR artifacts", async () => {
     const [essential] = await client.db.select().from(schema.products).where(eq(schema.products.slug, "oneinfo-essential"));

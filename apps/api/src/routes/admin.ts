@@ -36,7 +36,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       db.select({ value: count() }).from(customerProfiles),
       db.select({ value: count() }).from(cards).innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(isNotNull(cardBatches.printConfirmedAt)),
       db.select({ value: count() }).from(cardBatches).where(isNotNull(cardBatches.printConfirmedAt)),
-      db.select({ value: count() }).from(productionStations).where(eq(productionStations.status, "ACTIVE")),
+      db.select({ value: count(), online: sql<number>`count(*) filter (where ${productionStations.lastSeenAt} >= now() - interval '30 seconds')::int` })
+        .from(productionStations).where(eq(productionStations.status, "ACTIVE")),
       db.select({ value: count() }).from(productionJobs).innerJoin(cardBatches, eq(productionJobs.batchId, cardBatches.id))
         .where(and(isNotNull(cardBatches.printConfirmedAt), inArray(productionJobs.status, ["QUEUED", "CLAIMED", "RETRYABLE_FAILURE"]))),
       db.select({ value: count() }).from(qrArtifacts).innerJoin(cards, eq(qrArtifacts.cardId, cards.id))
@@ -63,6 +64,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       cards: cardTotal[0]?.value ?? 0,
       batches: batchTotal[0]?.value ?? 0,
       stations: stationTotal[0]?.value ?? 0,
+      stationsOnline: stationTotal[0]?.online ?? 0,
       pendingJobs: pendingJobs[0]?.value ?? 0,
       qrArtifacts: qrTotal[0]?.value ?? 0,
       nfcAttempts: nfcAttemptTotal[0]?.value ?? 0,
@@ -167,7 +169,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       status: productionJobs.status, batchId: productionJobs.batchId, cardId: cards.id, publicSlug: cards.publicSlug })
       .from(productionJobs).innerJoin(cards, eq(cards.id, productionJobs.cardId))
       .where(and(inArray(productionJobs.assignedStationId, stations.map(station => station.id)),
-        inArray(productionJobs.status, ["CLAIMED", "RETRYABLE_FAILURE"]))).orderBy(desc(productionJobs.updatedAt)) : [];
+        inArray(productionJobs.status, ["CLAIMED", "RETRYABLE_FAILURE"])))
+      .orderBy(sql`(${productionJobs.status} = 'CLAIMED') desc`, desc(productionJobs.updatedAt)) : [];
     const items = stations.map(station => ({ ...station, online: station.status === "ACTIVE" &&
       Boolean(station.lastSeenAt && Date.now() - station.lastSeenAt.getTime() <= 30_000),
       currentJob: jobs.find(job => job.stationId === station.id) ?? null }));

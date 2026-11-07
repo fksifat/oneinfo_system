@@ -38,6 +38,7 @@ interface Overview {
   cards: number;
   batches: number;
   stations: number;
+  stationsOnline?: number;
   pendingJobs: number;
   qrArtifacts: number;
   nfcAttempts: number;
@@ -395,7 +396,7 @@ export function App() {
             <Metric label="Client profiles" value={overview.profiles} detail="Digital identities" />
             <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} saleable`} />
             <Metric label="Pending jobs" value={overview.pendingJobs} detail="Across QR, NFC and QC" highlight />
-            <Metric label="Stations online" value={stations.filter(station => station.online).length} detail={`${overview.stations} active registrations`} />
+            <Metric label="Stations online" value={overview.stationsOnline ?? 0} detail={`${overview.stations} active registrations`} />
           </div>
           <div className="dashboard-grid">
             <article className="panel lifecycle-panel"><div className="panel-head"><div><p className="eyebrow">CARD LIFECYCLE</p><h2>Production readiness</h2></div><span>{overview.cards} cards</span></div>
@@ -430,7 +431,7 @@ export function App() {
           <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />])} />{moreCards && <div className="table-footer-action"><button className="quiet" onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button></div>}</> : null}
         {["batches", "audit"].includes(view) && <div className="list-toolbar"><label>Search {view}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label></div>}
         {view === "batches" ? <>
-          {reprintBatch && <section className="panel operation-panel" id="batch-reprint"><BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} /></section>}
+          {reprintBatch && <section className="panel operation-panel" id="batch-reprint"><BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} onClose={() => setReprintBatch("")} /></section>}
           <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map(batch => [
             batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status,
             <div key={batch.id} className="operation-actions"><a href={workstationLink(batch.id)} target="_blank" rel="noreferrer">Open batch</a>

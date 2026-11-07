@@ -86,7 +86,7 @@ code { padding: 2px 5px; border-radius: 4px; background: #edf3f5; color: #22485d
 .empty { margin: 26px 0; text-align: center; color: #88969e; }
 .workbench { margin-top: 20px; padding: 26px; display: grid; grid-template-columns: 1fr auto; gap: 20px; align-items: center; }
 .workbench img { width: 220px; border: 1px solid #d9e1e6; border-radius: 10px; }
-.url { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #526975; overflow-wrap: anywhere; }
+.url { font-family: monospace; color: #526975; overflow-wrap: anywhere; }
 .device-note { grid-column: 1 / -1; padding: 12px 0; color: #5e707a; }
 .actions { grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; }
 .secondary { background: #e8eef1; color: #294253; }

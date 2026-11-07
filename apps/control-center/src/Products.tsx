@@ -90,6 +90,7 @@ export function Products({ token }: { token: string }) {
       <div className="catalog-card-top"><span className={`pill ${p.status === "PUBLISHED" ? "success" : ""}`}>{p.status.toLowerCase()}</span>{p.featured && <span className="catalog-highlight">Homepage highlight</span>}</div>
       <h3>{p.name}</h3><p>{p.subtitle || "Smart business card"}</p>
       <div className="catalog-colours">{p.variants.map(v => <span key={v.id} title={`${v.name}${v.available ? "" : " · unavailable"}`} style={{background:v.colorHex, opacity:v.available ? 1 : .35}} />)}<small>{p.variants.length} {p.variants.length === 1 ? "colour" : "colours"}</small></div>
+      <small>{p.variants.filter(variant => printFinish(p.slug, variant.appearance)).length}/{p.variants.length} colours ready for card-back printing</small>
       <div className="catalog-card-bottom"><strong>{priceRange(p)}</strong><button className="catalog-secondary" onClick={() => edit(p)}>Edit {p.name}</button></div>
     </article>)}</div>{loaded && filtered.length === 0 && <p>No products found.</p>}
     {editing && <dialog ref={dialog} className="product-editor" onCancel={e => { if (busy) e.preventDefault(); else setEditing(null); }} aria-labelledby="product-editor-title">
