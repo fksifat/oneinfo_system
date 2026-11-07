@@ -556,14 +556,88 @@ export function App() {
             />
           </>
         ) : null}
-        {view === "stations" ? <section className="panel operation-panel"><div className="panel-head"><div><h2>Production stations</h2>
-          <p>{stations.filter(station => station.online).length} online · {stations.length} shown. Online means seen within the last 30 seconds.</p></div></div>
-          {stations.map(station => <div className="operation-row" key={station.id}><div><strong>{station.stationCode} · {station.name}</strong>
-            <small>{station.status === "REVOKED" ? "Revoked" : station.online ? "Online now" : "Offline"} · Last seen {formatDate(station.lastSeenAt)}</small>
-            {station.currentJob ? <small>{station.currentJob.status === "RETRYABLE_FAILURE" ? "Needs retry" : "Current job"} · {station.currentJob.type.replaceAll("_", " ")} · <a href={workstationLink(station.currentJob.batchId, station.currentJob.cardId)} target="_blank" rel="noreferrer">{station.currentJob.publicSlug}</a></small> : <small>No active job</small>}</div>
-            <div className="operation-actions">{station.status === "ACTIVE" && <button className="danger-link" disabled={busy} onClick={() => void revokeStation(station)}>Revoke</button>}
-              <button className="quiet" disabled={busy} onClick={() => void recoverStation(station)}>Recover unfinished jobs</button></div></div>)}
-        </section> : null}
+        {view === "stations" ? (
+          <section className="panel operation-panel stations-panel">
+            <div className="panel-head stations-panel-head">
+              <div>
+                <span className="eyebrow">HARDWARE FLEET</span>
+                <h2>Production stations</h2>
+                <p>
+                  {stations.filter(station => station.online).length} online · {stations.length} shown. Online means seen within the last 30 seconds.
+                </p>
+              </div>
+              <span className="station-fleet-pill">
+                <span className="status-dot"></span>
+                {stations.filter(station => station.online).length} Online / {stations.length} Registered
+              </span>
+            </div>
+
+            <div className="stations-list">
+              {stations.map(station => (
+                <div className={"station-card-row " + (station.online ? "is-online" : "is-offline")} key={station.id}>
+                  <div className="station-card-main">
+                    <div className="station-icon-avatar" aria-hidden="true">
+                      <span>🖥️</span>
+                      <span className={"station-dot-badge " + (station.status === "REVOKED" ? "is-bad" : station.online ? "is-good" : "is-neutral")}></span>
+                    </div>
+                    <div className="station-card-info">
+                      <div className="station-card-title-row">
+                        <code>{station.stationCode}</code>
+                        <strong className="station-title-name">{station.name}</strong>
+                        {station.status === "REVOKED" ? (
+                          <span className="table-status-pill is-bad">
+                            <span className="status-dot"></span>Revoked
+                          </span>
+                        ) : station.online ? (
+                          <span className="table-status-pill is-good">
+                            <span className="status-dot"></span>Online now
+                          </span>
+                        ) : (
+                          <span className="table-status-pill is-neutral">
+                            <span className="status-dot"></span>Offline
+                          </span>
+                        )}
+                      </div>
+                      <div className="station-telemetry-row">
+                        <small className="station-last-seen">Last seen {formatDate(station.lastSeenAt)}</small>
+                      </div>
+                      {station.currentJob ? (
+                        <div className="station-job-badge">
+                          <span className="job-status-kicker">
+                            {station.currentJob.status === "RETRYABLE_FAILURE" ? "⚠️ Needs retry" : "⚡ Current job"}
+                          </span>
+                          <span className="job-desc">{station.currentJob.type.replaceAll("_", " ")}</span>
+                          <span className="job-separator">·</span>
+                          <a
+                            href={workstationLink(station.currentJob.batchId, station.currentJob.cardId)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="station-job-link"
+                          >
+                            <code>{station.currentJob.publicSlug}</code>
+                            <span className="action-glyph">↗</span>
+                          </a>
+                        </div>
+                      ) : (
+                        <small className="station-idle-text">No active job</small>
+                      )}
+                    </div>
+                  </div>
+                  <div className="operation-actions station-card-actions">
+                    {station.status === "ACTIVE" && (
+                      <button className="danger-link button-station-revoke" disabled={busy} onClick={() => void revokeStation(station)}>
+                        Revoke
+                      </button>
+                    )}
+                    <button className="quiet button-station-recover" disabled={busy} onClick={() => void recoverStation(station)}>
+                      Recover unfinished jobs
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
         {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
         {view === "production" ? (
           <section className="production-hub">

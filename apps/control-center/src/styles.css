@@ -3496,3 +3496,204 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   background: rgba(233, 173, 85, 0.25);
   color: #92580c;
 }
+
+/* Stations Fleet Premium Styling */
+.stations-panel {
+  padding: 24px;
+  border-radius: var(--radius-md);
+  background: var(--paper);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 24px;
+}
+.stations-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+.station-fleet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.stations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.station-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  transition: border-color 0.15s, transform 0.15s, background-color 0.15s;
+  flex-wrap: wrap;
+}
+.station-card-row:hover {
+  border-color: var(--interactive);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 45, 66, 0.04);
+}
+.station-card-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex: 1;
+  min-width: 260px;
+}
+.station-icon-avatar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(16, 45, 66, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+.station-dot-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+}
+.station-dot-badge.is-good {
+  background: var(--success);
+}
+.station-dot-badge.is-neutral {
+  background: #94a3b8;
+}
+.station-dot-badge.is-bad {
+  background: var(--danger);
+}
+.station-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.station-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.station-card-title-row code {
+  font-family: monospace;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--ink);
+}
+.station-title-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.station-telemetry-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.station-last-seen {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.station-job-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+.job-status-kicker {
+  font-weight: 700;
+  color: var(--interactive);
+  font-size: 0.72rem;
+}
+.job-desc {
+  font-weight: 600;
+  color: var(--ink);
+}
+.job-separator {
+  color: var(--border);
+}
+.station-job-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--interactive);
+  text-decoration: none;
+  font-weight: 700;
+}
+.station-job-link:hover {
+  text-decoration: underline;
+}
+.station-idle-text {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+.station-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.button-station-revoke {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--danger-border);
+  background: var(--danger-bg);
+  color: var(--danger);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.button-station-revoke:hover:not(:disabled) {
+  background: #fee2e2;
+}
+.button-station-recover {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.button-station-recover:hover:not(:disabled) {
+  border-color: var(--interactive);
+  color: var(--interactive);
+  background: var(--surface-alt);
+}
