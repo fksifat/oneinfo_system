@@ -82,17 +82,95 @@ export function Products({ token }: { token: string }) {
   const previewImage = cover?.type === "image" ? cover.url : cover?.type === "video" ? cover.poster : "";
   const previewPrice = preview ? toVariant(preview) : null;
   return <section className="products-admin">
-    <div className="catalog-toolbar"><div><h2>Your card collection</h2><p>{items.length} products · Manage colours, pricing and visibility.</p></div><button className="catalog-primary" onClick={() => edit()}>+ New product</button></div>
-    <div className="catalog-filters"><input aria-label="Search products" placeholder="Search products or status…" value={search} onChange={e => setSearch(e.target.value)} /><button className="catalog-secondary" onClick={() => void load()}>Refresh collection</button><a href={`${import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175"}/#products`} target="_blank" rel="noreferrer">View storefront ↗</a></div>
-    {error && !editing && <p role="alert" className="product-error">{error}</p>}{notice && <p role="status" className="catalog-notice">{notice}</p>}
-    {!loaded && !error && <p>Loading products…</p>}
-    <div className="product-admin-grid">{filtered.map(p => <article className="product-admin-card" key={p.id}>
-      <div className="catalog-card-top"><span className={`pill ${p.status === "PUBLISHED" ? "success" : ""}`}>{p.status.toLowerCase()}</span>{p.featured && <span className="catalog-highlight">Homepage highlight</span>}</div>
-      <h3>{p.name}</h3><p>{p.subtitle || "Smart business card"}</p>
-      <div className="catalog-colours">{p.variants.map(v => <span key={v.id} title={`${v.name}${v.available ? "" : " · unavailable"}`} style={{background:v.colorHex, opacity:v.available ? 1 : .35}} />)}<small>{p.variants.length} {p.variants.length === 1 ? "colour" : "colours"}</small></div>
-      <small>{p.variants.filter(variant => printFinish(p.slug, variant.appearance)).length}/{p.variants.length} colours ready for card-back printing</small>
-      <div className="catalog-card-bottom"><strong>{priceRange(p)}</strong><button className="catalog-secondary" onClick={() => edit(p)}>Edit {p.name}</button></div>
-    </article>)}</div>{loaded && filtered.length === 0 && <p>No products found.</p>}
+    <div className="catalog-toolbar">
+      <div>
+        <span className="eyebrow">HARDWARE CATALOG</span>
+        <h2>Your card collection</h2>
+        <p>{items.length} products · Manage physical cards, finishes, pricing and digital storefront visibility.</p>
+      </div>
+      <button className="catalog-primary" onClick={() => edit()}>+ New product</button>
+    </div>
+
+    <div className="catalog-filters">
+      <div className="catalog-search-wrap">
+        <span className="search-glyph" aria-hidden="true">🔍</span>
+        <input aria-label="Search products" placeholder="Search products or status…" value={search} onChange={e => setSearch(e.target.value)} />
+      </div>
+      <button className="catalog-secondary" onClick={() => void load()}>Refresh collection</button>
+      <a href={`${import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175"}/#products`} target="_blank" rel="noreferrer" className="catalog-storefront-link">
+        View storefront ↗
+      </a>
+    </div>
+
+    {error && !editing && <p role="alert" className="product-error">{error}</p>}
+    {notice && <p role="status" className="catalog-notice">{notice}</p>}
+    {!loaded && !error && <p className="empty">Loading products…</p>}
+
+    <div className="product-admin-grid">
+      {filtered.map(p => {
+        const readyCount = p.variants.filter(variant => printFinish(p.slug, variant.appearance)).length;
+        const totalCount = p.variants.length;
+        const isReady = readyCount === totalCount && totalCount > 0;
+        const primary = p.variants[0];
+        const isLight = primary?.appearance === "light" || primary?.colorHex?.toLowerCase() === "#ffffff";
+
+        return (
+          <article className="product-admin-card" key={p.id}>
+            <div className="catalog-card-visual" style={{ background: primary?.colorHex || "#102d42" }}>
+              <div className={`card-preview-mini ${isLight ? "is-light-card" : ""}`}>
+                <div className="card-mini-chip" aria-hidden="true"></div>
+                <div className="card-mini-brand">Oneinfo</div>
+                <div className="card-mini-nfc" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8.5 16.5a5 5 0 0 1 0-7" />
+                    <path d="M12 19a8.5 8.5 0 0 1 0-14" />
+                    <path d="M15.5 21.5a12 12 0 0 1 0-19" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            <div className="product-admin-card-body">
+              <div className="catalog-card-top">
+                <span className={`pill ${p.status === "PUBLISHED" ? "success" : ""}`}>{p.status.toLowerCase()}</span>
+                {p.featured && <span className="catalog-highlight">★ Homepage highlight</span>}
+              </div>
+
+              <h3>{p.name}</h3>
+              <p>{p.subtitle || "Smart business card"}</p>
+
+              <div className="catalog-colours">
+                <div className="catalog-swatches-stack">
+                  {p.variants.map(v => (
+                    <span
+                      key={v.id}
+                      title={`${v.name}${v.available ? "" : " · unavailable"}`}
+                      style={{ background: v.colorHex, opacity: v.available ? 1 : 0.35 }}
+                    />
+                  ))}
+                </div>
+                <small>{p.variants.length} {p.variants.length === 1 ? "colour" : "colours"}</small>
+              </div>
+
+              <div className={`catalog-print-readiness ${isReady ? "is-ready" : "is-incomplete"}`}>
+                <span className="print-status-dot" aria-hidden="true"></span>
+                <small>{readyCount}/{totalCount} colours ready for card-back printing</small>
+              </div>
+
+              <div className="catalog-card-bottom">
+                <div className="product-price-cell">
+                  <small className="price-kicker">Pricing</small>
+                  <strong>{priceRange(p)}</strong>
+                </div>
+                <button className="catalog-secondary" onClick={() => edit(p)}>Edit {p.name}</button>
+              </div>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+    {loaded && filtered.length === 0 && <p className="empty">No products found.</p>}
+
     {editing && <dialog ref={dialog} className="product-editor" onCancel={e => { if (busy) e.preventDefault(); else setEditing(null); }} aria-labelledby="product-editor-title">
       <div className="catalog-editor-top">
       <header className="catalog-editor-header"><div><h2 id="product-editor-title">{editing.id ? "Edit product" : "New product"}</h2><p>{editing.name || "Set up your card for the storefront"}</p></div><button type="button" aria-label="Close product editor" disabled={busy} onClick={() => setEditing(null)}>×</button></header>
