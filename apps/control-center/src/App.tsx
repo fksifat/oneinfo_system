@@ -709,7 +709,20 @@ export function App() {
             </div>
           </section>
         ) : null}
-        {view === "audit" ? <DataPanel title="Audit history" columns={["Action", "Target", "Identifier", "Time"]} rows={audits.map((audit) => [audit.action.replaceAll("_", " "), audit.targetType, audit.targetId.slice(0, 12), formatDate(audit.createdAt)])} /> : null}
+        {view === "audit" ? (
+          <DataPanel
+            title="Audit history"
+            columns={["Action", "Target", "Identifier", "Time"]}
+            rows={audits.map((audit) => [
+              <AuditActionBadge key={audit.id} action={audit.action} />,
+              <span key="target" className="audit-target-badge">{audit.targetType.replaceAll("_", " ")}</span>,
+              <code key="id" className="audit-id-badge">{audit.targetId.slice(0, 12)}</code>,
+              <div key="time" className="audit-time-cell">
+                <span className="audit-timestamp">{formatDate(audit.createdAt)}</span>
+              </div>
+            ])}
+          />
+        ) : null}
         {view === "production" ? (
           <section className="production-hub">
             <article className="panel connected-production-head">
@@ -822,6 +835,35 @@ function Metric({ label, value, detail, highlight = false, icon }: { label: stri
         <small className="metric-detail">{detail}</small>
       </div>
     </article>
+  );
+}
+
+function AuditActionBadge({ action }: { action: string }) {
+  const norm = action.toUpperCase();
+  let tone = "is-neutral";
+  let glyph = "📝";
+
+  if (norm.includes("AUTH") || norm.includes("LOGIN") || norm.includes("PASSWORD")) {
+    tone = "is-auth";
+    glyph = "🔐";
+  } else if (norm.includes("PAYMENT") || norm.includes("VERIFIED") || norm.includes("DELIVERED") || norm.includes("ORDER")) {
+    tone = "is-order";
+    glyph = "💳";
+  } else if (norm.includes("CARD") || norm.includes("NFC") || norm.includes("QC") || norm.includes("BATCH")) {
+    tone = "is-hardware";
+    glyph = "🏷️";
+  } else if (norm.includes("REVOKE") || norm.includes("FAIL") || norm.includes("DISABLE") || norm.includes("DELETE")) {
+    tone = "is-security";
+    glyph = "🛡️";
+  }
+
+  return (
+    <div className="audit-action-cell">
+      <span className={"audit-action-pill " + tone}>
+        <span className="audit-glyph" aria-hidden="true">{glyph}</span>
+        {action.replaceAll("_", " ")}
+      </span>
+    </div>
   );
 }
 
