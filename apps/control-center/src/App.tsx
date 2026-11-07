@@ -495,14 +495,67 @@ export function App() {
             )}
           </>
         ) : null}
-        {["batches", "audit"].includes(view) && <div className="list-toolbar"><label>Search {view}<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label></div>}
-        {view === "batches" ? <>
-          {reprintBatch && <section className="panel operation-panel" id="batch-reprint"><BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} onClose={() => setReprintBatch("")} /></section>}
-          <DataPanel title="Production batches · live" columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]} rows={batches.map(batch => [
-            batch.batchCode, `${batch.qrGenerated}/${batch.total}`, `${batch.nfcWritten}/${batch.total}`, `${batch.qcPassed}/${batch.total}`, batch.status,
-            <div key={batch.id} className="operation-actions"><a href={workstationLink(batch.id)} target="_blank" rel="noreferrer">Open batch</a>
-              <button className="quiet" onClick={() => { setReprintBatch(batch.id); requestAnimationFrame(() => document.getElementById("batch-reprint")?.scrollIntoView({ block: "start" })); }}>Reprint</button></div>
-          ])} /></> : null}
+        {["batches", "audit"].includes(view) && (
+          <div className="search-filter-console">
+            <label className="console-search-label">
+              <span className="control-kicker">Search {view}</span>
+              <div className="console-search-wrap">
+                <span className="search-glyph" aria-hidden="true">🔍</span>
+                <input
+                  type="search"
+                  value={search}
+                  onChange={event => setSearch(event.target.value)}
+                  placeholder={view === "batches" ? "Search by batch code (e.g. BATCH-20261106) or status..." : "Search audit logs..."}
+                />
+              </div>
+            </label>
+          </div>
+        )}
+        {view === "batches" ? (
+          <>
+            {reprintBatch && (
+              <section className="panel operation-panel reprint-wrapper-panel" id="batch-reprint">
+                <BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} onClose={() => setReprintBatch("")} />
+              </section>
+            )}
+            <DataPanel
+              title="Production batches · live"
+              columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]}
+              rows={batches.map(batch => [
+                <div key={batch.id} className="batch-identity-cell">
+                  <div className="batch-icon-box" aria-hidden="true">
+                    <span>📦</span>
+                  </div>
+                  <div className="batch-identity-meta">
+                    <span className="batch-code-link">
+                      <code>{batch.batchCode}</code>
+                    </span>
+                    <small className="batch-unit-caption">{batch.total} cards allocated</small>
+                  </div>
+                </div>,
+                <BatchProgress key="qr" current={batch.qrGenerated} total={batch.total} label="QR ready" />,
+                <BatchProgress key="nfc" current={batch.nfcWritten} total={batch.total} label="NFC written" />,
+                <BatchProgress key="qc" current={batch.qcPassed} total={batch.total} label="QC approved" />,
+                <StatusBadge key="status" value={batch.status} />,
+                <div key={batch.id} className="batch-workspace-actions">
+                  <a href={workstationLink(batch.id)} target="_blank" rel="noreferrer" className="action-pill-link">
+                    Open batch <span className="action-glyph">↗</span>
+                  </a>
+                  <button
+                    type="button"
+                    className="button-reprint-pill"
+                    onClick={() => {
+                      setReprintBatch(batch.id);
+                      requestAnimationFrame(() => document.getElementById("batch-reprint")?.scrollIntoView({ block: "start" }));
+                    }}
+                  >
+                    Reprint
+                  </button>
+                </div>
+              ])}
+            />
+          </>
+        ) : null}
         {view === "stations" ? <section className="panel operation-panel"><div className="panel-head"><div><h2>Production stations</h2>
           <p>{stations.filter(station => station.online).length} online · {stations.length} shown. Online means seen within the last 30 seconds.</p></div></div>
           {stations.map(station => <div className="operation-row" key={station.id}><div><strong>{station.stationCode} · {station.name}</strong>
@@ -523,10 +576,17 @@ export function App() {
             <p className="workstation-help">If the tab cannot connect, start Oneinfo on this PC and try again. Production updates will appear here automatically.</p>
           </article>}
         </section> : null}
-        {(view === "profiles" || view === "batches" || view === "audit") && <nav className="list-toolbar" aria-label="List pages">
-          <button className="quiet" disabled={listPage === 1} onClick={() => setListPage(page => page - 1)}>Previous page</button>
-          <span>Page {listPage}</span><button className="quiet" disabled={!listMore[view]} onClick={() => setListPage(page => page + 1)}>Next page</button>
-        </nav>}
+        {(view === "profiles" || view === "batches" || view === "audit") && (
+          <nav className="list-pagination-bar" aria-label="List pages">
+            <button className="pagination-button" disabled={listPage === 1} onClick={() => setListPage(page => page - 1)}>
+              Previous page
+            </button>
+            <span className="pagination-indicator">Page {listPage}</span>
+            <button className="pagination-button" disabled={!listMore[view]} onClick={() => setListPage(page => page + 1)}>
+              Next page
+            </button>
+          </nav>
+        )}
       </main>
 
       <footer className="status-bar" role="status" aria-live="polite"><span className={busy ? "working" : ""}></span>{busy ? "Working." : message}</footer>
@@ -550,11 +610,31 @@ function Metric({ label, value, detail, highlight = false, icon }: { label: stri
   );
 }
 
+function BatchProgress({ current, total, label }: { current: number; total: number; label: string }) {
+  const percent = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+  const isDone = current === total && total > 0;
+  const isNone = current === 0;
+  const toneClass = isDone ? "is-complete" : isNone ? "is-zero" : "is-progress";
+
+  return (
+    <div className={"batch-progress-cell " + toneClass} title={label + ": " + current + "/" + total + " (" + percent + "%)"}>
+      <div className="batch-progress-bar">
+        <div className="batch-progress-fill" style={{ width: percent + "%" }}></div>
+      </div>
+      <span className="batch-progress-count">
+        <strong>{current}</strong>
+        <span className="batch-progress-divider">/</span>
+        <span className="batch-progress-total">{total}</span>
+      </span>
+    </div>
+  );
+}
+
 function StatusBadge({ value }: { value: string }) {
   const norm = value.toUpperCase();
   let tone = "is-neutral";
-  if (["PASSED", "GENERATED", "WRITTEN", "ACTIVE", "READY", "ONLINE", "PUBLISHED", "SALEABLE"].includes(norm)) tone = "is-good";
-  else if (["RESERVED", "PENDING", "UNWRITTEN", "BLANK", "NOT_READY", "DRAFT"].includes(norm)) tone = "is-warn";
+  if (["PASSED", "GENERATED", "WRITTEN", "ACTIVE", "READY", "ONLINE", "PUBLISHED", "SALEABLE", "COMPLETED"].includes(norm)) tone = "is-good";
+  else if (["RESERVED", "PENDING", "UNWRITTEN", "BLANK", "NOT_READY", "DRAFT", "IN_PRODUCTION"].includes(norm)) tone = "is-warn";
   else if (["FAILED", "RETRYABLE_FAILURE", "REVOKED", "REJECTED"].includes(norm)) tone = "is-bad";
 
   return (

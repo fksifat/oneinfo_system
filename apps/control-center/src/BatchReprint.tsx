@@ -43,16 +43,58 @@ export function BatchReprint({ batchId, token, onClose }: { batchId: string; tok
     finally { setBusy(false); }
   }
 
-  return <div className="batch-reprint"><div className="panel-head"><h2>Reprint selected cards</h2>
-    <button className="quiet" type="button" onClick={onClose}>Close reprint</button></div>
-    {error && <p role="alert">{error}</p>}
-    {!result && (error ? <button className="quiet" onClick={() => setReload(value => value + 1)}>Try again</button> : <p role="status">Loading saved QR codes…</p>)}
-    {result && <><p>Select cards to download a print sheet using their saved QR codes.</p>
-      <fieldset disabled={busy}><legend>Cards to reprint</legend>{result.items.map(card => <label key={card.id}>
-        <input type="checkbox" disabled={!canPrint(card)} checked={selected.includes(card.id)} onChange={e => {
-          const checked = e.target.checked; setSelected(ids => checked ? [...ids, card.id] : ids.filter(id => id !== card.id));
-        }} /> {card.slug} · {canPrint(card) ? (card.labelOnly ? "QR label" : "Card back") : "Print artwork or QR missing"}
-      </label>)}</fieldset>
-      <button type="button" disabled={!selected.length || busy} onClick={() => void download()}>{busy ? "Preparing…" : `Download selected (${selected.length})`}</button></>}
-  </div>;
+  return (
+    <div className="batch-reprint-panel">
+      <div className="panel-head batch-reprint-head">
+        <div>
+          <span className="eyebrow">HARDWARE REPRINT UTILITY</span>
+          <h2>Reprint selected cards</h2>
+          <p>Select cards to download a high-resolution print sheet using their saved vector QR codes.</p>
+        </div>
+        <button className="quiet reprint-close-button" type="button" onClick={onClose}>Close reprint ×</button>
+      </div>
+      {error && <p role="alert" className="lookup-error-banner">{error}</p>}
+      {!result && (error ? <button className="quiet" onClick={() => setReload(value => value + 1)}>Try again</button> : <p role="status">Loading saved QR codes…</p>)}
+      {result && (
+        <>
+          <fieldset disabled={busy} className="reprint-fieldset">
+            <legend className="reprint-legend">Cards in Batch {result.code} ({result.items.length})</legend>
+            <div className="reprint-grid">
+              {result.items.map(card => {
+                const printable = canPrint(card);
+                const isChecked = selected.includes(card.id);
+                return (
+                  <label key={card.id} className={"reprint-card-item " + (isChecked ? "is-selected " : "") + (!printable ? "is-disabled" : "")}>
+                    <input
+                      type="checkbox"
+                      disabled={!printable}
+                      checked={isChecked}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setSelected(ids => checked ? [...ids, card.id] : ids.filter(id => id !== card.id));
+                      }}
+                    />
+                    <div className="reprint-card-content">
+                      <code>{card.slug}</code>
+                      <small>{printable ? (card.labelOnly ? "QR label" : "Card back") : "Print artwork missing"}</small>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+          <div className="reprint-actions">
+            <button
+              type="button"
+              className="button-reprint-submit"
+              disabled={!selected.length || busy}
+              onClick={() => void download()}
+            >
+              {busy ? "Preparing export…" : `Download print sheet (${selected.length} cards)`}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
