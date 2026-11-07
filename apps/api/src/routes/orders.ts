@@ -10,7 +10,8 @@ import {
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
+import { registerOrderPrint } from "./order-print.js";
 import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
 import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
@@ -41,6 +42,7 @@ function conflict(message: string): never {
 }
 
 export const orderRoutes: FastifyPluginAsync = async app => {
+  registerOrderPrint(app);
   app.post("/coupon", { bodyLimit: 1024 }, async (request, reply) => {
     const { code } = parseBody(z.object({ code: CouponCodeSchema }), request.body);
     const [coupon] = await db.select().from(storeCoupons).where(eq(storeCoupons.code, code));
@@ -251,7 +253,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       .orderBy(desc(storeOrders.createdAt), desc(storeOrders.id)).limit(51);
     const page = rows.slice(0, 50);
     const allocations = page.length ? await db.select({ orderId: orderCardAllocations.orderId, id: cards.id, publicSlug: cards.publicSlug,
+      lineIndex: orderCardAllocations.lineIndex, unitIndex: orderCardAllocations.unitIndex, printConfirmedAt: cardBatches.printConfirmedAt,
       canonicalUrl: cards.canonicalUrl, qcStatus: cards.qcStatus }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
+      .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
       .where(inArray(orderCardAllocations.orderId, page.map(row => row.id))) : [];
     const invites = page.length ? await db.select().from(storeReviewInvites).where(inArray(storeReviewInvites.orderId, page.map(row => row.id))) : [];
     return { items: page.map(row => {

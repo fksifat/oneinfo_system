@@ -23,6 +23,15 @@ export function printedStockAvailable() {
     sql`not exists (select 1 from ${orderCardAllocations} a where a.card_id = ${cards.id})`);
 }
 
+export async function reserveCardForOrder(tx: Transaction, orderId: string, card: typeof cards.$inferSelect, slot: { lineIndex: number; unitIndex: number }) {
+  await tx.insert(orderCardAllocations).values({ orderId, cardId: card.id, ...slot });
+  await tx.update(cards).set({ inventoryStatus: "RESERVED", updatedAt: new Date() }).where(eq(cards.id, card.id));
+  await tx.insert(cardEvents).values({ cardId: card.id, eventType: "ORDER_QR_ASSIGNED", previousState: card.inventoryStatus,
+    newState: "RESERVED", metadata: { orderId, ...slot } });
+  await tx.insert(auditLogs).values({ action: "ORDER_QR_ASSIGNED", targetType: "store_order", targetId: orderId,
+    metadata: { cardId: card.id } });
+}
+
 export async function allocatePendingOrders(tx: Transaction) {
   await lockPrintedStock(tx);
   const waiting = await tx.select().from(storeOrders).where(sql`
@@ -48,12 +57,7 @@ export async function allocatePendingOrders(tx: Transaction) {
     if (!available.length) break;
     for (let index = 0; index < available.length; index++) {
       const card = available[index]!.card;
-      await tx.insert(orderCardAllocations).values({ orderId: order.id, cardId: card.id, ...slots[index]! });
-      await tx.update(cards).set({ inventoryStatus: "RESERVED", updatedAt: new Date() }).where(eq(cards.id, card.id));
-      await tx.insert(cardEvents).values({ cardId: card.id, eventType: "ORDER_QR_ASSIGNED", previousState: card.inventoryStatus,
-        newState: "RESERVED", metadata: { orderId: order.id, ...slots[index]! } });
-      await tx.insert(auditLogs).values({ action: "ORDER_QR_ASSIGNED", targetType: "store_order", targetId: order.id,
-        metadata: { cardId: card.id } });
+      await reserveCardForOrder(tx, order.id, card, slots[index]!);
       allocated++;
     }
   }

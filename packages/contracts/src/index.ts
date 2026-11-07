@@ -487,4 +487,5 @@ export type OrderReceipt = OrderTracking & {
 };
 export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null;
   codCollectedMinor?: number | null; codSettledMinor?: number | null;
-  profileId?: string | null; assignedCards?: { id: string; publicSlug: string; canonicalUrl: string; qcStatus: string }[] };
+  profileId?: string | null; assignedCards?: { id: string; publicSlug: string; canonicalUrl: string; qcStatus: string;
+    lineIndex?: number; unitIndex?: number; printConfirmedAt?: string | null }[] };
