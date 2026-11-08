@@ -192,10 +192,10 @@ export function CardPortal({ slug }: { slug: string }) {
       <div className="studio-header-main">
         <div className="studio-badge-row">
           <span className="studio-eyebrow">ONEINFO // DIGITAL IDENTITY STUDIO</span>
-          <span className="studio-status-pill">● LIVE ON NFC &amp; QR</span>
+          <span className="studio-status-pill">YOUR PROFESSIONAL PROFILE</span>
         </div>
         <h1>{mode === "signup" ? "Create your account" : claimToken ? "Set up your card" : "Edit your public profile"}</h1>
-        <p className="portal-privacy">The profile details below will be visible to anyone who scans your QR or NFC. Your password and account email stay private; use Public email only if you want to share it.</p>
+        <p className="portal-privacy">The profile details below will be visible to anyone who opens your card or profile link. Your password and account email stay private; use Public email only if you want to share it.</p>
       </div>
       <div className="studio-header-actions">
         <button type="button" className="quiet studio-btn-back" disabled={busy} onClick={() => navigate("public")}>← Back to card</button>
@@ -247,7 +247,7 @@ export function CardPortal({ slug }: { slug: string }) {
 
           <div className="studio-save-action">
             <button className="studio-save-button" disabled={busy || photoBusy}>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</button>
-            <span className="studio-save-note">Instant cloud sync to your physical NFC card &amp; QR tag.</span>
+            <span className="studio-save-note">Save your changes to update the profile linked to your card.</span>
           </div>
         </form>
 
@@ -259,7 +259,7 @@ export function CardPortal({ slug }: { slug: string }) {
         {/* 3D Physical & Live Digital Card Preview */}
         <div className="studio-preview-card">
           <div className="studio-preview-header">
-            <span className="studio-card-tag">TAP / SCAN LIVE PREVIEW</span>
+            <span className="studio-card-tag">YOUR PROFILE PREVIEW</span>
             <span className="studio-theme-indicator">{profile.theme}</span>
           </div>
           <div className={`studio-phone-mockup theme-${profile.theme.toLowerCase()}`}>
@@ -277,15 +277,15 @@ export function CardPortal({ slug }: { slug: string }) {
               {profile.bio && <p className="studio-mockup-bio-text">{profile.bio.length > 90 ? profile.bio.slice(0, 90) + "…" : profile.bio}</p>}
               
               <div className="studio-mockup-chips">
-                {profile.phone && <span className="mockup-chip">📞 Call</span>}
-                {profile.email && <span className="mockup-chip">✉️ Email</span>}
-                {profile.website && <span className="mockup-chip">🌐 Web</span>}
-                {profile.links.slice(0, 2).map((l, i) => <span key={i} className="mockup-chip">🔗 {l.label || "Link"}</span>)}
+                {profile.phone && <span className="mockup-chip">Call</span>}
+                {profile.email && <span className="mockup-chip">Email</span>}
+                {profile.website && <span className="mockup-chip">Website</span>}
+                {profile.links.slice(0, 2).map((l, i) => <span key={i} className="mockup-chip">{l.label || "Link"}</span>)}
               </div>
               <div className="studio-mockup-save-btn">Save to Contacts</div>
             </div>
           </div>
-          <p className="studio-preview-caption">Updates in real-time as you type. Scanned visitors see this layout.</p>
+          <p className="studio-preview-caption">Updates in real-time as you type. Save your changes to share them with visitors.</p>
         </div>
 
         {mode === "details" && !claimToken && <>
@@ -320,16 +320,16 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
     finally { setBusy(false); }
   }
   return <section className="lead-inbox"><h2>Profile analytics</h2><p>Last 30 days. Contact saves count button clicks.</p>
-    {base && <p><a href={`${base}?source=nfc`}>NFC link</a> · <a href={`${base}?source=qr`}>QR link</a></p>}
+    {base && <p><a href={`${base}?source=nfc`}>Tap link</a> · <a href={`${base}?source=qr`}>QR link</a></p>}
     <button type="button" className="quiet" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : items ? "Refresh analytics" : "Load analytics"}</button>
     {error && <p role="alert">{error}</p>}
     {!!items?.length && <label>Traffic source<select value={source} onChange={event => setSource(event.target.value)}>
-      <option value="">All sources</option><option value="NFC">NFC</option><option value="QR">QR</option><option value="DIRECT">Direct / untagged</option>
+      <option value="">All sources</option><option value="NFC">Tap</option><option value="QR">Scan</option><option value="DIRECT">Direct / untagged</option>
     </select></label>}
     {visible?.length === 0 && <p role="status">{source ? "No activity from this source." : "No activity recorded yet."}</p>}
     {!!visible?.length && <ul>{visible.map(item => <li key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}>
       <strong>{item.label ?? ({ VIEW: "Profile views", SAVE: "Contact-save clicks", LINK: "Website clicks", LEAD: "Leads" }[item.event] ?? item.event)} · {item.total}</strong>
-      <span>{item.campaign || item.mode} · {item.source === "DIRECT" ? "Direct / untagged" : item.source}</span>
+      <span>{item.campaign || item.mode} · {item.source === "NFC" ? "Tap" : item.source === "QR" ? "Scan" : "Direct link"}</span>
     </li>)}</ul>}
   </section>;
 }

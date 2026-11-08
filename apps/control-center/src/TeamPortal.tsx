@@ -514,7 +514,7 @@ function CompanyWorkspace() {
               <h2 id="company-cards" tabIndex={-1}>Company cards</h2>
               <span className="studio-counter-pill">{workspace.cards.length} cards ({deployed} deployed)</span>
             </div>
-            {workspace.cards.length === 0 ? <p className="studio-empty-text">Ask your Oneinfo Admin to reserve QC-passed cards for {workspace.company.name}, then refresh this workspace to assign them.</p> :
+            {workspace.cards.length === 0 ? <p className="studio-empty-text">Contact Oneinfo to add cards for {workspace.company.name}, then refresh this workspace to assign them.</p> :
               <label>Card status<select value={cardFilter} onChange={event => setCardFilter(event.target.value)}>
                 <option value="all">All cards</option><option value="deployed">Deployed</option><option value="unassigned">Unassigned</option><option value="suspended">Suspended</option>
               </select></label>}
@@ -525,15 +525,15 @@ function CompanyWorkspace() {
                 return (
                   <li key={card.id} className="team-card-item">
                     <div className="card-top-meta">
-                      <span className="card-slug-mono">💳 {card.publicSlug}</span>
-                      <span className={`card-status-pill status-${card.lifecycleStatus.toLowerCase()}`}>{card.lifecycleStatus}</span>
+                      <span className="card-slug-mono">Card {card.publicSlug}</span>
+                      <span className={`card-status-pill status-${card.lifecycleStatus.toLowerCase()}`}>{card.lifecycleStatus === "ACTIVATED" ? "Active" : card.lifecycleStatus === "SUSPENDED" ? "Paused" : card.lifecycleStatus === "QC_PASSED" ? "Ready to assign" : "In preparation"}</span>
                     </div>
                     {assignedEmployee && (
                       <div className="card-assigned-sub">
-                        <span>👤 Assigned to: <strong>{assignedEmployee.name}</strong> ({assignedEmployee.email})</span>
+                        <span>Assigned to: <strong>{assignedEmployee.name}</strong> ({assignedEmployee.email})</span>
                       </div>
                     )}
-                    {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">NFC link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a> · <button className="quiet" type="button" disabled={busy} onClick={() => void run(async () => {
+                    {card.lifecycleStatus === "ACTIVATED" && <div className="card-live-links"><a href={`/c/${card.publicSlug}?source=nfc`} target="_blank" rel="noreferrer">Tap link ↗</a> · <a href={`/c/${card.publicSlug}?source=qr`} target="_blank" rel="noreferrer">QR link ↗</a> · <button className="quiet" type="button" disabled={busy} onClick={() => void run(async () => {
                       await navigator.clipboard.writeText(new URL(`/c/${card.publicSlug}`, location.origin).href); return "Public card link copied.";
                     }, false)}>Copy public link</button></div>}
                     {["QC_PASSED", "ACTIVATED", "SUSPENDED"].includes(card.lifecycleStatus) && <form key={`${card.id}-${card.profileId}`} onSubmit={event => {

@@ -27,7 +27,7 @@ export function ActivationCode({ cardId, slug, token, issued, claimed, ready }: 
     style.textContent = "body{font:16px system-ui;padding:32px;max-width:520px}h2{font:24px monospace;letter-spacing:2px}p{overflow-wrap:anywhere}@page{margin:15mm}";
     popup.document.head.append(style);
     for (const [tag, value] of [["h1", "Oneinfo · Private activation code"], ["p", `Card: ${slug}`], ["h2", secret.secretCode],
-      ["p", "Scan your card's QR or NFC, enter this code, then create your account and save your profile."],
+      ["p", "Tap your card or scan its code, enter this private activation code, then create your account and set up your profile."],
       ["p", secret.canonicalUrl], ["p", "Keep this slip private. Give it only to the card's owner."]]) {
       const element = popup.document.createElement(tag!); element.textContent = value!; popup.document.body.append(element);
     }
