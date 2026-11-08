@@ -8,6 +8,9 @@ import { cardBatches, cardEvents, cards, productionJobs, qrArtifacts, cardVerifi
 import { productionBatchSummary, verificationSummary } from "../domain/workflow.js";
 import { parseBody, sendCreated } from "../http.js";
 import { allocatePendingOrders, lockPrintedStock } from "../domain/printed-stock.js";
+import { z } from "zod";
+import { deleteProductionStock } from "../domain/delete-production-stock.js";
+import { forgetProductionCards } from "./local-nfc.js";
 
 async function latestWrites(batchId: string) {
   const writes = await db.select({ cardId: nfcEncodingAttempts.cardId, attemptedAt: nfcEncodingAttempts.attemptedAt }).from(nfcEncodingAttempts)
@@ -23,6 +26,16 @@ async function checkedPrints(batchId: string) {
 }
 
 export const batchRoutes: FastifyPluginAsync = async (app) => {
+  for (const path of ["/:batchId", "/:batchId/cards/:cardId"]) app.delete(path, async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN", "INVENTORY_MANAGER"]);
+    const { batchId, cardId } = parseBody(z.object({ batchId: z.uuid(), cardId: z.uuid().optional() }), request.params);
+    const { confirmation } = parseBody(z.object({ confirmation: z.string().min(1).max(64) }), request.body);
+    const result = await deleteProductionStock(batchId, cardId, confirmation, actor.operatorId, request.id);
+    try { forgetProductionCards(result.cardIds); }
+    catch { request.log.warn("Deleted stock; NFC state cleanup could not be saved"); }
+    return { deleted: result.deleted, batchId, batchDeleted: result.batchDeleted };
+  });
+
   app.post("/", async (request, reply) => {
     const operator = await requireOperator(request, ["SUPER_ADMIN"]);
     const input = parseBody(CreateBatchSchema, request.body);

@@ -28,6 +28,9 @@ try {
   const { npmCommand } = await import(pathToFileURL(join(root,'scripts/start-local.mjs')).href);
   const {config}=await import(pathToFileURL(join(root,'apps/api/dist/config.js')).href);
   assert.equal(new URL(config.DATABASE_URL).pathname,'/'+database,'Refusing to populate a non-test database');
+  const adminTestPassword = 'isolated browser administrator password';
+  const {hashPassword}=await import(pathToFileURL(join(root,'apps/api/dist/domain/customer-auth.js')).href);
+  config.ADMIN_EMAIL='admin-ui@example.com';config.ADMIN_PASSWORD_HASH=await hashPassword(adminTestPassword);
   Object.assign(config,{BREVO_SMTP_USER:undefined,BREVO_SMTP_KEY:undefined,RESEND_API_KEY:'browser-test',ORDER_EMAIL_FROM:'Oneinfo <test@example.com>',STOREFRONT_URL:'http://127.0.0.1:5174'});
   const [binary, args] = npmCommand(['run', 'db:migrate']);
   const migration = spawnSync(binary, args, { cwd: root, env: process.env, encoding: 'utf8' });
@@ -194,6 +197,14 @@ try {
     }
     for(const label of ['Production','NFC tools','Connection']){
       await evaluate(`(()=>{const b=[...document.querySelectorAll('.workspace-nav button')].find(b=>b.textContent.endsWith(${JSON.stringify(label)}));b.click();})()`);await inspect('production-'+label.replaceAll(' ','-')+'-'+width);
+      if(label==='Production'){
+        await evaluate(`[...document.querySelectorAll('.batch-toolbar button')].find(b=>b.textContent==='Delete batch').focus()`);
+        await click('Delete batch');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+        await inspect('production-delete-batch-dialog-'+width);
+        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+        await until(`!document.querySelector('.stock-delete-dialog[open]')`);
+        assert.equal(await evaluate(`document.activeElement.textContent.trim()`),'Delete batch');
+      }
       if(label==='Production'&&width===1440){
         await fill('Batch code','UI-BULK');await fill('Number of cards','3');await click('Create batch');await until(`document.querySelector('.batch-toolbar select')?.selectedOptions[0]?.textContent.includes('UI-BULK')&&!!document.querySelector('.selected-production-card')`);
         const selectedBatch=await evaluate(`document.querySelector('.batch-toolbar select').value`);assert.equal(await evaluate(`new URL(location.href).searchParams.get('batch')`),selectedBatch);await reload();await until(`document.querySelector('.batch-toolbar select')?.value===${JSON.stringify(selectedBatch)}&&!!document.querySelector('.selected-production-card')`);
@@ -201,6 +212,25 @@ try {
         await evaluate(`window.__printCalled=false;window.print=()=>{window.__printCalled=true}`);await click('Print selected QR');await until(`window.__printCalled`);assert.equal(await evaluate(`document.querySelectorAll('.print-label').length`),1);await click('Print full batch');await until(`document.querySelectorAll('.print-label').length===3`);
         await command('Emulation.setEmulatedMedia',{media:'print'});assert.equal(await evaluate(`getComputedStyle(document.querySelector('.production-print')).display`),'block');await screenshot('audit-print-qr');await command('Emulation.setEmulatedMedia',{media:''});
         await evaluate(`document.querySelector('.print-confirmation input').click()`);await click('Confirm printed batch');await until(`document.querySelector('.print-confirmation h2')?.textContent==='Printed stock confirmed'`);console.log('Bulk QR create/generate/single/full print/confirmation PASS');
+        const bulkId=await evaluate(`document.querySelector('.batch-toolbar select').value`);
+        const bulkRows=await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId));
+        await click('Delete QR & link');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+        await inspect('production-delete-card-dialog-'+width);
+        assert.equal(await evaluate(`[...document.querySelectorAll('.stock-delete-dialog button')].find(b=>b.textContent==='Delete permanently').disabled`),true);
+        await fill('Type','wrong ID');assert.equal(await evaluate(`[...document.querySelectorAll('.stock-delete-dialog button')].find(b=>b.textContent==='Delete permanently').disabled`),true);
+        await click('Cancel');assert.equal((await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId))).length,3);
+        await click('Delete QR & link');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+        const deletionSlug=await evaluate(`document.querySelector('.stock-delete-dialog strong').textContent`);
+        await fill('Type',deletionSlug);await click('Delete permanently');await until(`!document.querySelector('.stock-delete-dialog[open]')&&document.querySelectorAll('.production-card-list button').length===2`);
+        assert.equal((await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId))).length,2);
+        assert.equal((await app.inject('/api/v1/customer/cards/'+deletionSlug)).statusCode,404);
+        await click('Delete batch');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+        await fill('Type',await evaluate(`document.querySelector('.stock-delete-dialog strong').textContent`));await click('Delete permanently');
+        await until(`!document.querySelector('.stock-delete-dialog[open]')&&!document.querySelector('.selected-production-card')`);
+        assert.equal((await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId))).length,0);
+        assert.equal((await app.inject({url:'/api/v1/admin/batches/'+bulkId+'/reprint',headers})).statusCode,404);
+        assert.equal(bulkRows.length,3);
+        console.log('Production deletion confirmation/cancel, single QR removal, full confirmed batch removal and Admin sync PASS');
       }
       if(label==='Connection'){
         expirePairingSoon=width===1440;
@@ -237,7 +267,10 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   for(const width of [1440,320]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-    await command('Page.navigate',{url:'http://127.0.0.1:5174/?ui-auth=1'});await until(`!!document.querySelector('.auth-card')`);await inspect('admin-auth-'+width);await click('Enter development workspace');await until(`!!document.querySelector('.sidebar')`);
+    await command('Page.navigate',{url:'http://127.0.0.1:5174/?ui-auth=1'});await until(`!!document.querySelector('.auth-card')`);await inspect('admin-auth-'+width);
+    if(await evaluate(`!!document.querySelector('.admin-login')`)){await fill('Email','admin-ui@example.com');await fill('Password',adminTestPassword);await click('Sign in');}
+    else await click('Enter development workspace');
+    await until(`!!document.querySelector('.sidebar')`);
     await command('Page.navigate',{url:'http://127.0.0.1:5173/?ui-auth=1'});await until(`!!document.querySelector('.setup-panel')`);await inspect('production-setup-'+width);
     await fill('Station code','BROWSER-QA');await click('Register workstation');await until(`document.querySelector('.setup-error')?.textContent.includes('already registered')`);await inspect('production-duplicate-station-'+width);
     await fill('Station code','UI-REGISTER-'+width);await click('Register workstation');await until(`!!document.querySelector('.workspace-nav')`);assert.equal(await evaluate(`!!document.querySelector('.setup-error')`),false);

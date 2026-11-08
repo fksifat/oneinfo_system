@@ -234,3 +234,14 @@ footer { min-height: 50px; padding: 12px var(--page-inset); background: white; b
   .app-shell > header, .app-shell > footer { flex-wrap: wrap; }
   .batch-panel { grid-template-columns: 1fr; }
 }
+
+.batch-toolbar .danger-button,.selected-production-card .actions .danger-button,.stock-delete-dialog .danger-button { margin-top:0; }
+.stock-delete-dialog { width:min(480px,calc(100% - 32px)); max-height:calc(100dvh - 40px); overflow:auto; border:1px solid #dce5e9; border-radius:16px; padding:24px; color:#173b51; background:white; }
+.stock-delete-dialog::backdrop { background:#102d4270; }
+.stock-delete-dialog form { display:grid; gap:16px; }
+.stock-delete-dialog h2,.stock-delete-dialog p { margin:0; }
+.stock-delete-dialog p { font-size:.86rem; line-height:1.6; }
+.stock-delete-dialog strong { overflow-wrap:anywhere; }
+.stock-delete-dialog .actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
+.stock-delete-dialog .stock-delete-error { color:#a13b2c; }
+@media print { .stock-delete-dialog { display:none !important; } }

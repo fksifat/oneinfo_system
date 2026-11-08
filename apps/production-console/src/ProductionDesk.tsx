@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { api, type Credentials } from "./api.js";
 
 interface Job { id: string; type: string; status: string }
@@ -8,6 +8,7 @@ interface ProductionCard {
 }
 interface Batch { id: string; batchCode: string; plannedQuantity: number; printConfirmedAt: string | null; cards: ProductionCard[] }
 type ExpectedCard = { cardId: string; slug: string; expiresAt: number };
+type DeleteTarget = { batchId: string; cardId?: string; label: string; quantity: number };
 interface Props { visible: boolean; credentials: Credentials; busy: boolean; onBusy: (value: boolean) => void; onMessage: (value: string) => void; onChanged: () => Promise<void>; onPhoneScan: () => void }
 
 export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, onChanged, onPhoneScan }: Props) {
@@ -20,6 +21,17 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   const deepLinked = useRef(Boolean(selectedId));
   const [expected, setExpected] = useState<ExpectedCard | null>(null);
   const [checking, setChecking] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const deleteDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!deleteTarget) return;
+    setDeleteConfirmation(""); setDeleteError("");
+    const dialog = deleteDialog.current, opener = document.activeElement as HTMLElement | null;
+    dialog?.showModal();
+    return () => { dialog?.close(); if (opener?.isConnected) opener.focus(); };
+  }, [deleteTarget]);
   const [checkError, setCheckError] = useState("");
   const [batchCode, setBatchCode] = useState(`BATCH-${new Date().toLocaleDateString("en-CA").replaceAll("-", "")}-${Date.now().toString(36).slice(-4)}`);
   const [quantity, setQuantity] = useState(10);
@@ -95,6 +107,7 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
     columns * labelWidth + (columns - 1) * gap + 2 * margin <= 210 && labelHeight + margin * 2 <= 297;
 
   const clearMissingBatch = useCallback(() => {
+    currentBatchId.current = "";
     setBatch(null); setBatchId(""); setSelectedId(""); setPrintCards([]);
   }, []);
 
@@ -139,7 +152,7 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         const result = await api<{ printConfirmedAt: string | null; items: Pick<ProductionCard, "id" | "qrStatus" | "nfcStatus" | "qcStatus" | "printChecked" | "verification">[] }>(
           `/api/v1/production/batches/${batchId}/verification-status`, {}, credentials);
         if (disposed) return;
-        setBatch((current) => current?.id === batchId ? { ...current, printConfirmedAt: result.printConfirmedAt, cards: current.cards.map((card) => ({ ...card, ...result.items.find((item) => item.id === card.id) })) } : current);
+        setBatch((current) => current?.id === batchId ? { ...current, plannedQuantity: result.items.length, printConfirmedAt: result.printConfirmedAt, cards: current.cards.filter(card => result.items.some(item => item.id === card.id)).map((card) => ({ ...card, ...result.items.find((item) => item.id === card.id) })) } : current);
         setSyncError("");
         setLastSynced(new Date().toLocaleTimeString());
       } catch (error) {
@@ -208,6 +221,31 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
     return `Printed stock confirmed and visible in Admin. ${result.assigned} QR codes assigned to waiting orders. NFC encoding and QC are still required.`;
   });
 
+  async function deleteStock(event: FormEvent) {
+    event.preventDefault();
+    if (!deleteTarget || busy || deleteConfirmation !== deleteTarget.label) return;
+    const target = deleteTarget;
+    onBusy(true); setDeleteError("");
+    let deleted = false;
+    try {
+      const result = await api<{ deleted: number; batchDeleted: boolean }>(`/api/v1/production/batches/${target.batchId}${target.cardId ? `/cards/${target.cardId}` : ""}`, {
+        method: "DELETE", body: JSON.stringify({ confirmation: deleteConfirmation }),
+      }, credentials);
+      deleted = true;
+      setDeleteTarget(null); setPrintCards([]); setPrintingComplete(false);
+      if (currentBatchId.current === target.batchId) {
+        if (result.batchDeleted) clearMissingBatch();
+        else { setBatch(current => current && { ...current, plannedQuantity: current.cards.length - 1, cards: current.cards.filter(card => card.id !== target.cardId) }); setSelectedId(""); }
+      }
+      await refresh(); await onChanged();
+      onMessage(`Deleted ${result.deleted} QR/card${result.deleted === 1 ? "" : "s"}${result.batchDeleted ? " and the batch" : ""}. Removed from Admin inventory; saved card links are no longer available.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not delete production stock.";
+      if (deleted) onMessage(`Stock deleted. Refresh the dashboard: ${message}`);
+      else setDeleteError(message);
+    } finally { onBusy(false); }
+  }
+
   return <>
     <section hidden={!visible} className="panel production-desk">
       <div className="desk-heading"><div><p className="section-label">PRODUCTION WORKSPACE</p><h2>Generate → print → load NFC → final QC</h2></div><span className="desk-badge">PRODUCTION DESK</span></div>
@@ -218,7 +256,7 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         <button disabled={busy}>Create batch</button>
         <details><summary>Use your own links</summary><label>One unique HTTP(S) URL per card<textarea rows={4} value={links} onChange={(event) => setLinks(event.target.value)} placeholder="https://your-domain.com/card-1&#10;https://your-domain.com/card-2" /></label><small>Leave empty to generate unique card URLs from the configured card domain. Pasted links determine the quantity.</small></details>
       </form>
-      <div className="batch-toolbar"><label>Production batch<select value={batchId} disabled={busy} onChange={(event) => { if (event.target.value === batchId) return; setBatchId(event.target.value); setBatch(null); setSelectedId(""); localStorage.setItem("oneinfo.production.batch", event.target.value); }}><option value="">Choose a batch</option>{batches.map((item) => <option key={item.id} value={item.id}>{item.batchCode} · {item.plannedQuantity} cards</option>)}</select></label><button disabled={busy || !batch} onClick={() => void generate()}>Generate all QR codes</button><button className="secondary" disabled={busy} onClick={() => void refresh().catch((error: Error) => onMessage(error.message))}>Refresh batch</button></div>
+      <div className="batch-toolbar"><label>Production batch<select value={batchId} disabled={busy} onChange={(event) => { if (event.target.value === batchId) return; setBatchId(event.target.value); setBatch(null); setSelectedId(""); localStorage.setItem("oneinfo.production.batch", event.target.value); }}><option value="">Choose a batch</option>{batches.map((item) => <option key={item.id} value={item.id}>{item.batchCode} · {item.plannedQuantity} cards</option>)}</select></label><button disabled={busy || !batch} onClick={() => void generate()}>Generate all QR codes</button><button className="secondary" disabled={busy} onClick={() => void refresh().catch((error: Error) => onMessage(error.message))}>Refresh batch</button><button className="danger-button" disabled={busy || !batch} onClick={() => batch && setDeleteTarget({ batchId: batch.id, label: batch.batchCode, quantity: batch.cards.length })}>Delete batch</button></div>
       {batch ? <>
         {batch.cards.some((card) => { const host = new URL(card.canonicalUrl).hostname; return host.endsWith(".example") || ["localhost", "127.0.0.1", "[::1]"].includes(host); }) ? <p className="domain-warning">This batch uses local or placeholder links. Local activation pages need the Admin/customer app running on port 5174. Configure your hosted card domain before printing cards for client delivery; saved QR/NFC links do not change afterward.</p> : null}
         <div className="batch-metrics">{[["Cards", batch.cards.length], ["Print checked", batch.cards.filter((card) => card.printChecked).length], ["NFC written", batch.cards.filter((card) => card.nfcStatus === "WRITTEN").length], ["QC approved", batch.cards.filter((card) => card.qcStatus === "PASSED").length]].map(([label, count]) => <div key={label}><span>{label}</span><strong>{count}<small> / {batch.cards.length}</small></strong></div>)}</div>
@@ -233,7 +271,7 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
               </button>
               {checkError && <p role="alert">{checkError}</p>}
             </div>
-            <div className="actions"><button disabled={busy || Boolean(selected.imageData)} onClick={() => void generate(selected)}>Generate QR</button>{selected.imageData ? <a className="download-qr" href={selected.imageData} download={`${selected.publicSlug}.png`}>Download PNG</a> : null}</div>
+            <div className="actions"><button disabled={busy || Boolean(selected.imageData)} onClick={() => void generate(selected)}>Generate QR</button>{selected.imageData ? <a className="download-qr" href={selected.imageData} download={`${selected.publicSlug}.png`}>Download PNG</a> : null}<button className="danger-button" disabled={busy} onClick={() => setDeleteTarget({ batchId: batch.id, cardId: selected.id, label: selected.publicSlug, quantity: 1 })}>Delete QR & link</button></div>
             <div className="verification-controls"><p className="section-label">PHONE PRODUCTION · LIVE UPDATES</p><small>Phone: Scan printed QR → Load to NFC → scan QR again → tap NFC → Approve QC. Only the final scans after writing count toward QC.</small><div><span className={selected.nfcStatus === "WRITTEN" ? "check-pass" : ""}>{selected.nfcStatus === "WRITTEN" ? "✓" : "1"}</span><strong role="status">NFC encoding: {selected.nfcStatus}</strong></div><div><span className={selected.verification.camera ? "check-pass" : ""}>{selected.verification.camera ? "✓" : "2"}</span><strong role="status">Final QR check: {selected.verification.cameraResult ?? "PENDING"}</strong></div><div><span className={selected.verification.nfc ? "check-pass" : ""}>{selected.verification.nfc ? "✓" : "3"}</span><strong role="status">Final NFC check: {selected.verification.nfcResult ?? "PENDING"}</strong></div><strong role="status">QC approval: {selected.qcStatus}</strong><small>{syncError ? `Live updates paused: ${syncError}` : `Updated ${lastSynced || "just now"} · refreshes every 2 seconds`}</small></div>
           </article> : null}
         </div>
@@ -248,6 +286,17 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         <button disabled={busy || !printingComplete || batch.cards.some(card => !card.imageData)} onClick={() => void confirmPrint()}>Confirm printed batch</button>
       </>}
     </section>}
+    {deleteTarget && <dialog ref={deleteDialog} className="stock-delete-dialog" aria-labelledby="stock-delete-title" aria-describedby="stock-delete-description" onCancel={event => { event.preventDefault(); if (!busy) setDeleteTarget(null); }}>
+      <form onSubmit={event => void deleteStock(event)}>
+        <h2 id="stock-delete-title">{deleteTarget.cardId ? "Delete QR & link" : "Delete entire batch"}</h2>
+        <p id="stock-delete-description">Remove {deleteTarget.quantity} QR/card{deleteTarget.quantity === 1 ? "" : "s"} from Oneinfo and Admin inventory. Oneinfo card links will stop working. This cannot be undone in the console.</p>
+        <p>Only unassigned stock can be deleted. Assigned/reserved cards and claimed production jobs are protected. Deleting the last QR also removes its empty batch.</p>
+        <p>Printed copies, physical NFC tags and external websites are not erased.</p>
+        <label>Type <strong>{deleteTarget.label}</strong> to confirm<input autoFocus autoComplete="off" required value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} disabled={busy} /></label>
+        {deleteError && <p role="alert" className="stock-delete-error">{deleteError}</p>}
+        <div className="actions"><button type="button" className="secondary" disabled={busy} onClick={() => setDeleteTarget(null)}>Cancel</button><button type="submit" className="danger-button" disabled={busy || deleteConfirmation !== deleteTarget.label}>{busy ? "Deleting…" : "Delete permanently"}</button></div>
+      </form>
+    </dialog>}
     <div className="production-print" aria-hidden="true"><style>{`@media print { @page { size: A4 portrait; margin: ${margin}mm; } .print-sheet { display:grid; grid-template-columns:repeat(${columns},${labelWidth}mm); grid-auto-rows:${labelHeight}mm; gap:${gap}mm; } .print-label { width:${labelWidth}mm; height:${labelHeight}mm; } .print-label img { width:${Math.min(labelHeight - 12, labelWidth - 6)}mm; height:${Math.min(labelHeight - 12, labelWidth - 6)}mm; } }`}</style>{Array.from({ length: Math.ceil(printCards.length / perPage) }, (_, page) => <div className="print-sheet" key={page}>{printCards.slice(page * perPage, (page + 1) * perPage).map((card) => <div className="print-label" key={card.id}><img src={card.imageData!} alt="" /><strong>{card.publicSlug}</strong><small>{card.canonicalUrl}</small></div>)}</div>)}</div>
   </>;
 }

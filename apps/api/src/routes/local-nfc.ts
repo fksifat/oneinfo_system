@@ -35,6 +35,15 @@ const { pairings, devices, sessions, readSessions, verificationSessions, qrScans
 // shortcut: the lock is local to the workstation API, just like a pending phone operation.
 const expectedCards = new Map<string, { cardId: string; slug: string; expiresAt: number }>();
 
+export function forgetProductionCards(cardIds: string[]) {
+  const ids = new Set(cardIds);
+  for (const [station, target] of expectedCards) if (ids.has(target.cardId)) expectedCards.delete(station);
+  for (const entries of [sessions, verificationSessions, qrScans]) {
+    for (const [id, value] of entries) if (ids.has(value.cardId)) entries.delete(id);
+  }
+  store.save();
+}
+
 function expectedCard(stationId: string) {
   const target = expectedCards.get(stationId);
   if (target && target.expiresAt <= Date.now()) { expectedCards.delete(stationId); return undefined; }
@@ -274,6 +283,8 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
   app.get("/latest-qr-scan", async (request) => {
     await requireOperator(request);
     const station = await requireStation(request);
+    const target = expectedCard(station.stationId);
+    if (target && !(await db.select({ id: cards.id }).from(cards).where(eq(cards.id, target.cardId)).limit(1)).length) expectedCards.delete(station.stationId);
     const [scan] = await db.select({ id: cardEvents.id, cardId: cards.id, batchId: cards.batchId,
       publicSlug: cards.publicSlug, scannedAt: cardEvents.createdAt }).from(cardEvents)
       .innerJoin(cards, eq(cards.id, cardEvents.cardId))
