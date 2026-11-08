@@ -1,10 +1,11 @@
+import { publicProfileAvailable } from "../domain/profile-visibility.js";
 import { lockPrintedStock } from "../domain/printed-stock.js";
 import { adminPage } from "../domain/admin-page.js";
 import { ensureProfileHandle } from "../domain/profile-handles.js";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
-import { and, asc, eq, getTableColumns, inArray, isNull, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull, isNotNull, sql } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardBatches, customerAccounts, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, orderActivationProfiles, profileLinks } from "../db/schema.js";
@@ -37,14 +38,11 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     const { handle } = request.params as { handle: string };
     if (!/^[a-zA-Z0-9]{1,64}$/.test(handle)) return reply.code(404).send({ message: "Profile not found" });
     const [profile] = await db.select(publicProfileFields).from(customerProfiles)
-      .where(and(sql`lower(${customerProfiles.handle}) = lower(${handle})`, eq(customerProfiles.published, true)));
+      .where(and(sql`lower(${customerProfiles.handle}) = lower(${handle})`, publicProfileAvailable()));
     if (!profile) return reply.code(404).send({ message: "Profile not found" });
     const linked = await db.select({ publicSlug: cards.publicSlug, lifecycleStatus: cards.lifecycleStatus, qcStatus: cards.qcStatus, confirmed: cardBatches.printConfirmedAt }).from(cards)
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.profileId, profile.id)).orderBy(asc(cards.createdAt), asc(cards.id));
     const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && card.qcStatus === "PASSED" && card.confirmed);
-    if (linked.length && !active) return reply.code(404).send({ message: "Profile unavailable" });
-    const [owner] = await db.select({ active: customerAccounts.active }).from(customerAccounts).where(or(eq(customerAccounts.profileId, profile.id), inArray(customerAccounts.id, db.select({ id: cards.customerAccountId }).from(cards).where(eq(cards.profileId, profile.id)))));
-    if (owner && !owner.active) return reply.code(404).send({ message: "Profile unavailable" });
     const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder }).from(profileLinks)
       .where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
     return { profile, links, cardSlug: active?.publicSlug ?? null };
@@ -53,7 +51,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
   app.get("/public/:slug/contact.vcf", async (request, reply) => {
     const { slug } = request.params as { slug: string };
     const [profile] = await db.select(publicProfileFields).from(customerProfiles)
-      .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true))).limit(1);
+      .where(and(eq(customerProfiles.publicSlug, slug), publicProfileAvailable())).limit(1);
     if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
     return reply.header("Cache-Control", "no-store").header("Content-Disposition", "inline; filename=contact.vcf")
       .type("text/vcard; charset=utf-8").send(contactVcard(profile));
@@ -64,7 +62,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     const [profile] = await db
       .select(publicProfileFields)
       .from(customerProfiles)
-      .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true)))
+      .where(and(eq(customerProfiles.publicSlug, slug), publicProfileAvailable()))
       .limit(1);
     if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
     const links = await db
@@ -81,7 +79,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       .select({ profile: publicProfileFields, card: { publicSlug: cards.publicSlug, canonicalUrl: cards.canonicalUrl } })
       .from(cards)
       .innerJoin(customerProfiles, eq(customerProfiles.id, cards.profileId))
-      .where(and(eq(cards.publicSlug, cardSlug), eq(cards.lifecycleStatus, "ACTIVATED"), eq(customerProfiles.published, true)))
+      .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id))
+      .where(and(eq(cards.publicSlug, cardSlug), eq(cards.lifecycleStatus, "ACTIVATED"), eq(cards.qcStatus, "PASSED"),
+        isNotNull(cardBatches.printConfirmedAt), publicProfileAvailable()))
       .limit(1);
     if (!result) throw Object.assign(new Error("Active card profile not found"), { statusCode: 404 });
     const links = await db
@@ -180,8 +180,10 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
 
     await db.transaction(async (tx) => {
       await lockPrintedStock(tx);
-      const [pending] = await tx.select().from(orderActivationProfiles).where(and(eq(orderActivationProfiles.profileId, profileId), isNull(orderActivationProfiles.redeemedAt)));
-      if (pending) throw Object.assign(new Error("Use the order secret code to activate this temporary profile."), { statusCode: 409 });
+      const [pending] = await tx.select().from(orderActivationProfiles).where(eq(orderActivationProfiles.profileId, profileId));
+      const [owner] = await tx.select().from(customerAccounts).where(eq(customerAccounts.profileId, profileId));
+      const [employee] = await tx.select().from(companyEmployees).where(eq(companyEmployees.profileId, profileId));
+      if (pending || owner || employee) throw Object.assign(new Error("Use client or company activation for this owned profile."), { statusCode: 409 });
       const [current] = await tx.select().from(cards).where(eq(cards.id, card.id)).for("update");
       const [activation] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
       if (current?.customerAccountId || current?.companyId || activation) throw Object.assign(new Error("This card uses client or company activation. Use its assigned workflow."), { statusCode: 409 });

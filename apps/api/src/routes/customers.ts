@@ -1,3 +1,4 @@
+import { publicProfileAvailable } from "../domain/profile-visibility.js";
 import { ensureProfileHandle } from "../domain/profile-handles.js";
 import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -35,7 +36,7 @@ function liveRecipient(tx: Transaction, cardSlug: string) {
     .innerJoin(customerAccounts, contactOwner)
     .innerJoin(customerProfiles, eq(cards.profileId, customerProfiles.id))
     .where(and(eq(cards.publicSlug, cardSlug), eq(cards.lifecycleStatus, "ACTIVATED"), eq(cards.qcStatus, "PASSED"),
-      isNotNull(cardBatches.printConfirmedAt), eq(customerAccounts.active, true), eq(customerProfiles.published, true)))
+      isNotNull(cardBatches.printConfirmedAt), eq(customerAccounts.active, true), publicProfileAvailable()))
     .limit(1).for("share", { of: cards });
 }
 
@@ -146,13 +147,14 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const { card } = row;
     if (!row.confirmed || card.qcStatus !== "PASSED" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) return { status: "UNAVAILABLE" };
     if (card.profileId && card.lifecycleStatus === "ACTIVATED") {
-      const [profile] = await db.select(publicProfileFields).from(customerProfiles).where(and(eq(customerProfiles.id, card.profileId), eq(customerProfiles.published, true)));
+      const [profile] = await db.select(publicProfileFields).from(customerProfiles).where(and(eq(customerProfiles.id, card.profileId), publicProfileAvailable()));
       if (profile) {
         const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder })
           .from(profileLinks).where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
         return { status: "PROFILE", profile, links, canShareContact: row.ownerActive === true, crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL) };
       }
     }
+    if (card.profileId && card.lifecycleStatus === "ACTIVATED") return { status: "UNAVAILABLE" };
     const [allocated] = await db.select({ orderId: storeOrders.id }).from(orderCardAllocations)
       .innerJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId)).where(eq(orderCardAllocations.cardId, card.id));
     return { status: card.customerAccountId || card.companyId ? "UNAVAILABLE" : "ACTIVATION_REQUIRED",

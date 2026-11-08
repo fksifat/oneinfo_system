@@ -1,4 +1,4 @@
-# Full project audit — 6 November 2026
+# Full project audit — 8 November 2026
 
 Scope: storefront, Admin/client/team interfaces, authentication, order/payment
 validation, QR stock and activation, local Android/PC-SC NFC paths, media storage,
@@ -8,7 +8,19 @@ ownership and activation secrets were preserved; public page visits may record
 ordinary view analytics. No synthetic customer messages, payments or tag writes
 were sent.
 
-## Findings and fixes
+## Current findings and fixes
+
+| Finding | Change and evidence |
+|---|---|
+| Profile/vCard aliases could expose suspended, retired or replaced profiles, or profiles belonging to disabled accounts | Share one visibility predicate across handles, legacy profile URLs, contact downloads, card scans and company directories. Tests cover primary/secondary customer profiles, inactive owners/employees and per-card QC/print eligibility. Profiles with another eligible active card remain accessible. |
+| Manual Admin assignment could attach customer/company-owned profiles without transferring account ownership correctly | Keep manual assignment for operator-managed profiles; require the existing customer/company activation flow for owned and order-created profiles. Integration regression verifies the rejection. |
+| Replacing a suspended card silently activated its replacement | Preserve SUSPENDED status and record the matching replacement event; serialize replacement with stock allocation/deletion. |
+| Password changes and reset-link invalidation were separate writes; concurrent reset links locked tokens in opposite order | Perform password/session changes and reset invalidation atomically, serializing account-link completion and password changes by account email before locking reset tokens. Concurrent reset and stale-link regressions pass. |
+
+These fixes require no database migration or new dependency. Existing order codes, ownership, QR URLs and customer data are retained.
+
+## Earlier fixes retained (6 November)
+
 
 | Finding | Change and evidence |
 |---|---|
@@ -26,7 +38,10 @@ were sent.
 
 ## Verification
 
-- Unit/type/build checks and disposable PostgreSQL migration/workflow tests.
+- Full typecheck, build and unit checks: 94 API unit tests; desktop writer and launcher/storefront/hosting checks.
+- 58 disposable PostgreSQL workflow tests, including the new order-per-card temporary profile/code flow, activation concurrency, public access revocation and password reset races.
+- Android unit tests and debug APK assembly using Gradle 8.9; deployment/rollback regression tests pass.
+- Production npm dependency audit: zero known vulnerabilities. Four moderate entries remain in the development-only Drizzle/esbuild migration tool chain.
 - Full QR/NFC smoke flow, including write/readback, QR/NFC mismatch, erase,
   Unicode text, cancellation, retries and station revocation, with fake tags.
 - Real Chrome responsive flows at 320/390/768/1440px: Admin, storefront checkout,
@@ -34,9 +49,15 @@ were sent.
 - Extended browser coverage for company administration, customer workspace,
   CSV import, employee edit links, branding and public directory/profile privacy.
 - Deployment success/failure regressions, archive guards and smoke safety guards.
-- An actual VPS CI database backup restored into a disposable local PostgreSQL
+- Earlier evidence (6 November): an actual VPS CI database backup restored into a disposable local PostgreSQL
   database. Tables/data and foreign keys validated; the restored database was
   then dropped. Production records were not restored over or modified.
+
+## Live service checks
+
+Both frontend domains and VPS API health returned HTTP 200. Anonymous Admin/order requests were rejected with 401. Public workstation NFC and development-login endpoints returned 404. The dedicated API and PostgreSQL containers were healthy; API restart count was zero, certificate-renewal timer active, and database backup files were present. These are read-only operational checks, not a live customer purchase or activation test.
+
+Local shared-mode Admin/storefront use the configured cloud API so profile/product media stay on customer-reachable storage; the private workstation API remains the NFC bridge. Browser regression requests are intercepted into disposable fixtures.
 
 ## Remaining limits
 
@@ -45,10 +66,7 @@ stemming from its old esbuild dependency. Production dependencies have no known
 npm vulnerabilities. npm's suggested fix is a breaking Drizzle downgrade; it
 was not applied. No ineffective dependency override is kept.
 
-Physical NFC/printer/payment-provider tests and Windows/macOS runtime checks were
-not performed. CI backups remain on the same VPS; scheduled off-server backups
-and retention policy are not configured. Email verification/recovery and full
-offline production synchronization remain product features outside this repair.
+Physical NFC/PC-SC reader/printer/payment-provider tests and Windows/macOS runtime checks were not performed. Deployment backups observed here remain on the same VPS; off-server backup recovery was not validated. Email verification, recovery and company invitations are now covered with mocked email delivery; live mailbox delivery was not exercised. Full offline production synchronization remains outside this repair. The desktop PC/SC helper supports production Type 2 URI encoding; general NFC tools are exercised through the Android bridge fixture.
 
 This audit records exercised paths and observed defects; it does not assert that
 every possible input, device or concurrent production scenario is defect-free.

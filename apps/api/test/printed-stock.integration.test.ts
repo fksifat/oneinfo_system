@@ -405,6 +405,52 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   const signup = (claimToken: string, email: string) => app.inject({ method: "POST", url: "/api/v1/customer/signup",
     payload: { claimToken, email, password: "a secure customer password", profile: publicDetails } });
 
+  it("hides disabled profiles consistently across handles, legacy URLs, vCards and card endpoints", async () => {
+    const card = await readyForClaim(), secret = await issue(card.id);
+    const grant = await activate(card.publicSlug, secret.secretCode);
+    expect((await signup(grant.claimToken, "visibility@example.com")).statusCode).toBe(201);
+    const profile = (await request(`/api/v1/customer/cards/${card.publicSlug}`)).profile;
+    const urls = [`/api/v1/profiles/handle/${profile.handle}`, `/api/v1/profiles/public/${profile.publicSlug}`,
+      `/api/v1/profiles/public/${profile.publicSlug}/contact.vcf`, `/api/v1/profiles/card/${card.publicSlug}`];
+    for (const url of urls) expect((await app.inject({ url })).statusCode).toBe(200);
+    for (const lifecycleStatus of ["SUSPENDED", "RETIRED", "REPLACED"] as const) {
+      await client.db.update(schema.cards).set({ lifecycleStatus }).where(eq(schema.cards.id, card.id));
+      for (const url of urls) expect((await app.inject({ url })).statusCode, url).toBe(404);
+      expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({ status: "UNAVAILABLE" });
+    }
+    await client.db.update(schema.cards).set({ lifecycleStatus: "ACTIVATED" }).where(eq(schema.cards.id, card.id));
+    await client.db.update(schema.customerAccounts).set({ active: false }).where(eq(schema.customerAccounts.profileId, profile.id));
+    for (const url of urls) expect((await app.inject({ url })).statusCode, url).toBe(404);
+    expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({ status: "UNAVAILABLE" });
+    expect((await app.inject({ method: "POST", url: `/api/v1/customer/cards/${card.publicSlug}/contact-leads`,
+      payload: { requestId: randomUUID(), name: "Visitor", email: "visitor@example.com", consent: true } })).statusCode).toBe(404);
+  });
+
+  it("keeps a replacement profile visible while refusing old card routes and preserving suspension", async () => {
+    const card = await readyForClaim(), secret = await issue(card.id);
+    const grant = await activate(card.publicSlug, secret.secretCode);
+    await signup(grant.claimToken, "replace-visibility@example.com");
+    const profile = (await request(`/api/v1/customer/cards/${card.publicSlug}`)).profile;
+    await client.db.update(schema.cards).set({ lifecycleStatus: "SUSPENDED" }).where(eq(schema.cards.id, card.id));
+    const replacement = await readyForClaim();
+    await request(`/api/v1/production/cards/${card.id}/replace`, { replacementSlug: replacement.publicSlug });
+    expect((await client.db.select().from(schema.cards).where(eq(schema.cards.id, replacement.id)))[0]?.lifecycleStatus).toBe("SUSPENDED");
+    expect((await app.inject({ url: `/api/v1/profiles/public/${profile.publicSlug}` })).statusCode).toBe(404);
+    await client.db.update(schema.cards).set({ lifecycleStatus: "ACTIVATED" }).where(eq(schema.cards.id, replacement.id));
+    expect((await app.inject({ url: `/api/v1/profiles/public/${profile.publicSlug}` })).statusCode).toBe(200);
+    expect((await app.inject({ url: `/api/v1/profiles/card/${card.publicSlug}` })).statusCode).toBe(404);
+    expect((await request(`/api/v1/customer/cards/${replacement.publicSlug}`)).profile.id).toBe(profile.id);
+    await client.db.update(schema.cards).set({ lifecycleStatus: "ACTIVATED", qcStatus: "FAILED" }).where(eq(schema.cards.id, card.id));
+    expect((await app.inject({ url: `/api/v1/profiles/card/${card.publicSlug}` })).statusCode).toBe(404);
+    expect((await app.inject({ url: `/api/v1/profiles/public/${profile.publicSlug}` })).statusCode).toBe(200);
+    await client.db.update(schema.cards).set({ qcStatus: "PASSED" }).where(eq(schema.cards.id, card.id));
+    await client.db.update(schema.cardBatches).set({ printConfirmedAt: null }).where(eq(schema.cardBatches.id, card.batchId));
+    expect((await app.inject({ url: `/api/v1/profiles/card/${card.publicSlug}` })).statusCode).toBe(404);
+    const unused = await readyForClaim();
+    expect((await app.inject({ method: "POST", url: `/api/v1/profiles/${profile.id}/assign-card`, headers,
+      payload: { cardId: unused.id } })).statusCode).toBe(409);
+  });
+
   const secretCodes = (id: string) => request(`/api/v1/orders/admin/${id}/activation-codes`, {});
   const confirmPackage = (id: string) => request(`/api/v1/orders/admin/${id}/packing-check`, { confirmed: true });
 
@@ -471,6 +517,11 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(updated.statusCode).toBe(200);
     expect((await request(`/api/v1/customer/cards/${second.publicSlug}`)).profile.displayName).toBe("Card Owner");
     expect((await secretCodes(placed.id)).items.every((row: any) => row.secretCode === null && row.redeemedAt)).toBe(true);
+    const [account] = await client.db.select().from(schema.customerAccounts);
+    await client.db.update(schema.customerAccounts).set({ active: false }).where(eq(schema.customerAccounts.id, account!.id));
+    expect((await app.inject({ url: `/api/v1/profiles/public/${own.json().profile.publicSlug}/contact.vcf` })).statusCode).toBe(404);
+    expect(await request(`/api/v1/customer/cards/${first.publicSlug}`)).toEqual({ status: "UNAVAILABLE" });
+
   });
 
   it("rejects cancelled codes, temporary-profile publication, reserved stock and competing code redemptions", async () => {
@@ -728,8 +779,19 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const publicPortal = await app.inject({ url: "/api/v1/company/public/team.example.com", headers: { origin: "https://team.example.com" } });
     expect(publicPortal.headers["access-control-allow-origin"]).toBe("*");
     expect(publicPortal.body).not.toContain("employee@example.com");
+    const [workspaceOwner] = await client.db.select().from(schema.companies).where(eq(schema.companies.id, id));
+    await client.db.update(schema.customerAccounts).set({ active: false }).where(eq(schema.customerAccounts.id, workspaceOwner!.ownerAccountId));
+    expect((await app.inject({ url: "/api/v1/company/public/team.example.com" })).statusCode).toBe(404);
+    expect((await request(teamCard)).status).toBe("UNAVAILABLE");
+    const profileUrl = `/api/v1/profiles/public/${employee.publicSlug}`;
+    expect((await app.inject({ url: `${profileUrl}/contact.vcf` })).statusCode).toBe(404);
+    await client.db.update(schema.customerAccounts).set({ active: true }).where(eq(schema.customerAccounts.id, workspaceOwner!.ownerAccountId));
+
     expect((await send("PATCH", `${url}/employees/${employee.id}`, { active: false })).statusCode).toBe(200);
     expect((await send("POST", welcome)).statusCode).toBe(404);
+    expect((await request(teamCard)).status).toBe("UNAVAILABLE");
+    await client.db.update(schema.customerProfiles).set({ published: true }).where(eq(schema.customerProfiles.id, employee.profileId));
+    expect((await app.inject({ url: `${profileUrl}/contact.vcf` })).statusCode).toBe(404);
     expect((await request(teamCard)).status).toBe("UNAVAILABLE");
     expect((await send("POST", editor, { token: secret }, {})).statusCode).toBe(404);
     expect((await send("PUT", `${url}/cards/${stock.id}`, { employeeId: colleague.id })).statusCode).toBe(200);
@@ -1198,6 +1260,25 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const expired = await createAccountLink("invited@example.com", "reset");
     await client.db.update(schema.accountTokens).set({ expiresAt: new Date(0) });
     expect((await app.inject({ method: "POST", url: "/api/v1/customer/account-link/complete", payload: { token: expired.token, password: "another long password" } })).statusCode).toBe(400);
+  });
+
+  it("serializes competing password resets and atomically invalidates reset links after a password change", async () => {
+    const { createAccountLink } = await import("../src/domain/account-tokens.js");
+    const invite = await createAccountLink("reset-race@example.com", "invite", { name: "Reset Race" });
+    await request("/api/v1/customer/account-link/complete", { token: invite.token, password: "initial reset race password", displayName: "Reset Race" });
+    const links = await Promise.all([createAccountLink("reset-race@example.com", "reset"), createAccountLink("reset-race@example.com", "reset")]);
+    const complete = (token: string, password: string) => app.inject({ method: "POST", url: "/api/v1/customer/account-link/complete", payload: { token, password } });
+    const reset = await Promise.all(links.map((link, i) => complete(link.token, `new competing password ${i}`)));
+    expect(reset.map(result => result.statusCode).sort()).toEqual([200, 400]);
+    const currentPassword = `new competing password ${reset.findIndex(result => result.statusCode === 200)}`;
+    const login = await request("/api/v1/customer/login", { email: "reset-race@example.com", password: currentPassword });
+    const stale = await createAccountLink("reset-race@example.com", "reset");
+    const changed = await app.inject({ method: "POST", url: "/api/v1/customer/me/password", headers: { authorization: `Bearer ${login.accessToken}` },
+      payload: { currentPassword, password: "changed password invalidates resets" } });
+    expect(changed.statusCode, changed.body).toBe(200);
+    expect((await complete(stale.token, "a stale reset password")).statusCode).toBe(400);
+    expect((await app.inject({ url: "/api/v1/customer/me", headers: { authorization: `Bearer ${login.accessToken}` } })).statusCode).toBe(401);
+    expect((await request("/api/v1/customer/login", { email: "reset-race@example.com", password: "changed password invalidates resets" })).accessToken).toBeTruthy();
   });
 
   it("recovers queued email after a restart and fences concurrent send attempts", async () => {
