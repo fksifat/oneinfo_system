@@ -78,6 +78,131 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
 
+  const removeStock = (created: { id: string; batchCode: string }, card?: { id: string; publicSlug: string }, confirmation = card?.publicSlug ?? created.batchCode) => app.inject({
+    method: "DELETE", url: `/api/v1/production/batches/${created.id}${card ? `/cards/${card.id}` : ""}`, headers, payload: { confirmation },
+  });
+
+  it("deletes individual draft cards, adjusts quantities, and removes the last empty batch", async () => {
+    const created = await batch(2, false);
+    const [first, second] = await client.db.select().from(schema.cards);
+    expect((await removeStock(created, first!, "wrong confirmation")).statusCode).toBe(400);
+    expect(await client.db.select().from(schema.cards)).toHaveLength(2);
+    expect((await removeStock(created, first!)).json()).toMatchObject({ deleted: 1, batchDeleted: false });
+    expect((await request(`/api/v1/production/batches/${created.id}`)).plannedQuantity).toBe(1);
+    expect(await client.db.select().from(schema.productionJobs)).toHaveLength(3);
+    expect((await removeStock(created, second!)).json()).toMatchObject({ deleted: 1, batchDeleted: true });
+    expect(await client.db.select().from(schema.cardBatches)).toHaveLength(0);
+    expect(await client.db.select().from(schema.productionJobs)).toHaveLength(0);
+    expect(await client.db.select().from(schema.auditLogs).where(eq(schema.auditLogs.action, "PRODUCTION_CARD_DELETED"))).toHaveLength(2);
+  });
+
+  it("removes confirmed stock from Admin and deletes all dependent evidence while retaining an audit", async () => {
+    const card = await readyForClaim();
+    const created = (await request(`/api/v1/production/batches/${card.batchId}`));
+    const jobs = await client.db.select().from(schema.productionJobs);
+    const [actor] = await client.db.select().from(schema.operators);
+    const stationId = headers["x-station-key"]!.split(".")[0]!;
+    await client.db.insert(schema.nfcEncodingAttempts).values({ jobId: jobs.find(job => job.type === "NFC_ENCODING")!.id,
+      cardId: card.id, stationId, operatorId: actor!.id, idempotencyKey: randomUUID(), result: "SUCCEEDED", expectedUrlHash: "a".repeat(64) });
+    await client.db.insert(schema.qualityChecks).values({ jobId: jobs.find(job => job.type === "QUALITY_CONTROL")!.id,
+      cardId: card.id, inspectorId: actor!.id, idempotencyKey: randomUUID(), result: "PASSED" });
+    await client.db.insert(schema.cardVerifications).values({ cardId: card.id, stationId, method: "QR_CAMERA", expectedUrl: qrUrl(card.canonicalUrl), scannedValue: qrUrl(card.canonicalUrl), matched: true });
+    expect((await request("/api/v1/admin/cards")).items).toHaveLength(1);
+    const removed = await removeStock(created);
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect((await request("/api/v1/admin/cards")).items).toHaveLength(0);
+    expect((await request("/api/v1/admin/batches")).items).toHaveLength(0);
+    for (const table of [schema.cards, schema.cardBatches, schema.productionJobs, schema.qrArtifacts, schema.nfcEncodingAttempts, schema.qualityChecks, schema.cardVerifications, schema.cardEvents, schema.cardActivationSecrets]) {
+      expect(await client.db.select().from(table)).toHaveLength(0);
+    }
+    expect((await app.inject(`/api/v1/customer/cards/${card.publicSlug}`)).statusCode).toBe(404);
+    const audit = await client.db.select().from(schema.auditLogs).where(eq(schema.auditLogs.action, "PRODUCTION_BATCH_DELETED"));
+    expect(audit).toHaveLength(1);expect(JSON.stringify(audit)).not.toContain("codeHash");
+  });
+
+  it("protects activation-code stock reserved for client handover", async () => {
+    const card = await readyForClaim();await issue(card.id);
+    const created = await request(`/api/v1/production/batches/${card.batchId}`);
+    expect((await removeStock(created)).statusCode).toBe(409);
+    expect(await client.db.select().from(schema.cardActivationSecrets)).toHaveLength(1);
+    expect(await client.db.select().from(schema.cards)).toHaveLength(1);
+  });
+
+  it("keeps the whole batch when an order owns a card but still permits deletion of an unused sibling", async () => {
+    const created = await batch(2);await confirm(created.id);await order();
+    const rows = await client.db.select().from(schema.cards);
+    const reserved = rows.find(card => card.inventoryStatus === "RESERVED")!, free = rows.find(card => card.id !== reserved.id)!;
+    expect((await removeStock(created)).statusCode).toBe(409);
+    expect((await removeStock(created, reserved)).statusCode).toBe(409);
+    expect(await client.db.select().from(schema.cards)).toHaveLength(2);
+    expect(await client.db.select().from(schema.qrArtifacts)).toHaveLength(2);
+    expect((await removeStock(created, free)).statusCode).toBe(200);
+    expect((await request("/api/v1/admin/cards")).items).toHaveLength(1);
+    expect((await request(`/api/v1/production/batches/${created.id}`)).plannedQuantity).toBe(1);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(1);
+  });
+
+  it.each(["profile", "customer", "company", "dispatched"] as const)("protects %s-linked cards from deletion", async kind => {
+    const created = await batch(1);
+    const [card] = await client.db.select().from(schema.cards);
+    const profile = await request("/api/v1/profiles", { publicSlug: `delete-guard-${kind}`, displayName: "Protected Owner" });
+    const [account] = await client.db.insert(schema.customerAccounts).values({ email: randomUUID() + "@example.com", passwordHash: "test-only", profileId: profile.id }).returning();
+    if (kind === "company") {
+      const [company] = await client.db.insert(schema.companies).values({ name: "Protected Company", ownerAccountId: account!.id }).returning();
+      await client.db.update(schema.cards).set({ companyId: company!.id }).where(eq(schema.cards.id, card!.id));
+    } else await client.db.update(schema.cards).set(kind === "profile" ? { profileId: profile.id } : kind === "customer" ? { customerAccountId: account!.id } : { inventoryStatus: "DISPATCHED" }).where(eq(schema.cards.id, card!.id));
+    expect((await removeStock(created, card!)).statusCode).toBe(409);
+    expect(await client.db.select().from(schema.cards)).toHaveLength(1);
+    expect(await client.db.select().from(schema.customerAccounts)).toHaveLength(1);
+  });
+
+  it("refuses deletion during a claimed NFC job and rejects cards outside the selected batch", async () => {
+    const created = await batch(1), other = await batch(1);
+    const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+    expect((await removeStock(other, card!)).statusCode).toBe(404);
+    const jobs = await client.db.select().from(schema.productionJobs).where(eq(schema.productionJobs.cardId, card!.id));
+    const job = jobs.find(item => item.type === "NFC_ENCODING")!;
+    await request(`/api/v1/production/jobs/${job.id}/claim`, { idempotencyKey: randomUUID() });
+    expect((await removeStock(created)).statusCode).toBe(409);
+    expect(await client.db.select().from(schema.cards)).toHaveLength(2);
+  });
+
+  it.each(["PRODUCTION_OPERATOR", "INVENTORY_MANAGER"] as const)("requires deletion permission for %s", async role => {
+    const created = await batch(1, false);
+    const url = `/api/v1/production/batches/${created.id}`;
+    const payload = { confirmation: created.batchCode };
+    expect((await app.inject({ method: "DELETE", url, payload })).statusCode).toBe(401);
+    const [actor] = await client.db.insert(schema.operators).values({ email: randomUUID() + "@example.com", displayName: "Delete role test", role }).returning();
+    const { issueOperatorToken } = await import("../src/auth.js");
+    const token = await issueOperatorToken({ operatorId: actor!.id, email: actor!.email, role });
+    try {
+      const result = await app.inject({ method: "DELETE", url, headers: { authorization: `Bearer ${token}` }, payload });
+      expect(result.statusCode).toBe(role === "INVENTORY_MANAGER" ? 200 : 403);
+    } finally { await client.db.delete(schema.operators).where(eq(schema.operators.id, actor!.id)); }
+  });
+
+  it("clears the removed card's phone selection and expected-card lock", async () => {
+    const created = await batch(1);
+    const [card] = await client.db.select().from(schema.cards);
+    const send = await phone();
+    await request("/api/v1/local-nfc/expected-card", { cardId: card!.id });
+    const scanId = randomUUID();
+    expect((await send("resolve-qr", { scanId, scannedValue: qrUrl(card!.canonicalUrl) })).statusCode).toBe(200);
+    expect((await removeStock(created)).statusCode).toBe(200);
+    expect(await request("/api/v1/local-nfc/latest-qr-scan")).toMatchObject({ scan: null, expected: null });
+    expect((await send("load-to-nfc", { scanId })).statusCode).toBe(404);
+  });
+
+  it("serializes deletion against concurrent order allocation without orphaning either record", async () => {
+    const created = await batch(1);await confirm(created.id);
+    const [removed] = await Promise.all([removeStock(created), order()]);
+    expect([200, 409]).toContain(removed.statusCode);
+    const allocations = await client.db.select().from(schema.orderCardAllocations), rows = await client.db.select().from(schema.cards);
+    expect(await client.db.select().from(schema.storeOrders)).toHaveLength(1);
+    expect(allocations).toHaveLength(removed.statusCode === 200 ? 0 : 1);
+    expect(rows).toHaveLength(allocations.length);
+  });
+
   it("refreshes an older QR design without changing card links or discarding the previous artifact", async () => {
     const created = await batch(1);
     const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));

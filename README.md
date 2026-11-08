@@ -184,6 +184,8 @@ Use `http://127.0.0.1:5173` for the full local workflow:
 
 Run `npm run start:local` or use **Start Oneinfo** for full local startup. `npm run desktop` only opens an already-running console, preferring a Chrome/Edge app window and falling back to the OS browser. `ONEINFO_DESKTOP_URL` selects the URL for that open-only command; `VITE_API_URL` selects the API for manual build/dev startup. The full local launcher builds against its local API. This version has no separate offline sync queue; connecting to a future cloud deployment requires the real API address and authentication integration.
 
+Administrators and inventory managers can remove unused stock from the Production Console: **Delete batch** removes the entire batch; **Delete QR & link** removes the selected card. Type the exact batch code or public card ID in the confirmation dialog. Deleting the last card removes its empty batch. Confirmed stock disappears from Admin inventory and owned Oneinfo card links stop resolving; external URLs and physical tags/printed copies are unaffected. Removal is atomic and retains an audit entry. Any order allocation, client/company ownership, reserved/dispatched status or claimed production job blocks deletion; a protected card prevents the entire batch from being deleted. Remaining cards keep their print confirmation and the batch quantity adjusts automatically. Finish the current production operation before deleting claimed stock.
+
 The phone needs the latest companion APK after an app update. PostgreSQL backups include QR images and saved scan evidence; back up the workstation's `.oneinfo/nfc-state.bin` and `.oneinfo/lan-identity.json` separately to retain phone pairing and local operation state.
 
 ## Verification
