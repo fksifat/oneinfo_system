@@ -78,6 +78,20 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
 
+  it("creates the maximum batch with unique cards, all jobs and complete creation history", async () => {
+    const created = await batch(1000, false);
+    const rows = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+    const jobs = await client.db.select().from(schema.productionJobs).where(eq(schema.productionJobs.batchId, created.id));
+    const events = await client.db.select().from(schema.cardEvents);
+    expect(rows).toHaveLength(1000);
+    expect(new Set(rows.map(row => row.publicSlug)).size).toBe(1000);
+    expect(jobs).toHaveLength(3000);
+    expect(rows.every(row => jobs.filter(job => job.cardId === row.id).length === 3)).toBe(true);
+    expect(events).toHaveLength(1000);
+    expect(events.map(event => Number(event.metadata.sequence)).sort((a, b) => a - b)).toEqual(Array.from({ length: 1000 }, (_, index) => index + 1));
+    expect(rows.every(row => row.profileId === null && row.inventoryStatus === "NOT_READY")).toBe(true);
+  });
+
   const removeStock = (created: { id: string; batchCode: string }, card?: { id: string; publicSlug: string }, confirmation = card?.publicSlug ?? created.batchCode) => app.inject({
     method: "DELETE", url: `/api/v1/production/batches/${created.id}${card ? `/cards/${card.id}` : ""}`, headers, payload: { confirmation },
   });

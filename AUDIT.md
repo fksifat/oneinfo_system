@@ -15,6 +15,7 @@ were sent.
 | Profile/vCard aliases could expose suspended, retired or replaced profiles, or profiles belonging to disabled accounts | Share one visibility predicate across handles, legacy profile URLs, contact downloads, card scans and company directories. Tests cover primary/secondary customer profiles, inactive owners/employees and per-card QC/print eligibility. Profiles with another eligible active card remain accessible. |
 | Manual Admin assignment could attach customer/company-owned profiles without transferring account ownership correctly | Keep manual assignment for operator-managed profiles; require the existing customer/company activation flow for owned and order-created profiles. Integration regression verifies the rejection. |
 | Replacing a suspended card silently activated its replacement | Preserve SUSPENDED status and record the matching replacement event; serialize replacement with stock allocation/deletion. |
+| Large batch creation made four database writes per card across the workstation/VPS tunnel | Bulk insert cards, jobs and creation events in the existing transaction (five writes per batch). Measured shared database round trip was about 58ms; a 1,000-card fixture verifies all 3,000 jobs and 1,000 creation events. |
 | Password changes and reset-link invalidation were separate writes; concurrent reset links locked tokens in opposite order | Perform password/session changes and reset invalidation atomically, serializing account-link completion and password changes by account email before locking reset tokens. Concurrent reset and stale-link regressions pass. |
 
 These fixes require no database migration or new dependency. Existing order codes, ownership, QR URLs and customer data are retained.
@@ -39,7 +40,7 @@ These fixes require no database migration or new dependency. Existing order code
 ## Verification
 
 - Full typecheck, build and unit checks: 94 API unit tests; desktop writer and launcher/storefront/hosting checks.
-- 58 disposable PostgreSQL workflow tests, including the new order-per-card temporary profile/code flow, activation concurrency, public access revocation and password reset races.
+- 59 disposable PostgreSQL workflow tests, including the new order-per-card temporary profile/code flow, activation concurrency, public access revocation and password reset races.
 - Android unit tests and debug APK assembly using Gradle 8.9; deployment/rollback regression tests pass.
 - Production npm dependency audit: zero known vulnerabilities. Four moderate entries remain in the development-only Drizzle/esbuild migration tool chain.
 - Full QR/NFC smoke flow, including write/readback, QR/NFC mismatch, erase,
