@@ -330,6 +330,12 @@ try {
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
   console.log('PASS: Admin/activation/owner photo upload, public image, replacement/removal; signup → owner edit → fresh scan; private email hidden.');
+  await command('Page.navigate',{url:'http://127.0.0.1:5173/?batch='+batch.id});
+  await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+  await click('Delete QR & link');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+  await fill('Type',card.publicSlug);await click('Delete permanently');await until(`document.querySelector('.stock-delete-error')?.textContent.includes('assigned or reserved')`);
+  assert.equal((await connection.db.select().from(schema.cards).where(eq(schema.cards.id,card.id))).length,1);
+  await click('Cancel');console.log('Assigned client card remains protected with an inline deletion error PASS');
   const company=await api('/api/v1/company/admin',{name:'Browser Team',ownerEmail:'browser-owner@example.com',domain:'team-ui.example'},headers);
   await command('Page.navigate',{url:'http://127.0.0.1:5174/team?manage=1'});await until(`!!document.querySelector('input[name=email]')`);
   await fill('Account email','browser-owner@example.com');await fill('Password','a secure browser test password');await click('Sign in');
