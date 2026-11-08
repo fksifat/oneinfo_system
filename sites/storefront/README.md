@@ -169,3 +169,15 @@ server and keeps it with the order receipt.
 For confirmation emails, set `RESEND_API_KEY` and `ORDER_EMAIL_FROM` on the API.
 Use a verified sender domain. Checkout shows whether an email was submitted
 to Resend after saving the order.
+
+### Customer-facing catalog copy
+
+`npm run catalog:copy` previews the benefit-focused wording for Essential and
+Signature in the database selected by `DATABASE_URL` (or the local `.env`).
+Review that target first, then run `npm run catalog:copy -- --apply` to save it.
+The command backs up both original product records under `.oneinfo/backups/`
+with private file permissions, locks the rows, and updates only subtitle,
+description and features, plus their version/timestamp and an audit entry.
+Prices, stock, variants, product identity and media are verified unchanged.
+It is safe to rerun; matching copy is left alone. Database errors roll back the
+whole update. This is an explicit content update and does not run on deployment.
