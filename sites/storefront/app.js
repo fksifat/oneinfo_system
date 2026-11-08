@@ -700,6 +700,9 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     $(".order-receipt-invoice").hidden = !lastReceipt.invoiceNumber;
     $(".order-receipt-invoice dd").textContent = lastReceipt.invoiceNumber ?? "";
     $(".order-receipt-activation").hidden = !lastReceipt.invoiceNumber;
+    $(".order-receipt-activation").textContent = lastReceipt.activationMethod === "ORDER_SECRET"
+      ? "Your package includes a private secret code for each card. Tap or scan your card, enter its code, then create an account or sign in and save your profile."
+      : "Keep your invoice number. After delivery, tap or scan your card to activate it with your order email.";
     const tracking = $(".order-receipt-tracking");
     const trackingPath = typeof lastReceipt.trackingPath === "string" && /^\/#track\/[a-zA-Z0-9_.-]+$/.test(lastReceipt.trackingPath) ? lastReceipt.trackingPath : "";
     tracking.hidden = !trackingPath;

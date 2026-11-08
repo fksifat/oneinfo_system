@@ -274,7 +274,7 @@ try {
       await evaluate(`document.querySelector('[name=paymentMethod][value=BKASH]').click();document.querySelector('#order-form').requestSubmit()`);await until(`location.hash==='#arisepay'&&!document.querySelector('#arisepay-form').hidden`);await inspect('storefront-payment-'+width);
       const [reservation]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.awaitingPayment,true));
       assert.ok(reservation,'Checkout must reserve stock before displaying payment instructions');
-      await set('#arisepay-transaction','UICHECK123456');await click('Submit payment for verification');await until(`!document.querySelector('.order-saved').hidden`);await inspect('storefront-order-receipt-'+width);console.log('Storefront coupon/bKash submission/order receipt PASS (test transaction, no payment sent)');
+      await set('#arisepay-transaction','UICHECK123456');await click('Submit payment for verification');await until(`!document.querySelector('.order-saved').hidden`);assert.ok(await evaluate(`document.querySelector('.order-receipt-activation').textContent.includes('private secret code')`));await inspect('storefront-order-receipt-'+width);console.log('Storefront coupon/bKash submission/order receipt PASS (test transaction, no payment sent)');
       const [finalized]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,reservation.id));
       assert.equal(finalized.awaitingPayment,false);
     }

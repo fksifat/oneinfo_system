@@ -299,7 +299,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               <span className="filter-label">QR allocation</span>
               <select name="qr">
                 <option value="">Any</option>
-                <option value="AWAITING_QR">Awaiting QR</option>
+                <option value="AWAITING_QR">No QR linked</option>
                 <option value="PARTIAL">Partially assigned</option>
                 <option value="ASSIGNED">Assigned</option>
               </select>
@@ -324,7 +324,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                 <div className="store-order-title-row">
                   <strong>{order.customer.name}</strong>
                   {order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && (
-                    <span className={`order-qr-pill ${order.qrAllocation?.status === "ASSIGNED" ? "is-assigned" : "is-pending"}`}>
+                    <span className={`order-qr-pill ${(order.activationMethod === "ORDER_SECRET" ? order.packedAt : order.qrAllocation?.status === "ASSIGNED") ? "is-assigned" : "is-pending"}`}>
                       <span className="order-qr-dot" aria-hidden="true"></span>
                       {order.activationMethod === "ORDER_SECRET" ? order.packedAt ? "Package confirmed" : "Awaiting package" : order.invoiceNumber ? needsPacking(order) ? "Awaiting packing" : "Cards packed" : order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.activationMethod === "ORDER_SECRET" && order.packedAt ? order.qrAllocation?.required ?? 0 : order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}
                     </span>
