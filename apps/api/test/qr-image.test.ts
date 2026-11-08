@@ -14,6 +14,7 @@ it.each([
   ...Array.from({ length: 12 }, (_, index) => `https://oneinfo.online/c/${createHash("sha256").update(`test${index}`).digest("base64url").slice(0, 12)}?source=qr`),
 ])("round dotted PNG with a centre badge decodes to its exact link: %s", value => {
   const data = productionQrImage(value);
+  expect(data.length).toBeLessThan(100 * 1024);
   const png = PNG.sync.read(Buffer.from(data.split(",")[1]!, "base64"));
   expect([png.width, png.height]).toEqual([512, 512]);
   expect(Array.from(png.data.subarray(0, 4))).toEqual([255, 255, 255, 255]);

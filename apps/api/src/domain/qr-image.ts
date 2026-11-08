@@ -59,5 +59,5 @@ export function productionQrImage(value: string): string {
       }
     }
   }
-  return `data:image/png;base64,${PNG.sync.write(image).toString("base64")}`;
+  return `data:image/png;base64,${PNG.sync.write(image, { filterType: 0, deflateLevel: 6, deflateStrategy: 0 }).toString("base64")}`;
 }
