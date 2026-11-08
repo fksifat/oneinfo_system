@@ -38,10 +38,11 @@ const expectedCards = new Map<string, { cardId: string; slug: string; expiresAt:
 export function forgetProductionCards(cardIds: string[]) {
   const ids = new Set(cardIds);
   for (const [station, target] of expectedCards) if (ids.has(target.cardId)) expectedCards.delete(station);
+  let changed = false;
   for (const entries of [sessions, verificationSessions, qrScans]) {
-    for (const [id, value] of entries) if (ids.has(value.cardId)) entries.delete(id);
+    for (const [id, value] of entries) if (ids.has(value.cardId)) { entries.delete(id); changed = true; }
   }
-  store.save();
+  if (changed) store.save();
 }
 
 function expectedCard(stationId: string) {
