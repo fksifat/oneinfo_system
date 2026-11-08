@@ -12,25 +12,25 @@
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
 
-  /* Unified Theme Palette (Tactile Architect) */
-  --ink: #112b2b;
-  --ink-2: #183b3a;
-  --ink-surface: #102d42;
-  --ink-hover: #183b3a;
-  --ink-deep: #0d2433;
-  --lime: #b9f56a;
-  --lime-soft: #d7f4dd;
-  --accent: #27849a;
-  --accent-hover: #1e6d80;
-  --interactive: #27849a;
-  --interactive-hover: #1e6d80;
-  --paper: #fbfaf5;
-  --cream: #f4f0e5;
+  /* Unified Theme Palette (Obsidian & Champagne Gold) */
+  --ink: #121316;
+  --ink-2: #1c1e24;
+  --ink-surface: #181a20;
+  --ink-hover: #1c1e24;
+  --ink-deep: #0c0d0f;
+  --lime: #c8a165;
+  --lime-soft: #f7f1e1;
+  --accent: #c8a165;
+  --accent-hover: #b38c50;
+  --interactive: #c8a165;
+  --interactive-hover: #b38c50;
+  --paper: #f9f8f5;
+  --cream: #f2eee5;
   --surface: #ffffff;
-  --surface-alt: #f4f0e5;
-  --muted: #64716d;
-  --line: rgba(17, 43, 43, 0.12);
-  --line-strong: rgba(17, 43, 43, 0.22);
+  --surface-alt: #f2eee5;
+  --muted: #6b675e;
+  --line: rgba(18, 19, 22, 0.10);
+  --line-strong: rgba(18, 19, 22, 0.18);
 
   /* Status Colors */
   --success: #50bb81;

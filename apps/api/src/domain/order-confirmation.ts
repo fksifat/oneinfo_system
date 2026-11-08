@@ -73,7 +73,7 @@ export async function sendPaymentVerifiedEmail(order: Pick<StoreOrder, "id" | "c
     subject: "Your Oneinfo bKash payment is verified",
     text: [`Hi ${order.customer.name}, ${intro}`, `Order ID: ${order.id}`, ...details].join("\n"),
     html: renderOneinfoEmail(order, "PAYMENT VERIFIED", "Payment verified.", intro,
-      `<div style="padding:14px;background:#d7f4dd;border-radius:10px">${details.map(escapeHtml).join("<br>")}</div>`),
+      `<div style="padding:14px;background:#f7f1e1;color:#121316;border-radius:10px">${details.map(escapeHtml).join("<br>")}</div>`),
     idempotencyKey: `oneinfo-payment-verified/${order.id}`,
   });
 }
@@ -94,7 +94,7 @@ function renderOrderEmail(order: StoreOrder, totals: ReadonlyArray<readonly [str
   <h2 style="margin:0;font-size:19px">Order summary</h2>
   <table aria-label="Order items" width="100%" cellspacing="0" cellpadding="0">${items}</table>
   <table aria-label="Order totals" width="100%" cellspacing="0" cellpadding="0" style="margin:12px 0 18px">${amounts}</table>
-  <div style="padding:14px;background:#d7f4dd;border-radius:10px">
+  <div style="padding:14px;background:#f7f1e1;color:#121316;border-radius:10px">
     <strong>${paymentMethod}</strong><br>
     ${paymentNotes.length ? paymentNotes.join("<br>") : "Pay the total when your order arrives."}
   </div>

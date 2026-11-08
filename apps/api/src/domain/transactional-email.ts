@@ -55,22 +55,22 @@ export async function sendTransactionalEmail({ to, subject, text, html, idempote
 export function renderOneinfoEmail(order: { id: string; customer: { name: string } }, status: string, title: string, intro: string, body: string) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeEmailHtml(title)}</title></head>
-<body style="margin:0;background:#f4f0e5;color:#112b2b;font:15px/1.5 Arial,Helvetica,sans-serif">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#f4f0e5">
+<body style="margin:0;background:#f9f8f5;color:#121316;font:15px/1.5 Arial,Helvetica,sans-serif">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#f9f8f5">
 <tr><td align="center" style="padding:24px 12px">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background:#ffffff;border:1px solid #dce5dc;border-radius:18px">
-<tr><td style="padding:26px 24px;background:#fbfaf5;border-bottom:1px solid #e2e8df">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:580px;background:#ffffff;border:1px solid #e2ddd3;border-radius:18px">
+<tr><td style="padding:26px 24px;background:#f9f8f5;border-bottom:1px solid #e2ddd3">
   <img src="cid:${logoCid}" alt="Oneinfo" width="128" height="39" style="display:block;border:0">
-  <p style="margin:22px 0 6px;color:#39554d;font-size:12px;font-weight:bold;letter-spacing:1px">${escapeEmailHtml(status)}</p>
+  <p style="margin:22px 0 6px;color:#c8a165;font-size:12px;font-weight:bold;letter-spacing:1px">${escapeEmailHtml(status)}</p>
   <h1 style="margin:0;font-size:30px;line-height:1.15">${escapeEmailHtml(title)}</h1>
   <p style="margin:12px 0 0">Hi ${escapeEmailHtml(order.customer.name)}, ${escapeEmailHtml(intro)}</p>
 </td></tr>
 <tr><td style="padding:24px">
-  <p style="margin:0 0 20px;color:#526460;font-size:13px;overflow-wrap:anywhere">Order ID<br><strong style="color:#112b2b">${escapeEmailHtml(order.id)}</strong></p>
+  <p style="margin:0 0 20px;color:#6b675e;font-size:13px;overflow-wrap:anywhere">Order ID<br><strong style="color:#121316">${escapeEmailHtml(order.id)}</strong></p>
   ${body}
 </td></tr>
-<tr><td style="padding:16px 24px;border-top:1px solid #e2e8df;color:#526460;font-size:13px">
-  Oneinfo · <a href="https://www.oneinfo.online" style="color:#112b2b">oneinfo.online</a>
+<tr><td style="padding:16px 24px;border-top:1px solid #e2ddd3;color:#6b675e;font-size:13px">
+  Oneinfo · <a href="https://www.oneinfo.online" style="color:#c8a165">oneinfo.online</a>
 </td></tr>
 </table></td></tr></table></body></html>`;
 }

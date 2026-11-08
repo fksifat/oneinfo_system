@@ -116,7 +116,7 @@ export function Products({ token }: { token: string }) {
 
         return (
           <article className="product-admin-card" key={p.id}>
-            <div className="catalog-card-visual" style={{ background: primary?.colorHex || "#102d42" }}>
+            <div className="catalog-card-visual" style={{ background: primary?.colorHex || "#121316" }}>
               <div className={`card-preview-mini ${isLight ? "is-light-card" : ""}`}>
                 <div className="card-mini-chip" aria-hidden="true"></div>
                 <div className="card-mini-brand">Oneinfo</div>
