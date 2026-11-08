@@ -90,4 +90,3 @@ export async function orderProfileClaimable(tx: Tx, cardId: string, orderProfile
     owner || !profile || profile.published) fail("This card or temporary profile is no longer available for activation.");
   return card;
 }
-
