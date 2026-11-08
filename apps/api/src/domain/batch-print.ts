@@ -23,24 +23,21 @@ export async function createProductionBatch(tx: Transaction, input: z.infer<type
     })
     .returning();
 
-  for (let index = 0; index < input.quantity; index += 1) {
-    const cardId = randomUUID();
+  const batchCards = Array.from({ length: input.quantity }, (_, index) => {
     const publicSlug = randomBytes(9).toString("base64url");
     const canonicalUrl = input.links?.[index] ?? `${config.PUBLIC_CARD_BASE_URL.replace(/\/$/, "")}/${publicSlug}?source=nfc`;
-    await tx.insert(cards).values({ id: cardId, batchId, publicSlug, canonicalUrl });
-    await tx.insert(productionJobs).values([
-      { batchId, cardId, type: "QR_GENERATION" },
-      { batchId, cardId, type: "NFC_ENCODING" },
-      { batchId, cardId, type: "QUALITY_CONTROL" },
-    ]);
-    await tx.insert(cardEvents).values({
-      cardId,
+    return { id: randomUUID(), batchId, publicSlug, canonicalUrl };
+  });
+  await tx.insert(cards).values(batchCards);
+  await tx.insert(productionJobs).values(batchCards.flatMap(card =>
+    (["QR_GENERATION", "NFC_ENCODING", "QUALITY_CONTROL"] as const).map(type => ({ batchId, cardId: card.id, type }))));
+  await tx.insert(cardEvents).values(batchCards.map((card, index) => ({
+      cardId: card.id,
       eventType: "CARD_CREATED",
       newState: "CREATED",
       actorId,
       metadata: { batchId, sequence: index + 1 },
-    });
-  }
+  })));
 
   await tx.insert(auditLogs).values({
     actorId,

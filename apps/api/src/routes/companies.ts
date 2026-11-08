@@ -1,3 +1,4 @@
+import { publicProfileAvailable } from "../domain/profile-visibility.js";
 import { adminPage } from "../domain/admin-page.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import { ensureProfileHandle } from "../domain/profile-handles.js";
@@ -260,11 +261,12 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     const input = parseBody(z.object({ domain }), request.params);
     const { profile: slug } = parseBody(z.object({ profile: z.string().max(64).optional() }), request.query);
     const [company] = await db.select({ id: companies.id, name: companies.name, logoUrl: companies.logoUrl, theme: companies.theme })
-      .from(companies).where(eq(companies.domain, input.domain));
+      .from(companies).innerJoin(customerAccounts, eq(companies.ownerAccountId, customerAccounts.id))
+      .where(and(eq(companies.domain, input.domain), eq(customerAccounts.active, true)));
     if (!company) fail("Company portal not found.", 404);
     const employees = await db.select(slug ? publicProfileFields : { id: customerProfiles.id, publicSlug: customerProfiles.publicSlug, displayName: customerProfiles.displayName, headline: customerProfiles.headline })
       .from(companyEmployees).innerJoin(customerProfiles, eq(companyEmployees.profileId, customerProfiles.id))
-      .where(and(eq(companyEmployees.companyId, company.id), eq(companyEmployees.active, true), eq(customerProfiles.published, true), slug ? eq(customerProfiles.publicSlug, slug) : undefined))
+      .where(and(eq(companyEmployees.companyId, company.id), eq(companyEmployees.active, true), publicProfileAvailable(), slug ? eq(customerProfiles.publicSlug, slug) : undefined))
       .orderBy(asc(customerProfiles.displayName)).limit(slug ? 1 : 500);
     if (slug && !employees[0]) fail("Employee profile not found.", 404);
     const links = slug && employees[0] ? await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url })

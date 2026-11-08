@@ -1,3 +1,4 @@
+import { lockPrintedStock } from "../domain/printed-stock.js";
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
@@ -46,6 +47,7 @@ export const cardRoutes: FastifyPluginAsync = async (app) => {
     const { cardId } = parseBody(z.object({ cardId: z.uuid() }), request.params);
     const { replacementSlug } = parseBody(z.object({ replacementSlug: z.string().trim().regex(/^[a-zA-Z0-9_-]{1,64}$/) }), request.body);
     return db.transaction(async tx => {
+      await lockPrintedStock(tx);
       const [candidate] = await tx.select({ id: cards.id }).from(cards).where(eq(cards.publicSlug, replacementSlug));
       const locked = candidate ? await tx.select().from(cards).where(inArray(cards.id, [cardId, candidate.id])).orderBy(asc(cards.id)).for("update") : [];
       const old = locked.find(card => card.id === cardId), next = locked.find(card => card.id === candidate?.id && card.id !== cardId);
@@ -59,12 +61,13 @@ export const cardRoutes: FastifyPluginAsync = async (app) => {
       const [issued] = await tx.select({ id: cardActivationSecrets.cardId }).from(cardActivationSecrets).where(and(eq(cardActivationSecrets.cardId, next.id)));
       if (!batch?.confirmed || allocated || issued) throw Object.assign(new Error("The replacement must be confirmed stock without an issued activation code or order allocation."), { statusCode: 409 });
       const now = new Date();
+      const lifecycleStatus = old.lifecycleStatus === "SUSPENDED" ? "SUSPENDED" : "ACTIVATED";
       await tx.update(cards).set({ lifecycleStatus: "REPLACED", updatedAt: now }).where(eq(cards.id, old.id));
       await tx.update(cards).set({ profileId: old.profileId, customerAccountId: old.customerAccountId, companyId: old.companyId, claimedAt: old.customerAccountId ? now : null,
-        lifecycleStatus: "ACTIVATED", inventoryStatus: "RESERVED", updatedAt: now }).where(eq(cards.id, next.id));
+        lifecycleStatus, inventoryStatus: "RESERVED", updatedAt: now }).where(eq(cards.id, next.id));
       await tx.insert(cardEvents).values([
         { cardId: old.id, actorId: actor.operatorId, eventType: "CARD_REPLACED", previousState: old.lifecycleStatus, newState: "REPLACED", metadata: { replacementSlug } },
-        { cardId: next.id, actorId: actor.operatorId, eventType: "REPLACEMENT_ACTIVATED", previousState: next.lifecycleStatus, newState: "ACTIVATED", metadata: { previousSlug: old.publicSlug } },
+        { cardId: next.id, actorId: actor.operatorId, eventType: lifecycleStatus === "SUSPENDED" ? "REPLACEMENT_SUSPENDED" : "REPLACEMENT_ACTIVATED", previousState: next.lifecycleStatus, newState: lifecycleStatus, metadata: { previousSlug: old.publicSlug } },
       ]);
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "CARD_REPLACED", targetType: "card", targetId: old.id,
         requestId: request.id, metadata: { replacementCardId: next.id } });
