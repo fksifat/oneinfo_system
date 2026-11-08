@@ -23,18 +23,20 @@ export function initializeHero3D(root) {
   function syncMotion() {
     viewer.autoRotate = ready && rotating && visible && !doc.hidden && !motion.matches;
     viewer.interpolationDecay = motion.matches ? 0 : 50;
-    toggle.textContent = rotating && !motion.matches ? "Pause rotation" : "Start rotation";
-    toggle.setAttribute("aria-pressed", String(rotating && !motion.matches));
-    toggle.disabled = !ready || motion.matches;
-    flip.disabled = !ready;
+    if (toggle) {
+      toggle.textContent = rotating && !motion.matches ? "Pause rotation" : "Start rotation";
+      toggle.setAttribute("aria-pressed", String(rotating && !motion.matches));
+      toggle.disabled = !ready || motion.matches;
+    }
+    if (flip) flip.disabled = !ready;
   }
   function stopRotation() { rotating = false; syncMotion(); }
   function showError() {
     ready = false;
     root.dataset.modelState = "error";
-    fallback.hidden = false;
+    if (fallback) fallback.hidden = false;
     viewer.src = "";
-    status.textContent = "Showing a still preview. Choose a finish to try the 3D view again.";
+    if (status) status.textContent = "Showing a still preview. Choose a finish to try the 3D view again.";
     syncMotion();
   }
   function setVariant(name) {
@@ -44,41 +46,41 @@ export function initializeHero3D(root) {
     if (!viewer.src?.endsWith(src) || root.dataset.modelState === "error") {
       ready = false;
       root.dataset.modelState = "loading";
-      status.textContent = "Preparing your card preview…";
-      fallback.hidden = true;
+      if (status) status.textContent = "Preparing your card preview…";
+      if (fallback) fallback.hidden = true;
       viewer.src = src;
     }
     root.dataset.heroActive = name;
-    title.textContent = config.title;
-    description.textContent = config.description;
+    if (title) title.textContent = config.title;
+    if (description) description.textContent = config.description;
     viewer.alt = `Oneinfo ${config.title} business card. Drag to explore the front and back.`;
-    for (const image of [poster, fallback]) {
+    for (const image of [poster, fallback].filter(Boolean)) {
       image.src = `/assets/cards-final/${config.poster}`;
       image.alt = `Oneinfo ${config.title} card`;
     }
     for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.cardVariant === name));
     flipped = false;
-    flip.setAttribute("aria-label", "Show back of card");
+    if (flip) flip.setAttribute("aria-label", "Show back of card");
     viewer.resetTurntableRotation?.();
     viewer.cameraOrbit = "25deg 75deg 105%";
     syncMotion();
   }
   for (const button of buttons) button.addEventListener("click", () => setVariant(button.dataset.cardVariant));
-  flip.addEventListener("click", () => {
+  flip?.addEventListener("click", () => {
     stopRotation();
     viewer.resetTurntableRotation?.();
     flipped = !flipped;
     viewer.cameraOrbit = flipped ? "205deg 75deg 105%" : "25deg 75deg 105%";
     flip.setAttribute("aria-label", flipped ? "Show front of card" : "Show back of card");
   });
-  toggle.addEventListener("click", () => { rotating = !rotating; syncMotion(); });
+  toggle?.addEventListener("click", () => { rotating = !rotating; syncMotion(); });
   viewer.addEventListener("pointerdown", stopRotation);
   viewer.addEventListener("keydown", stopRotation);
   viewer.addEventListener("load", () => {
     ready = true;
     root.dataset.modelState = "ready";
-    fallback.hidden = true;
-    status.textContent = "Drag to explore, or use the turn button to see the other side.";
+    if (fallback) fallback.hidden = true;
+    if (status) status.textContent = "";
     syncMotion();
   });
   viewer.addEventListener("error", showError);
