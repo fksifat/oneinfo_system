@@ -7,8 +7,9 @@ import { ActivateCardSchema, ClaimCardSchema, CustomerLoginSchema, CustomerProfi
   profileModes, ProfileModesSchema, profileSources, ShareContactSchema } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerContactLeads, customerProfiles, orderCardAllocations, profileActivity, profileLinks, storeOrders } from "../db/schema.js";
-import { codeHash, hashPassword, issueClaimToken, issueCustomerToken, issueInvoiceClaimToken, matchesCode, readClaimToken, requireCustomer, verifyPassword } from "../domain/customer-auth.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cardEvents, cards, companies, companyEmployees, customerAccounts, customerContactLeads, customerProfiles, orderCardAllocations, orderActivationProfiles, profileActivity, profileLinks, storeOrders } from "../db/schema.js";
+import { codeHash, hashPassword, issueClaimToken, issueOrderProfileClaimToken, issueCustomerToken, issueInvoiceClaimToken, matchesCode, readClaimToken, requireCustomer, verifyPassword } from "../domain/customer-auth.js";
+import { readyCard, orderProfileClaimable, orderSecretHash, pendingOrderProfile } from "../domain/order-activation.js";
 import { deliveredInvoice, invoiceActivationTarget, invoicePattern } from "../domain/order-invoice.js";
 import { escapeEmailHtml, sendTransactionalEmail, transactionalEmailEnabled } from "../domain/transactional-email.js";
 import { isManagedCardUrl } from "../domain/card-urls.js";
@@ -24,7 +25,7 @@ type ProfileInput = z.infer<typeof profileUpdateSchema>;
 function fail(message: string, statusCode = 409): never { throw Object.assign(new Error(message), { statusCode }); }
 const dummyPassword = hashPassword(randomBytes(32).toString("hex"));
 const cardSlugSchema = z.object({ cardSlug: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/) });
-const contactOwner = or(and(eq(cards.customerAccountId, customerAccounts.id), eq(cards.profileId, customerAccounts.profileId)), eq(companies.ownerAccountId, customerAccounts.id));
+const contactOwner = or(eq(cards.customerAccountId, customerAccounts.id), eq(companies.ownerAccountId, customerAccounts.id));
 
 function liveRecipient(tx: Transaction, cardSlug: string) {
   return tx.select({ accountId: customerAccounts.id, profileId: customerProfiles.id, mode: customerProfiles.profileMode,
@@ -48,20 +49,6 @@ async function recordActivity(tx: Transaction, recipient: Awaited<ReturnType<typ
   });
 }
 
-async function readyCard(tx: Transaction, cardId: string) {
-  const [card] = await tx.select().from(cards).where(eq(cards.id, cardId)).for("update");
-  if (!card) fail("Card not found", 404);
-  const [batch] = await tx.select().from(cardBatches).where(eq(cardBatches.id, card.batchId));
-  if (card.customerAccountId || card.companyId || !batch?.printConfirmedAt || card.qcStatus !== "PASSED" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) {
-    fail("This card is already claimed or is not ready for activation.");
-  }
-  if (card.profileId) {
-    const [profile] = await tx.select().from(customerProfiles).where(eq(customerProfiles.id, card.profileId));
-    if (profile?.published) fail("This card already has a published owner profile.");
-  }
-  return card;
-}
-
 async function invoiceOrderId(tx: Transaction, cardId: string) {
   const [row] = await tx.select({ id: storeOrders.id }).from(orderCardAllocations)
     .innerJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId))
@@ -70,6 +57,7 @@ async function invoiceOrderId(tx: Transaction, cardId: string) {
 }
 
 async function claimable(tx: Transaction, token: Awaited<ReturnType<typeof readClaimToken>>, email: string) {
+  if (token.orderProfileId) return orderProfileClaimable(tx, token.cardId, token.orderProfileId);
   if (token.orderId) {
     const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, token.orderId)).for("update");
     if (!order || !deliveredInvoice(order) || await invoiceOrderId(tx, token.cardId) !== order.id) {
@@ -97,14 +85,22 @@ async function saveProfile(tx: Transaction, profileId: string, input: ProfileInp
   if (links.length) await tx.insert(profileLinks).values(links.map(link => ({ ...link, profileId })));
 }
 
-async function finishClaim(tx: Transaction, card: typeof cards.$inferSelect, account: typeof customerAccounts.$inferSelect, requestId: string) {
-  await tx.update(cards).set({ customerAccountId: account.id, profileId: account.profileId, claimedAt: new Date(),
-    lifecycleStatus: "ACTIVATED", inventoryStatus: card.inventoryStatus === "DISPATCHED" ? "DISPATCHED" : "RESERVED", updatedAt: new Date() }).where(eq(cards.id, card.id));
+async function finishClaim(tx: Transaction, card: typeof cards.$inferSelect, account: typeof customerAccounts.$inferSelect, requestId: string,
+  profileId = account.profileId, orderProfileId?: string) {
+  let inventoryStatus: "RESERVED" | "DISPATCHED" = card.inventoryStatus === "DISPATCHED" ? "DISPATCHED" : "RESERVED";
+  if (orderProfileId) {
+    const entry = await pendingOrderProfile(tx, orderProfileId);
+    if (entry.order.shippedAt || entry.order.deliveredAt) inventoryStatus = "DISPATCHED";
+    await tx.insert(orderCardAllocations).values({ orderId: entry.order.id, cardId: card.id, lineIndex: entry.slot.lineIndex, unitIndex: entry.slot.unitIndex });
+    await tx.update(orderActivationProfiles).set({ cardId: card.id, redeemedAt: new Date(), encryptedCode: null }).where(eq(orderActivationProfiles.id, orderProfileId));
+  }
+  await tx.update(cards).set({ customerAccountId: account.id, profileId, claimedAt: new Date(),
+    lifecycleStatus: "ACTIVATED", inventoryStatus, updatedAt: new Date() }).where(eq(cards.id, card.id));
   await tx.update(cardActivationSecrets).set({ codeHash: null, redeemedAt: new Date() }).where(eq(cardActivationSecrets.cardId, card.id));
   await tx.insert(cardEvents).values({ cardId: card.id, actorId: account.id, eventType: "CUSTOMER_CARD_CLAIMED", previousState: card.lifecycleStatus,
-    newState: "ACTIVATED", metadata: { customerAccountId: account.id, profileId: account.profileId, previousProfileId: card.profileId } });
+    newState: "ACTIVATED", metadata: { customerAccountId: account.id, profileId, previousProfileId: card.profileId } });
   await tx.insert(auditLogs).values({ actorId: account.id, action: "CUSTOMER_CARD_CLAIMED", targetType: "card", targetId: card.id, requestId,
-    metadata: { customerAccountId: account.id, profileId: account.profileId } });
+    metadata: { customerAccountId: account.id, profileId } });
 }
 
 export const customerRoutes: FastifyPluginAsync = async app => {
@@ -157,8 +153,10 @@ export const customerRoutes: FastifyPluginAsync = async app => {
         return { status: "PROFILE", profile, links, canShareContact: row.ownerActive === true, crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL) };
       }
     }
+    const [allocated] = await db.select({ orderId: storeOrders.id }).from(orderCardAllocations)
+      .innerJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId)).where(eq(orderCardAllocations.cardId, card.id));
     return { status: card.customerAccountId || card.companyId ? "UNAVAILABLE" : "ACTIVATION_REQUIRED",
-      publicSlug: card.publicSlug, activationMethod: row.legacyCode ? "SECRET" : "INVOICE" };
+      publicSlug: card.publicSlug, activationMethod: row.legacyCode || !allocated ? "SECRET" : "INVOICE" };
   });
 
   app.post("/cards/:cardSlug/contact-leads", { bodyLimit: 8192 }, async (request, reply) => {
@@ -204,7 +202,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
       .innerJoin(companies, eq(companyEmployees.companyId, companies.id))
       .where(and(eq(companies.id, companyId ?? ""), eq(companies.ownerAccountId, account.id)));
     const items = await db.select({ mode, campaign, source, event, total: sql<number>`sum(${total})::int` }).from(profileActivity)
-      .where(and(companyId ? inArray(profileId, teamProfiles) : eq(profileId, account.profileId), gte(day, earliest))).groupBy(mode, campaign, source, event)
+      .where(and(companyId ? inArray(profileId, teamProfiles) : or(eq(profileId, account.profileId), inArray(profileId, db.select({ id: cards.profileId }).from(cards).where(eq(cards.customerAccountId, account.id)))), gte(day, earliest))).groupBy(mode, campaign, source, event)
       .orderBy(desc(sql`sum(${total})`)).limit(500);
     return { items: items.map(row => ({ ...row, label: row.event.startsWith("LINK:") ? row.event.slice(5) : null })) };
   });
@@ -288,6 +286,12 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const [card] = await db.select().from(cards).where(eq(cards.publicSlug, cardSlug)).limit(1);
     if (!card) fail("Invalid secret code or card unavailable.", 403);
     const token = await db.transaction(async tx => {
+      await lockPrintedStock(tx);
+      const [slot] = await tx.select().from(orderActivationProfiles).where(eq(orderActivationProfiles.codeHash, orderSecretHash(secretCode)));
+      if (slot) {
+        await orderProfileClaimable(tx, card.id, slot.id);
+        return issueOrderProfileClaimToken(card.id, slot.id);
+      }
       await readyCard(tx, card.id);
       if (await invoiceOrderId(tx, card.id)) fail("This card requires invoice activation.", 403);
       const [secret] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
@@ -304,16 +308,19 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const claim = await readClaimToken(input.claimToken);
     const passwordHash = await hashPassword(input.password);
     const account = await db.transaction(async tx => {
+      await lockPrintedStock(tx);
       const card = await claimable(tx, claim, input.email);
       const { links: _, ...fields } = input.profile;
-      const [profile] = await tx.insert(customerProfiles).values({ ...fields, publicSlug: `client-${randomBytes(9).toString("hex")}`, published: false }).returning();
-      await ensureProfileHandle(tx, profile!.id, profile!.displayName);
-      const [created] = await tx.insert(customerAccounts).values({ email: input.email, passwordHash, profileId: profile!.id,
+      const profileId = claim.orderProfileId
+        ? (await pendingOrderProfile(tx, claim.orderProfileId)).slot.profileId
+        : (await tx.insert(customerProfiles).values({ ...fields, publicSlug: `client-${randomBytes(9).toString("hex")}`, published: false }).returning())[0]!.id;
+      await ensureProfileHandle(tx, profileId, input.profile.displayName);
+      const [created] = await tx.insert(customerAccounts).values({ email: input.email, passwordHash, profileId,
         ...(claim.orderId ? { emailVerifiedAt: new Date() } : {}) })
         .onConflictDoNothing({ target: customerAccounts.email }).returning();
       if (!created) fail("This email already has an account. Sign in instead.");
       await saveProfile(tx, created.profileId, input.profile);
-      await finishClaim(tx, card, created, request.id);
+      await finishClaim(tx, card, created, request.id, profileId, claim.orderProfileId);
       return created;
     });
     reply.header("Cache-Control", "no-store");
@@ -330,11 +337,20 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     return { accessToken: await issueCustomerToken(account.id, account.authVersion), email: account.email };
   });
 
+  async function ownedProfile(request: FastifyRequest, account: typeof customerAccounts.$inferSelect) {
+    const { cardSlug } = parseBody(z.object({ cardSlug: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/).optional() }), request.query);
+    if (!cardSlug) return account.profileId;
+    const [card] = await db.select().from(cards).where(and(eq(cards.publicSlug, cardSlug), eq(cards.customerAccountId, account.id)));
+    if (!card?.profileId) fail("Your account does not own this card.", 403);
+    return card.profileId;
+  }
+
   app.get("/me", async (request, reply) => {
     const account = await requireCustomer(request);
     reply.header("Cache-Control", "no-store");
-    const [profile] = await db.select(publicProfileFields).from(customerProfiles).where(eq(customerProfiles.id, account.profileId));
-    const links = await db.select().from(profileLinks).where(eq(profileLinks.profileId, account.profileId)).orderBy(asc(profileLinks.sortOrder));
+    const profileId = await ownedProfile(request, account);
+    const [profile] = await db.select(publicProfileFields).from(customerProfiles).where(eq(customerProfiles.id, profileId));
+    const links = await db.select().from(profileLinks).where(eq(profileLinks.profileId, profileId)).orderBy(asc(profileLinks.sortOrder));
     const owned = await db.select({ id: cards.id, publicSlug: cards.publicSlug, canonicalUrl: cards.canonicalUrl }).from(cards).where(eq(cards.customerAccountId, account.id));
     return { email: account.email, emailVerified: Boolean(account.emailVerifiedAt), profile: { ...profile, links }, cards: owned };
   });
@@ -342,9 +358,10 @@ export const customerRoutes: FastifyPluginAsync = async app => {
   app.patch("/me/profile", async request => {
     const account = await requireCustomer(request);
     const profile = parseBody(profileUpdateSchema, request.body);
+    const profileId = await ownedProfile(request, account);
     await db.transaction(async tx => {
-      await saveProfile(tx, account.profileId, profile);
-      await tx.insert(auditLogs).values({ actorId: account.id, action: "CUSTOMER_PROFILE_UPDATED", targetType: "customer_profile", targetId: account.profileId, requestId: request.id });
+      await saveProfile(tx, profileId, profile);
+      await tx.insert(auditLogs).values({ actorId: account.id, action: "CUSTOMER_PROFILE_UPDATED", targetType: "customer_profile", targetId: profileId, requestId: request.id });
     });
     return { saved: true };
   });
@@ -354,10 +371,13 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     const input = parseBody(ClaimCardSchema.extend({ profile: profileUpdateSchema }), request.body);
     const token = await readClaimToken(input.claimToken);
     await db.transaction(async tx => {
+      await lockPrintedStock(tx);
       const card = await claimable(tx, token, account.email);
       if (token.orderId && !account.emailVerifiedAt) await tx.update(customerAccounts).set({ emailVerifiedAt: new Date() }).where(eq(customerAccounts.id, account.id));
-      await saveProfile(tx, account.profileId, input.profile);
-      await finishClaim(tx, card, account, request.id);
+      const profileId = token.orderProfileId ? (await pendingOrderProfile(tx, token.orderProfileId)).slot.profileId : account.profileId;
+      await ensureProfileHandle(tx, profileId, input.profile.displayName);
+      await saveProfile(tx, profileId, input.profile);
+      await finishClaim(tx, card, account, request.id, profileId, token.orderProfileId);
     });
     return { claimed: true };
   });

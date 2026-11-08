@@ -331,14 +331,14 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const isDelivered = Boolean(order.deliveredAt) || order.status === "DELIVERED";
     const isCancelled = order.status === "CANCELLED";
     const isConfirmed = order.status !== "AWAITING_PAYMENT" && !isCancelled;
-    const qrReady = isConfirmed && (cards.qrGenerated >= total || (!order.invoiceNumber && pastProcessing));
-    const qcReady = isConfirmed && (cards.qcPassed >= total || pastShipped);
+    const qrReady = isConfirmed && (order.activationMethod === "ORDER_SECRET" ? Boolean(order.packedAt) : (cards.qrGenerated >= total || (!order.invoiceNumber && pastProcessing)));
+    const qcReady = isConfirmed && (order.activationMethod === "ORDER_SECRET" ? Boolean(order.packedAt) : cards.qcPassed >= total || pastShipped);
     const fmt = date => date ? escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })) : "";
     const stages = [
       ["Received", "Order placed", isConfirmed, fmt(order.createdAt) || "Awaiting order", order.paymentVerifiedAt ? "Payment verified" : "Order confirmed"],
-      [order.invoiceNumber ? "Cards packed" : "Card prepared", order.invoiceNumber ? "Ready for you" : "Your card is taking shape", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "cards prepared"}`, order.invoiceNumber ? "Prepared for your order" : "Prepared for your profile"],
+      [order.invoiceNumber ? "Cards packed" : "Card prepared", order.invoiceNumber ? "Ready for you" : "Your card is taking shape", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "cards prepared"}`, order.activationMethod === "ORDER_SECRET" ? "Linked to your profile when you activate" : order.invoiceNumber ? "Prepared for your order" : "Prepared for your profile"],
       ["Quality checked", "Checked before dispatch", qcReady, `${qcReady ? total : cards.qcPassed}/${total} cards checked`, "Sharing and card quality reviewed"],
-      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Getting ready to ship", order.invoiceNumber ? "Activate by invoice after delivery" : "Packed with setup instructions"],
+      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Getting ready to ship", order.activationMethod === "ORDER_SECRET" ? "Secret code included per card" : order.invoiceNumber ? "Activate by invoice after delivery" : "Packed with setup instructions"],
       ["Shipped", "Handed to courier", pastShipped, fmt(order.shippedAt) || "Courier handoff", order.courierTrackingId ? `ID: ${escapeHtml(order.courierTrackingId)}` : "Nationwide delivery"],
       ["Delivered", "In client’s hands", isDelivered, fmt(order.deliveredAt) || "Final handoff", isDelivered ? "Ready to tap & activate" : "Reaching your address"],
     ];
@@ -702,6 +702,9 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     $(".order-receipt-invoice").hidden = !lastReceipt.invoiceNumber;
     $(".order-receipt-invoice dd").textContent = lastReceipt.invoiceNumber ?? "";
     $(".order-receipt-activation").hidden = !lastReceipt.invoiceNumber;
+    $(".order-receipt-activation").textContent = lastReceipt.activationMethod === "ORDER_SECRET"
+      ? "Your package includes a private secret code for each card. Tap or scan your card, enter its code, then create an account or sign in and save your profile."
+      : "Keep your invoice number. After delivery, tap or scan your card to activate it with your order email.";
     const tracking = $(".order-receipt-tracking");
     const trackingPath = typeof lastReceipt.trackingPath === "string" && /^\/#track\/[a-zA-Z0-9_.-]+$/.test(lastReceipt.trackingPath) ? lastReceipt.trackingPath : "";
     tracking.hidden = !trackingPath;

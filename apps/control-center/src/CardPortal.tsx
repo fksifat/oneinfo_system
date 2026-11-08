@@ -108,7 +108,7 @@ export function CardPortal({ slug }: { slug: string }) {
   }
   function remember(accessToken: string) { sessionStorage.setItem("oneinfo.customer.token", accessToken); setToken(accessToken); setPassword(""); }
   async function loadOwner(accessToken: string) {
-    const owner = await customerApi<{ email: string; profile: Draft; cards: { publicSlug: string }[] }>("/me", "GET", undefined, accessToken);
+    const owner = await customerApi<{ email: string; profile: Draft; cards: { publicSlug: string }[] }>(claimToken ? "/me" : `/me?cardSlug=${encodeURIComponent(slug)}`, "GET", undefined, accessToken);
     if (!claimToken && !owner.cards.some(card => card.publicSlug === slug)) throw new Error("Your account does not own this card. Start activation to claim an unactivated card.");
     setEmail(owner.email); setProfile({ ...emptyProfile, ...owner.profile }); navigate("details");
   }
@@ -141,7 +141,7 @@ export function CardPortal({ slug }: { slug: string }) {
       const result = await customerApi<{ accessToken: string }>("/signup", "POST", { email, password, claimToken, profile: parsed.data });
       remember(result.accessToken);
     } else if (claimToken) await customerApi("/claim", "POST", { claimToken, profile: parsed.data }, token);
-    else await customerApi("/me/profile", "PATCH", parsed.data, token);
+    else await customerApi(`/me/profile?cardSlug=${encodeURIComponent(slug)}`, "PATCH", parsed.data, token);
     clearClaim(); navigate("public"); await refresh();
   }); };
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setProfile(previous => ({ ...previous, [key]: value }));
@@ -177,7 +177,7 @@ export function CardPortal({ slug }: { slug: string }) {
           <button disabled={busy}>{busy ? "Checking…" : "Activate & continue"}</button></form>}
         {activationMessage && <p role="status">{activationMessage}</p>}
       </> : <>
-        <h1>Sign in</h1><p>{claimToken ? "Sign in to link this card to your existing profile." : "Sign in to manage your card and public details."}</p>
+        <h1>Sign in</h1><p>{claimToken ? "Sign in to set up this card under your existing account." : "Sign in to manage your card and public details."}</p>
         <form onSubmit={login}><label>Account email<input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} /></label>
           <label>Password<input type="password" autoComplete="current-password" required maxLength={128} value={password} onChange={event => setPassword(event.target.value)} /></label><button disabled={busy}>Sign in</button></form><a href="/team#recover">Forgot password?</a>
         {claimToken && <button className="quiet" disabled={busy} onClick={() => navigate("signup")}>Create a new account</button>}

@@ -48,7 +48,7 @@ const queue = sql`with work as (
     select (select coalesce(sum((item->>'quantity')::int),0)::int from jsonb_array_elements(o.items) item)
       - (select count(*)::int from ${orderCardAllocations} a where a.order_id = o.id) as units
   ) missing
-  where o.cancelled_at is null and o.shipped_at is null and o.delivered_at is null and not o.awaiting_payment and missing.units > 0
+  where o.cancelled_at is null and o.shipped_at is null and o.delivered_at is null and not o.awaiting_payment and missing.units > 0 and (o.activation_method <> 'ORDER_SECRET' or o.packed_at is null)
 )`;
 
 export async function attentionCounts() {

@@ -438,6 +438,8 @@ export const storeCoupons = pgTable("store_coupons", {
 
 export const storeOrders = pgTable("store_orders", {
   id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  activationMethod: text("activation_method").$type<"LEGACY" | "ORDER_SECRET">().notNull().default("LEGACY"),
+  packedAt: timestamp("packed_at", { withTimezone: true }),
   invoiceNumber: varchar("invoice_number", { length: 15 }),
   profileId: uuid("profile_id").references(() => customerProfiles.id, { onDelete: "set null" }),
   requestId: uuid("request_id").notNull(),
@@ -509,3 +511,19 @@ export const orderCardAllocations = pgTable("order_card_allocations", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [uniqueIndex("order_card_allocations_card_unique").on(table.cardId),
   uniqueIndex("order_card_allocations_unit_unique").on(table.orderId, table.lineIndex, table.unitIndex)]);
+
+export const orderActivationProfiles = pgTable("order_activation_profiles", {
+  id: uuid("id").primaryKey().$defaultFn(randomUUID),
+  orderId: uuid("order_id").notNull().references(() => storeOrders.id, { onDelete: "restrict" }),
+  profileId: uuid("profile_id").notNull().references(() => customerProfiles.id, { onDelete: "restrict" }),
+  lineIndex: integer("line_index").notNull(),
+  unitIndex: integer("unit_index").notNull(),
+  codeHash: varchar("code_hash", { length: 64 }).notNull(),
+  encryptedCode: text("encrypted_code"),
+  cardId: uuid("card_id").references(() => cards.id, { onDelete: "restrict" }),
+  redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex("order_activation_profiles_unit_unique").on(table.orderId, table.lineIndex, table.unitIndex),
+  uniqueIndex("order_activation_profiles_profile_unique").on(table.profileId),
+  uniqueIndex("order_activation_profiles_code_unique").on(table.codeHash),
+  uniqueIndex("order_activation_profiles_card_unique").on(table.cardId)]);

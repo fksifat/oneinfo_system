@@ -18,6 +18,7 @@ import {
   customerProfiles,
   nfcEncodingAttempts,
   orderCardAllocations,
+  orderActivationProfiles,
   productionJobs,
   productionStations,
   products,
@@ -98,13 +99,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/activation-follow-up", async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const { page } = adminPage(request.query);
-    const rows = await db.select({ cardId: cards.id, publicSlug: cards.publicSlug, orderId: storeOrders.id,
-      customer: sql<string>`${storeOrders.customer}->>'name'`, deliveredAt: storeOrders.deliveredAt })
-      .from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
-      .innerJoin(storeOrders, eq(storeOrders.id, orderCardAllocations.orderId))
-      .where(and(isNotNull(storeOrders.deliveredAt), sql`${cards.profileId} is null and ${cards.customerAccountId} is null
-        and ${cards.companyId} is null and ${cards.lifecycleStatus} not in ('SUSPENDED','RETIRED')`))
-      .orderBy(desc(storeOrders.deliveredAt), desc(cards.id)).limit(51).offset((page - 1) * 50);
+    const result = await db.execute<{ cardId: string | null; profileId: string | null; publicSlug: string | null; orderId: string; customer: string; deliveredAt: string }>(sql`
+      select * from (
+        select c.id as "cardId", null::uuid as "profileId", c.public_slug as "publicSlug", o.id as "orderId",
+          o.customer->>'name' as customer, o.delivered_at as "deliveredAt"
+        from ${orderCardAllocations} a join ${cards} c on c.id = a.card_id join ${storeOrders} o on o.id = a.order_id
+        where o.delivered_at is not null and o.cancelled_at is null and c.profile_id is null and c.customer_account_id is null
+          and c.company_id is null and c.lifecycle_status not in ('SUSPENDED','RETIRED')
+        union all
+        select null::uuid, p.profile_id, null::varchar, o.id, o.customer->>'name', o.delivered_at
+        from ${orderActivationProfiles} p join ${storeOrders} o on o.id = p.order_id
+        where o.delivered_at is not null and o.cancelled_at is null and p.redeemed_at is null
+      ) pending order by "deliveredAt" desc, coalesce("cardId", "profileId") desc limit 51 offset ${(page - 1) * 50}`);
+    const rows = result.rows;
     return { items: rows.slice(0, 50), hasMore: rows.length > 50 };
   });
 

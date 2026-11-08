@@ -246,13 +246,18 @@ compose.yaml                Local PostgreSQL service
 
 ## Client activation, signup and public card profiles
 
-New storefront orders get a Dhaka-date invoice such as `20261108-K7T9MX`. Checkout reserves catalog quantities. Physical cards stay in shared stock until packing.
+New storefront orders keep their invoice number, but use **order secret activation** (`ORDER_SECRET`) rather than preassigning a physical QR.
 
-1. Prepare stock in batches. Confirm printing, write NFC and pass phone QC. Keep physical finishes separated, especially for generic batches that have no variant ID.
-2. In Admin → **Orders** → **Pack from ready stock**, verify any required advance and scan the actual cards going into the package, one per ordered unit. Confirm the pack before shipping. To replace a card before shipping, use **Repack cards** and rescan the final contents.
-3. After delivery, the customer scans or taps each card, enters the invoice number from their receipt and opens the verification link sent to the order email. The link is card-specific and expires after 15 minutes. The customer creates an account or signs in using the order email, then saves their profile. One invoice can activate each card packed for that order once.
+1. Checkout creates one unpublished temporary profile and one private, single-use code for every ordered card. Three cards create three profiles and three codes. Payment reservation retries reuse the same profiles/codes. Order phone/email remain private and are not copied into public contact fields.
+2. Prepare generic stock in Production Console: generate QR, confirm printing, write NFC, and pass final phone QC. In Admin → **Orders** → **Pack cards & activation codes**, verify payment, select **Show secret codes**, and **Print activation slips**. Pick the correct quantity/finish and include a different slip with each card; select **Confirm package** before shipping. No QR is selected or reserved for this order during packing.
+3. The client scans any unused, print-confirmed, NFC-written, QC-passed Oneinfo card and enters its supplied order code. They create an account, or sign in, and save public details. That exact temporary profile becomes permanent and the scanned physical card is attached to it in one transaction. Codes are consumed only when setup succeeds; abandoning the signup page does not consume a code.
+4. Later scans display that card's saved profile. One account can activate multiple cards, each keeping its own profile; **Manage this card** edits only the scanned card's profile. Used codes cannot activate another card. Cancelled/unpaid orders and reserved/already-owned cards cannot use this flow.
 
-Apply migration `0018_order_invoices` before deploying the API and frontend. Invoice activation uses the configured transactional email provider and `STOREFRONT_URL`. Existing orders and separately issued cards continue to use their legacy secret-code flow below.
+Apply migration `0020_order_activation_profiles` before starting the new API/frontend. Existing orders retain their original workflow: invoice orders still pack specific cards and activate through an email sent to the order address; legacy stock orders retain automatic allocation. Existing issued codes, profiles, card links and ownership are not migrated or reset.
+
+New order codes use random 80-bit values, a lookup hash and an AES-256-GCM encrypted copy so authorized administrators can reprint unused slips. The encrypted copy is removed upon activation or cancellation. Keep `JWT_SECRET` stable and backed up: it also derives the code-encryption key; changing it makes existing unused slips unavailable for reprinting. Codes never appear in public receipts/tracking or audit metadata. In this flow, activation codes are bearer credentials: a client must keep their slip private. Physical QR inventory stays unassigned until activation, so QR inventory cannot identify dispatched-but-unactivated cards; deleting such stock invalidates its physical links.
+
+Separately issued, card-bound codes continue to work:
 
 1. Generate a normal Oneinfo QR batch, print/confirm it, write the same link to NFC, and finish phone QC.
 2. In Admin → **Cards & inventory**, use **Generate secret code** on a QC-passed card. Copy the code or select **Print private slip** and give that slip to the client with their card. Code generation requires an administrator or inventory manager. The plaintext code is shown once and is never stored; if it is lost, **Replace secret code** invalidates the previous code and unfinished signup grants.
@@ -273,7 +278,7 @@ Company workspace CSV imports queue a welcome email for each new employee using 
 
 ## Production work still required
 
-Printed QR stock and orders: in Production Console, generate and print a full batch, then tick the printing-complete checkbox and select **Confirm printed batch**. Only confirmed batches appear in Admin stock. Each ordered unit receives one unique managed Oneinfo QR, reserved automatically from the shared QR pool. An order with insufficient stock stays **Awaiting QR** (or partially assigned); confirming another batch fills pending quantities in order of receipt. Admin Orders shows assigned links and refreshes every five seconds. Allocation reserves a physical card without creating a client profile or publishing order contact data. Client ownership is established by secret-code signup, as described above. Assignment does not bypass NFC encoding or final phone QC. Production batches currently track generic QR stock, so allocation does not match catalog finishes/materials.
+Printed QR stock and orders: only print-confirmed batches appear in Admin stock. New orders create temporary profiles and codes, and attach a QR only when the client activates a card, as described above. NFC writing and final phone QC remain required. Older non-invoice orders still use their previous FIFO allocation and **Awaiting QR** status. Production batches currently track generic QR stock; operators must check the physical finish/material while packing.
 
 Run `npm run test:printed-stock` for database-backed workflow checks. It creates, migrates and drops a disposable test database using the configured PostgreSQL server, with outbound confirmation emails mocked. The configured database is not populated or cleared by these tests.
 
