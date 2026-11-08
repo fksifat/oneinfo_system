@@ -10,7 +10,8 @@ import {
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardActivationSecrets, cardBatches, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings } from "../db/schema.js";
+import { auditLogs, cardActivationSecrets, cardBatches, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings, orderActivationProfiles } from "../db/schema.js";
+import { createOrderProfiles, orderProfileCodes } from "../domain/order-activation.js";
 import { registerOrderPrint } from "./order-print.js";
 import { nextInvoiceNumber } from "../domain/order-invoice.js";
 import { assertInvoicePacked, packInvoiceOrder, packedCards } from "../domain/order-packing.js";
@@ -32,9 +33,9 @@ async function readCheckoutSettings(client: Pick<typeof db, "select"> = db) {
 }
 
 function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
-  const { id, shippingZone, subtotalMinor, shippingMinor, couponCode, discountMinor } = order;
+  const { id, shippingZone, subtotalMinor, shippingMinor, couponCode, discountMinor, activationMethod, packedAt } = order;
   const { paymentMethod, paymentAmountMinor, paymentVerifiedAt } = order;
-  return { id, paymentMethod, paymentAmountMinor,
+  return { id, activationMethod, packedAt: packedAt?.toISOString() ?? null, paymentMethod, paymentAmountMinor,
     ...(paymentAmountMinor > 0 && { paymentStatus: paymentVerifiedAt ? "VERIFIED" : "PENDING_VERIFICATION" }),
     ...orderTracking(order), trackingPath: trackingPath(id), shippingZone, subtotalMinor, shippingMinor,
     couponCode, discountMinor, totalMinor: subtotalMinor + shippingMinor - discountMinor };
@@ -46,10 +47,22 @@ function conflict(message: string): never {
 
 export const orderRoutes: FastifyPluginAsync = async app => {
   registerOrderPrint(app);
+  app.post("/admin/:id/activation-codes", async (request, reply) => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    reply.header("Cache-Control", "no-store");
+    return db.transaction(async tx => {
+      const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
+      if (!order || order.activationMethod !== "ORDER_SECRET" || order.cancelledAt || order.awaitingPayment) conflict("No activation codes are available for this order.");
+      if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) conflict("Verify payment before accessing activation codes.");
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "ORDER_ACTIVATION_CODES_VIEWED", targetType: "store_order", targetId: id, requestId: request.id });
+      return { items: await orderProfileCodes(tx, id) };
+    });
+  });
   app.post("/admin/:id/packing-check", { bodyLimit: 524288 }, async request => {
     const operator = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
-    const { scans, replace } = parseBody(z.object({ scans: z.array(z.string().trim().min(1).max(2048)).max(4950),
+    const { scans, replace, confirmed } = parseBody(z.object({ confirmed: z.literal(true).optional(), scans: z.array(z.string().trim().min(1).max(2048)).max(4950).default([]),
       replace: z.array(z.uuid()).max(4950).optional() }), request.body);
     return db.transaction(async tx => {
       await lockPrintedStock(tx);
@@ -57,6 +70,15 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (!order) throw Object.assign(new Error("Order not found"), { statusCode: 404 });
       if (order.cancelledAt || order.awaitingPayment || order.shippedAt || order.deliveredAt) conflict("Packing is available for open orders only.");
       if (order.paymentAmountMinor > 0 && !order.paymentVerifiedAt) conflict("Verify payment before packing.");
+      if (order.activationMethod === "ORDER_SECRET") {
+        if (!confirmed || scans.length) conflict("Confirm the correct quantity and finish of QC-passed cards and include one secret code per card. QR scans are not assigned during packing.");
+        const slots = await tx.select().from(orderActivationProfiles).where(eq(orderActivationProfiles.orderId, id));
+        const checked = order.items.reduce((sum, item) => sum + item.quantity, 0);
+        if (slots.length !== checked) conflict("Temporary profiles are incomplete. Contact support.");
+        await tx.update(storeOrders).set({ packedAt: order.packedAt ?? new Date() }).where(eq(storeOrders.id, id));
+        await tx.insert(auditLogs).values({ actorId: operator.operatorId, action: "ORDER_PACKING_CHECKED", targetType: "store_order", targetId: id, requestId: request.id, metadata: { checked, activationMethod: "ORDER_SECRET" } });
+        return { checked };
+      }
       if (order.invoiceNumber) {
         const { checked, cardIds } = await packInvoiceOrder(tx, order, scans, replace);
         await tx.insert(auditLogs).values({ actorId: operator.operatorId, action: "ORDER_PACKING_CHECKED", targetType: "store_order",
@@ -186,6 +208,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         });
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
       }
+      const usedProfiles = await tx.select().from(orderActivationProfiles).where(eq(orderActivationProfiles.orderId, id));
+      if (usedProfiles.some(slot => slot.redeemedAt)) conflict("An activated order cannot be cancelled.");
+      await tx.update(orderActivationProfiles).set({ encryptedCode: null }).where(eq(orderActivationProfiles.orderId, id));
       await tx.delete(orderCardAllocations).where(eq(orderCardAllocations.orderId, id));
       for (const { card } of allocated) await tx.update(cards).set({ inventoryStatus: card.qcStatus === "PASSED" ? "SALEABLE" : "NOT_READY", updatedAt: new Date() }).where(eq(cards.id, card.id));
       const [cancelled] = await tx.update(storeOrders).set({ cancelledAt: new Date(), cancellationReason: reason }).where(eq(storeOrders.id, id)).returning();
@@ -341,6 +366,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         if (duplicate) conflict("This bKash transaction ID is already linked to an order.");
         const [completed] = await tx.update(storeOrders).set({ transactionId: input.payment.transactionId, requestHash, awaitingPayment: false,
           invoiceNumber: await nextInvoiceNumber(tx) }).where(eq(storeOrders.id, previous.id)).returning();
+        await createOrderProfiles(tx, completed!);
         await queueOrderEmail(tx, previous.id, "confirmation");
         return { order: completed!, created: true };
       }
@@ -384,7 +410,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (paymentAmountMinor === 0 && transactionId) conflict("No bKash payment is required for this order.");
       const awaitingPayment = reserving && paymentAmountMinor > 0;
       const [order] = await tx.insert(storeOrders).values({
-        requestId, requestHash, customer: input.customer, deliveryAddress: input.deliveryAddress,
+        activationMethod: "ORDER_SECRET", requestId, requestHash, customer: input.customer, deliveryAddress: input.deliveryAddress,
         stockReservations: items.filter(line => catalog.find(product => product.id === line.productId)?.variants.find(variant => variant.id === line.variantId)?.stockQuantity !== undefined).map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
         items, shippingZone: zone, subtotalMinor, shippingMinor, couponCode: input.coupon?.code, discountMinor,
         paymentMethod, paymentAmountMinor, transactionId, awaitingPayment,
@@ -398,6 +424,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
           ? { ...variant, stockQuantity: variant.stockQuantity - (quantities.get(variant.id) ?? 0) } : variant);
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
       }
+      await createOrderProfiles(tx, order);
       if (!order.awaitingPayment) await queueOrderEmail(tx, order.id, "confirmation");
       return { order, created: true };
     }).catch(error => {

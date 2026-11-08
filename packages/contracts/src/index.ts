@@ -467,6 +467,8 @@ export type OrderTracking = {
   createdAt: string;
   processingAt?: string | null;
   shippedAt?: string | null;
+  activationMethod?: "LEGACY" | "ORDER_SECRET";
+  packedAt?: string | null;
   deliveredAt?: string | null;
   courierTrackingId?: string | null;
   cancelledAt?: string | null;

@@ -71,7 +71,7 @@ try {
     return Promise.resolve(Response.json({id:'ui-test-email'}));
   };
   const product=catalog.items[0],variant=product.variants.find(v=>v.available);
-  await api('/api/v1/orders',{requestId:crypto.randomUUID(),customer:{name:'UI audit buyer',email:'ui-audit@example.com',phone:'01712345678'},deliveryAddress:{district:'Dhaka',dhakaArea:'city',addressLine:'UI test address'},shippingMinor:6000,items:[{productId:product.id,variantId:variant.id,quantity:1,unitPriceMinor:variant.salePriceMinor??variant.priceMinor}]});
+  const uiOrder = await api('/api/v1/orders',{requestId:crypto.randomUUID(),customer:{name:'UI audit buyer',email:'ui-audit@example.com',phone:'01712345678'},deliveryAddress:{district:'Dhaka',dhakaArea:'city',addressLine:'UI test address'},shippingMinor:6000,items:[{productId:product.id,variantId:variant.id,quantity:1,unitPriceMinor:variant.salePriceMinor??variant.priceMinor}]});
   await api('/api/v1/profiles',{publicSlug:'ui-audit-profile',displayName:'UI Audit Profile',headline:'Profile with longer description for responsive checks',company:'Oneinfo',links:[{label:'Portfolio',url:'https://example.com'}]},headers);
   const pairing=await api('/api/v1/local-nfc/pairings',{},headers);
   const device=await api('/api/v1/local-nfc/devices/pair',{pairingCode:pairing.pairingCode,deviceName:'UI audit NFC device'},headers);
@@ -169,6 +169,21 @@ try {
         if(width===1440){await click('Save payment settings');await until(`document.body.innerText.includes('COD advance saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.store-settings-dialog[open]')`);
         await evaluate(`document.querySelector('.store-order summary').click()`);assert.equal(await evaluate(`document.querySelector('.store-order').open`),true);
+        await click('Show secret codes');await until(`document.querySelector('.order-packing code')?.textContent.includes('-')`);
+        await inspect('admin-order-secret-codes-'+width);
+        if(width===1440){
+          assert.equal(await evaluate(`[...document.querySelectorAll('.order-packing button')].find(b=>b.textContent==='Confirm package').disabled`),true);
+          await evaluate(`window.__originalOpen=window.open;window.open=()=>({opener:null,document:{write(html){window.__activationSlipHtml=html},close(){},querySelector(){return {addEventListener(){}}}}})`);
+          await click('Print activation slips');
+          assert.equal(await evaluate(`window.__activationSlipHtml.includes(document.querySelector('.order-packing code').textContent)`),true);
+          assert.equal(await evaluate(`(window.__activationSlipHtml.match(/<article>/g)||[]).length`),1);
+          await evaluate(`window.open=window.__originalOpen`);
+          await evaluate(`document.querySelector('.order-packing input[type=checkbox]').click()`);await click('Confirm package');
+          await until(`document.querySelector('.order-packing')?.textContent.includes('Package confirmed.')`);
+          assert.equal((await connection.db.select().from(schema.orderCardAllocations)).length,0);
+          console.log('Order temporary profile/secret slips/manual package confirmation without QR assignment PASS');
+        }
+
       }
     }
     if(width===1440){await evaluate(`location.hash='cards'`);await until(`document.querySelector('.workspace-header h1')?.textContent==='Cards & inventory'`);await reload();await until(`document.querySelector('.workspace-header h1')?.textContent==='Cards & inventory'`);failOverview=true;await evaluate(`document.querySelector('.header-tools button').click()`);await until(`!!document.querySelector('.workspace-error')`);failOverview=false;await click('Retry connection');await until(`!document.querySelector('.workspace-error')`);}
@@ -276,6 +291,22 @@ try {
     await fill('Station code','UI-REGISTER-'+width);await click('Register workstation');await until(`!!document.querySelector('.workspace-nav')`);assert.equal(await evaluate(`!!document.querySelector('.setup-error')`),false);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  const flexBatch = await api('/api/v1/production/batches',{batchCode:'UI-ANY-CARD',productVariantId:'ONEINFO-NFC-CARD',quantity:1},headers);
+  await api(`/api/v1/production/batches/${flexBatch.id}/generate-qr`,{},headers);
+  await api(`/api/v1/production/batches/${flexBatch.id}/confirm-print`,{confirmed:true},headers);
+  const [flexCard] = await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,flexBatch.id));
+  await connection.db.update(schema.cards).set({qcStatus:'PASSED',nfcStatus:'WRITTEN',lifecycleStatus:'QC_PASSED',inventoryStatus:'SALEABLE'}).where(eq(schema.cards.id,flexCard.id));
+  const orderCodes=(await api(`/api/v1/orders/admin/${uiOrder.id}/activation-codes`,{},headers)).items;
+  await command('Page.navigate',{url:`http://127.0.0.1:5174/c/${flexCard.publicSlug}`});
+  await until(`document.querySelector('h1')?.textContent==='Activate your card'`);
+  await fill('Secret code',orderCodes[0].secretCode);await click('Activate & continue');
+  await until(`document.querySelector('h1')?.textContent==='Create your account'`);
+  await fill('Account email','flex-browser@example.com');await fill('Password','a secure browser test password');await fill('Full name','Flexible Card Client');
+  await uploadPhoto();await click('Create account & save profile');await until(`document.querySelector('h1')?.textContent==='Flexible Card Client'`);
+  assert.equal((await api(`/api/v1/customer/cards/${flexCard.publicSlug}`)).profile.id,orderCodes[0].profileId);
+  await inspect('customer-order-secret-activation');
+  await evaluate('sessionStorage.clear()');
+  console.log('Any ready card + order secret → existing temporary profile → account/photo/public profile PASS');
   const url = `http://127.0.0.1:5174/c/${card.publicSlug}`;
   await command('Page.navigate', { url });
   await until(`document.querySelector('h1')?.textContent === 'Activate your card'`);

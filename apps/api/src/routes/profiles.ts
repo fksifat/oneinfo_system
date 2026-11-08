@@ -1,12 +1,13 @@
+import { lockPrintedStock } from "../domain/printed-stock.js";
 import { adminPage } from "../domain/admin-page.js";
 import { ensureProfileHandle } from "../domain/profile-handles.js";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
-import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, inArray, isNull, isNotNull, or, sql } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardBatches, customerAccounts, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, profileLinks } from "../db/schema.js";
+import { auditLogs, cardBatches, customerAccounts, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, orderActivationProfiles, profileLinks } from "../db/schema.js";
 import { parseBody, sendCreated } from "../http.js";
 
 export const publicProfileFields = {
@@ -25,7 +26,9 @@ async function profileWithLinks(profileId: string) {
     .where(eq(profileLinks.profileId, profileId))
     .orderBy(asc(profileLinks.sortOrder));
   const assignedCards = await db.select().from(cards).where(eq(cards.profileId, profileId));
-  return { ...profile, links, cards: assignedCards };
+  const [pending] = await db.select({ id: orderActivationProfiles.id }).from(orderActivationProfiles)
+    .where(and(eq(orderActivationProfiles.profileId, profileId), isNull(orderActivationProfiles.redeemedAt)));
+  return { ...profile, temporary: Boolean(pending), links, cards: assignedCards };
 }
 
 export const profileRoutes: FastifyPluginAsync = async (app) => {
@@ -40,7 +43,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.profileId, profile.id)).orderBy(asc(cards.createdAt), asc(cards.id));
     const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && card.qcStatus === "PASSED" && card.confirmed);
     if (linked.length && !active) return reply.code(404).send({ message: "Profile unavailable" });
-    const [owner] = await db.select({ active: customerAccounts.active }).from(customerAccounts).where(eq(customerAccounts.profileId, profile.id));
+    const [owner] = await db.select({ active: customerAccounts.active }).from(customerAccounts).where(or(eq(customerAccounts.profileId, profile.id), inArray(customerAccounts.id, db.select({ id: cards.customerAccountId }).from(cards).where(eq(cards.profileId, profile.id)))));
     if (owner && !owner.active) return reply.code(404).send({ message: "Profile unavailable" });
     const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder }).from(profileLinks)
       .where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
@@ -93,7 +96,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);
     const { page, query } = adminPage(request.query);
     const { visibility } = parseBody(z.object({ visibility: z.literal("draft").optional() }), request.query);
-    const profiles = await db.select().from(customerProfiles).where(and(visibility ? eq(customerProfiles.published, false) : undefined,
+    const profiles = await db.select({ ...getTableColumns(customerProfiles), temporary: sql<boolean>`exists (select 1 from ${orderActivationProfiles} p where p.profile_id = ${customerProfiles.id} and p.redeemed_at is null)` }).from(customerProfiles).where(and(visibility ? eq(customerProfiles.published, false) : undefined,
       sql`position(lower(${query}) in lower(${customerProfiles.displayName} || ' ' || ${customerProfiles.company} || ' ' || ${customerProfiles.publicSlug} || ' ' || coalesce(${customerProfiles.handle}, '') || ' ' || ${customerProfiles.email})) > 0`))
       .orderBy(asc(customerProfiles.displayName), asc(customerProfiles.id)).limit(101).offset((page - 1) * 100);
     return { items: profiles.slice(0, 100), hasMore: profiles.length > 100 };
@@ -142,6 +145,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     if (!existing) throw Object.assign(new Error("Profile not found"), { statusCode: 404 });
 
     await db.transaction(async (tx) => {
+      await lockPrintedStock(tx);
+      const [pending] = await tx.select().from(orderActivationProfiles).where(and(eq(orderActivationProfiles.profileId, profileId), isNull(orderActivationProfiles.redeemedAt)));
+      if (pending && profileData.published) throw Object.assign(new Error("The client must activate this temporary profile with their secret code first."), { statusCode: 409 });
       if (Object.keys(profileData).length) {
         await tx.update(customerProfiles).set({ ...profileData, updatedAt: new Date() }).where(eq(customerProfiles.id, profileId));
       }
@@ -173,6 +179,9 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     }
 
     await db.transaction(async (tx) => {
+      await lockPrintedStock(tx);
+      const [pending] = await tx.select().from(orderActivationProfiles).where(and(eq(orderActivationProfiles.profileId, profileId), isNull(orderActivationProfiles.redeemedAt)));
+      if (pending) throw Object.assign(new Error("Use the order secret code to activate this temporary profile."), { statusCode: 409 });
       const [current] = await tx.select().from(cards).where(eq(cards.id, card.id)).for("update");
       const [activation] = await tx.select().from(cardActivationSecrets).where(eq(cardActivationSecrets.cardId, card.id));
       if (current?.customerAccountId || current?.companyId || activation) throw Object.assign(new Error("This card uses client or company activation. Use its assigned workflow."), { statusCode: 409 });

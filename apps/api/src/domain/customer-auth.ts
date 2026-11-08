@@ -43,11 +43,16 @@ export function issueInvoiceClaimToken(cardId: string, orderId: string) {
     .setAudience("oneinfo-card-claim").setSubject(cardId).setIssuedAt().setExpirationTime("15m").sign(key);
 }
 
+export function issueOrderProfileClaimToken(cardId: string, orderProfileId: string) {
+  return new SignJWT({ orderProfileId }).setProtectedHeader({ alg: "HS256" }).setIssuer(issuer)
+    .setAudience("oneinfo-card-claim").setSubject(cardId).setIssuedAt().setExpirationTime("15m").sign(key);
+}
+
 export async function readClaimToken(token: string) {
   try {
     const { payload } = await jwtVerify(token, key, { issuer, audience: "oneinfo-card-claim", algorithms: ["HS256"] });
     const cardId = z.uuid().parse(payload.sub);
-    return payload.orderId ? { cardId, orderId: z.uuid().parse(payload.orderId) }
+    return payload.orderProfileId ? { cardId, orderProfileId: z.uuid().parse(payload.orderProfileId) } : payload.orderId ? { cardId, orderId: z.uuid().parse(payload.orderId) }
       : { cardId, version: z.uuid().parse(payload.version) };
   } catch {
     throw Object.assign(new Error("Activation expired. Scan your card and start activation again."), { statusCode: 401 });

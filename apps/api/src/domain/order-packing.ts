@@ -22,6 +22,10 @@ function invoiceReady({ card, printed }: Awaited<ReturnType<typeof packedCards>>
 }
 
 export async function assertInvoicePacked(tx: Tx, order: Order) {
+  if (order.activationMethod === "ORDER_SECRET") {
+    if (!order.packedAt) conflict("Confirm the package and include a secret code for each card first.");
+    return;
+  }
   if (!order.invoiceNumber || order.deliveredAt) return;
   const packed = await packedCards(tx, order.id);
   if (packed.length !== quantity(order) || packed.some(item => !invoiceReady(item) || item.card.inventoryStatus !== "RESERVED")) {

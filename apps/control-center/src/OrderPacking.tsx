@@ -4,6 +4,63 @@ import { api } from "./api.js";
 import { escapePrintText as escape } from "./print-artwork.js";
 
 export function OrderPacking({ order, token, initiallyOpen, onChange }: { order: StoreOrder; token: string; initiallyOpen: boolean; onChange: () => Promise<void> }) {
+  return order.activationMethod === "ORDER_SECRET"
+    ? <SecretOrderPacking order={order} token={token} initiallyOpen={initiallyOpen} onChange={onChange} />
+    : <LegacyOrderPacking order={order} token={token} initiallyOpen={initiallyOpen} onChange={onChange} />;
+}
+
+type SecretSlot = { id: string; profileId: string; lineIndex: number; unitIndex: number; cardId: string | null; redeemedAt: string | null; secretCode: string | null };
+
+function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameters<typeof OrderPacking>[0]) {
+  const [codes, setCodes] = useState<SecretSlot[]>();
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const quantity = order.items.reduce((count, item) => count + item.quantity, 0);
+  if (order.status === "CANCELLED" || order.status === "AWAITING_PAYMENT") return null;
+  const paid = order.paymentStatus !== "PENDING_VERIFICATION";
+  async function run(action: () => Promise<void>) {
+    if (busy) return; setBusy(true); setError("");
+    try { await action(); } catch (e) { setError(e instanceof Error ? e.message : "Could not update packing."); }
+    finally { setBusy(false); }
+  }
+  function printCodes() {
+    const tab = window.open("", "_blank", "popup");
+    if (!tab) { setError("Allow popups to print activation codes."); return; }
+    tab.opener = null;
+    tab.document.write(`<!doctype html><html lang="en"><meta charset="utf-8"><title>Oneinfo activation codes</title>
+      <style>body{font:16px system-ui;margin:2rem}article{border:1px dashed #777;padding:1.5rem;margin:1rem 0;break-inside:avoid}strong{font:700 22px monospace}@media print{button{display:none}}</style>
+      <h1>Oneinfo · ${escape(order.invoiceNumber ?? order.id)}</h1>
+      ${(codes ?? []).filter(slot => slot.secretCode).map(slot => `<article><p>${escape(order.items[slot.lineIndex]?.name ?? "Card")} · ${escape(order.items[slot.lineIndex]?.variantName ?? "")} · Card ${slot.unitIndex + 1}</p>
+        <strong>${escape(slot.secretCode!)}</strong><p>Scan your card’s QR or NFC, enter this secret code, then create an account or sign in and save your profile.</p><p>Use once with any unused, ready Oneinfo card. Keep this code private.</p></article>`).join("")}
+      <button type="button">Print codes</button></html>`);
+    tab.document.close(); tab.document.querySelector("button")?.addEventListener("click", () => tab.print());
+  }
+  return <details className="operation-panel order-packing" open={initiallyOpen || undefined}>
+    <summary>Pack cards & activation codes</summary>
+    <p>{quantity} temporary profile{quantity === 1 ? "" : "s"} · One private code per card. Physical cards are linked only when clients activate them.</p>
+    <ol>{order.items.map((item, i) => <li key={i}>{item.quantity} × {item.name} · {item.variantName}</li>)}</ol>
+    <button type="button" disabled={busy || !paid} onClick={() => void run(async () => {
+      setCodes((await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" })).items);
+    })}>{busy ? "Loading…" : codes ? "Refresh secret codes" : "Show secret codes"}</button>
+    {!paid && <p>Verify payment before accessing codes or confirming packing.</p>}
+    {codes && <><ul>{codes.map(slot => <li key={slot.id}>
+      <span>Profile {slot.lineIndex + 1}.{slot.unitIndex + 1}</span> · {slot.redeemedAt ? "Activated" : <code>{slot.secretCode}</code>}
+    </li>)}</ul><button type="button" disabled={!codes.some(slot => slot.secretCode)} onClick={printCodes}>Print activation slips</button></>}
+    {!order.packedAt && paid && <form onSubmit={event => { event.preventDefault(); void run(async () => {
+      await api(`/api/v1/orders/admin/${order.id}/packing-check`, token, { method: "POST", body: JSON.stringify({ confirmed: true }) });
+      await onChange();
+    }); }}>
+      <label className="share-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+        <span>I checked the quantity and finish of QC-passed cards and included a different secret code with each card.</span></label>
+      <button disabled={busy || !confirmed || !codes || codes.length !== quantity}>Confirm package</button>
+    </form>}
+    {order.packedAt && <p role="status">Package confirmed. Any supplied unused card can be activated with an unused code from this order.</p>}
+    {error && <p role="alert" className="store-order-notice is-error">{error}</p>}
+  </details>;
+}
+
+function LegacyOrderPacking({ order, token, initiallyOpen, onChange }: Parameters<typeof OrderPacking>[0]) {
   const [scans, setScans] = useState("");
   const [verified, setVerified] = useState("");
   const [error, setError] = useState("");

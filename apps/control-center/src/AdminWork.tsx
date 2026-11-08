@@ -23,7 +23,7 @@ const stageIcons: Record<Stage, string> = {
 
 type Task = { key: string; stage: Stage; units: number; orderId: string | null; cardId: string | null; batchId: string | null;
   label: string; station: string | null; jobStatus: string | null };
-type FollowUp = { cardId: string; publicSlug: string; customer: string; orderId: string; deliveredAt: string };
+type FollowUp = { cardId: string | null; profileId?: string | null; publicSlug: string | null; customer: string; orderId: string; deliveredAt: string };
 
 export function NeedsAttention({ counts }: { counts: Partial<Record<Stage, number>> }) {
   const total = Object.values(counts).reduce((sum, n) => sum + (n ?? 0), 0);
@@ -227,17 +227,17 @@ export function ActivationFollowUp({ token }: { token: string }) {
         {!result && open && !error && <p role="status" className="followup-loading">Loading delivered cards…</p>}
         {result?.items.length === 0 && <p className="followup-empty">✓ No delivered cards are awaiting activation.</p>}
         {result?.items.map(card => (
-          <div className="operation-row followup-card-row" key={card.cardId}>
+          <div className="operation-row followup-card-row" key={card.cardId ?? card.profileId}>
             <div className="followup-card-info">
               <div className="followup-title-row">
                 <strong>{card.customer}</strong>
-                <code>{card.publicSlug}</code>
+                <code>{card.publicSlug ?? "Unactivated profile"}</code>
               </div>
               <small>Delivered {new Date(card.deliveredAt).toLocaleDateString("en-BD")}</small>
             </div>
             <div className="operation-actions">
               <a href={orderLink(card.orderId)} className="action-pill-link">Open order ↗</a>
-              <CardPassport cardId={card.cardId} token={token} />
+              {card.cardId && <CardPassport cardId={card.cardId} token={token} />}
             </div>
           </div>
         ))}

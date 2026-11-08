@@ -141,6 +141,13 @@
       "when": 1794081863511,
       "tag": "0019_employee_welcome_email",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1794140000000,
+      "tag": "0020_order_activation_profiles",
+      "breakpoints": true
     }
   ]
 }

@@ -330,14 +330,14 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const isDelivered = Boolean(order.deliveredAt) || order.status === "DELIVERED";
     const isCancelled = order.status === "CANCELLED";
     const isConfirmed = order.status !== "AWAITING_PAYMENT" && !isCancelled;
-    const qrReady = isConfirmed && (cards.qrGenerated >= total || (!order.invoiceNumber && pastProcessing));
-    const qcReady = isConfirmed && (cards.qcPassed >= total || pastShipped);
+    const qrReady = isConfirmed && (order.activationMethod === "ORDER_SECRET" ? Boolean(order.packedAt) : (cards.qrGenerated >= total || (!order.invoiceNumber && pastProcessing)));
+    const qcReady = isConfirmed && (order.activationMethod === "ORDER_SECRET" ? Boolean(order.packedAt) : cards.qcPassed >= total || pastShipped);
     const fmt = date => date ? escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })) : "";
     const stages = [
       ["Received", "Order placed", isConfirmed, fmt(order.createdAt) || "Awaiting order", order.paymentVerifiedAt ? "Payment verified" : "Order confirmed"],
-      [order.invoiceNumber ? "Cards packed" : "Card & QR Generated", order.invoiceNumber ? "Ready stock" : "Identity allocated", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "QR generated"}`, order.invoiceNumber ? "Linked during packing" : "Unique slug & optical QR"],
+      [order.invoiceNumber ? "Cards packed" : "Card & QR Generated", order.invoiceNumber ? "Ready stock" : "Identity allocated", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "QR generated"}`, order.activationMethod === "ORDER_SECRET" ? "QR linked on client activation" : order.invoiceNumber ? "Linked during packing" : "Unique slug & optical QR"],
       ["NFC & QC Test OK", "Hardware verified", qcReady, `${qcReady ? total : cards.qcPassed}/${total} NFC & QC OK`, "NTAG213 write & read-back"],
-      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Workstation prep", order.invoiceNumber ? "Activate by invoice after delivery" : "Sealed with activation code"],
+      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Workstation prep", order.activationMethod === "ORDER_SECRET" ? "Secret code included per card" : order.invoiceNumber ? "Activate by invoice after delivery" : "Sealed with activation code"],
       ["Shipped", "Handed to courier", pastShipped, fmt(order.shippedAt) || "Courier handoff", order.courierTrackingId ? `ID: ${escapeHtml(order.courierTrackingId)}` : "Nationwide delivery"],
       ["Delivered", "In client’s hands", isDelivered, fmt(order.deliveredAt) || "Final handoff", isDelivered ? "Ready to tap & activate" : "Reaching your address"],
     ];

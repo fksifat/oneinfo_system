@@ -10,7 +10,7 @@ const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT
 const bdt = (minor: number) => money.format(minor / 100);
 const path = "/api/v1/orders";
 const searchFields = ["payment", "delivery", "qr"] as const;
-const needsPacking = (order: StoreOrder) => Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
+const needsPacking = (order: StoreOrder) => order.activationMethod === "ORDER_SECRET" ? !order.packedAt : Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 
 function getInitials(name: string) {
@@ -326,7 +326,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                   {order.status !== "CANCELLED" && order.status !== "AWAITING_PAYMENT" && (
                     <span className={`order-qr-pill ${order.qrAllocation?.status === "ASSIGNED" ? "is-assigned" : "is-pending"}`}>
                       <span className="order-qr-dot" aria-hidden="true"></span>
-                      {order.invoiceNumber ? needsPacking(order) ? "Awaiting packing" : "Cards packed" : order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}
+                      {order.activationMethod === "ORDER_SECRET" ? order.packedAt ? "Package confirmed" : "Awaiting package" : order.invoiceNumber ? needsPacking(order) ? "Awaiting packing" : "Cards packed" : order.qrAllocation?.status === "AWAITING_QR" ? "Awaiting QR" : order.qrAllocation?.status === "PARTIAL" ? "Partially assigned" : "QR assigned"} · {order.activationMethod === "ORDER_SECRET" && order.packedAt ? order.qrAllocation?.required ?? 0 : order.qrAllocation?.assigned ?? 0}/{order.qrAllocation?.required ?? 0}
                     </span>
                   )}
                 </div>
@@ -368,9 +368,9 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                   <div><dt>Order ID</dt><dd className="mono-code">{order.id}</dd></div>
                   {order.invoiceNumber && <div><dt>Invoice number</dt><dd className="mono-code">{order.invoiceNumber}</dd></div>}
                   <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted"
-                    : order.invoiceNumber ? needsPacking(order) ? "Pick ready stock and scan the cards while packing" : "Cards linked at packing"
+                    : order.activationMethod === "ORDER_SECRET" ? "Card links to its temporary profile when the client activates it" : order.invoiceNumber ? needsPacking(order) ? "Pick ready stock and scan the cards while packing" : "Cards linked at packing"
                     : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
-                  <div><dt>Client activation</dt><dd>{order.invoiceNumber ? "After delivery, scan the card, enter the invoice number and verify through the order email." : "The client claims ownership using their secret code and account."}</dd></div>
+                  <div><dt>Client activation</dt><dd>{order.activationMethod === "ORDER_SECRET" ? "Include one private secret code per card. The client scans any unused card, enters the code, and completes their profile." : order.invoiceNumber ? "After delivery, scan the card, enter the invoice number and verify through the order email." : "The client claims ownership using their secret code and account."}</dd></div>
                   {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="order-slug-link">{card.publicSlug} ↗</a> <span className="qc-badge">QC {card.qcStatus}</span></dd></div>)}
                 </dl>
               </div>

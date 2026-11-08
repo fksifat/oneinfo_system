@@ -291,7 +291,10 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const placed = await request("/api/v1/orders", payload);
     const { allocatePendingOrders } = await import("../src/domain/printed-stock.js");
     await client.db.transaction(async tx => {
-      await tx.update(schema.storeOrders).set({ invoiceNumber: null }).where(eq(schema.storeOrders.id, placed.id));
+      const slots = await tx.select().from(schema.orderActivationProfiles).where(eq(schema.orderActivationProfiles.orderId, placed.id));
+      await tx.delete(schema.orderActivationProfiles).where(eq(schema.orderActivationProfiles.orderId, placed.id));
+      for (const slot of slots) await tx.delete(schema.customerProfiles).where(eq(schema.customerProfiles.id, slot.profileId));
+      await tx.update(schema.storeOrders).set({ invoiceNumber: null, activationMethod: "LEGACY" }).where(eq(schema.storeOrders.id, placed.id));
       await allocatePendingOrders(tx);
     });
     const admin = await request("/api/v1/orders/admin", { query: placed.id });
@@ -401,6 +404,116 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   const activate = (slug: string, secretCode: string) => request(`/api/v1/customer/cards/${slug}/activate`, { secretCode });
   const signup = (claimToken: string, email: string) => app.inject({ method: "POST", url: "/api/v1/customer/signup",
     payload: { claimToken, email, password: "a secure customer password", profile: publicDetails } });
+
+  const secretCodes = (id: string) => request(`/api/v1/orders/admin/${id}/activation-codes`, {});
+  const confirmPackage = (id: string) => request(`/api/v1/orders/admin/${id}/packing-check`, { confirmed: true });
+
+  it("creates one private temporary profile and reusable packing slip per ordered unit without binding physical stock", async () => {
+    const card = await readyForClaim(), payload = orderPayload(3);
+    const placed = await request("/api/v1/orders", payload);
+    await request("/api/v1/orders", payload);
+    expect(placed.activationMethod).toBe("ORDER_SECRET");
+    expect(await client.db.select().from(schema.customerProfiles)).toHaveLength(3);
+    expect((await client.db.select().from(schema.customerProfiles)).every(p => !p.published && !p.email && !p.phone)).toBe(true);
+    expect(await client.db.select().from(schema.customerAccounts)).toHaveLength(0);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
+    const codes = (await secretCodes(placed.id)).items;
+    expect(codes).toHaveLength(3);
+    expect(new Set(codes.map((row: any) => row.secretCode)).size).toBe(3);
+    expect((await secretCodes(placed.id)).items).toEqual(codes);
+    expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toMatchObject({ status: "ACTIVATION_REQUIRED", activationMethod: "SECRET" });
+    const admin = await request("/api/v1/orders/admin", { query: placed.id });
+    expect(JSON.stringify(admin)).not.toContain(codes[0].secretCode);
+    const stored = await client.db.select().from(schema.orderActivationProfiles);
+    expect(JSON.stringify(stored)).not.toContain(codes[0].secretCode.replaceAll("-", ""));
+    const anonymous = await app.inject({ method: "POST", url: `/api/v1/orders/admin/${placed.id}/activation-codes` });
+    expect(anonymous.statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${placed.id}/fulfillment`, headers, payload: { status: "SHIPPED", trackingId: "TEST" } })).statusCode).toBe(409);
+    await confirmPackage(placed.id);
+    expect((await request("/api/v1/admin/tasks?stage=packing")).items).toHaveLength(0);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
+    const tracking = await request("/api/v1/orders/tracking", { token: placed.trackingPath.split("#track/")[1] });
+    expect(tracking).toMatchObject({ activationMethod: "ORDER_SECRET", packedAt: expect.any(String) });
+    expect(JSON.stringify(tracking)).not.toContain(codes[0].secretCode);
+  });
+
+  it("binds any ready card to its code's existing temporary profile and keeps multiple profiles independently editable", async () => {
+    const first = await readyForClaim(), second = await readyForClaim();
+    const placed = await request("/api/v1/orders", orderPayload(2));
+    const codes = (await secretCodes(placed.id)).items;
+    const attempt = () => app.inject({ method: "POST", url: `/api/v1/customer/cards/${second.publicSlug}/activate`, payload: { secretCode: codes[0].secretCode } });
+    expect((await attempt()).statusCode).toBe(409);
+    await confirmPackage(placed.id);
+    const grant = (await attempt()).json();
+    const created = await signup(grant.claimToken, "new-flow@example.com");
+    expect(created.statusCode, created.body).toBe(201);
+    const auth = { authorization: `Bearer ${created.json().accessToken}` };
+    const primary = await request(`/api/v1/customer/cards/${second.publicSlug}`);
+    expect(primary).toMatchObject({ status: "PROFILE", profile: { id: codes[0].profileId }, canShareContact: true });
+    expect((await attempt()).statusCode).toBe(409);
+    const next = await activate(first.publicSlug, codes[1].secretCode);
+    const claim = await app.inject({ method: "POST", url: "/api/v1/customer/claim", headers: auth,
+      payload: { claimToken: next.claimToken, profile: { ...publicDetails, displayName: "Second profile" } } });
+    expect(claim.statusCode, claim.body).toBe(200);
+    expect(await client.db.select().from(schema.customerProfiles)).toHaveLength(2);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(2);
+    expect(await request(`/api/v1/customer/cards/${first.publicSlug}`)).toMatchObject({ profile: { id: codes[1].profileId, displayName: "Second profile" }, canShareContact: true });
+    expect(await request(`/api/v1/customer/cards/${second.publicSlug}`)).toMatchObject({ profile: { id: codes[0].profileId, displayName: "Card Owner" } });
+    await request(`/api/v1/customer/cards/${first.publicSlug}/contact-leads`, { requestId: randomUUID(), name: "Second profile visitor", email: "visitor@example.com", consent: true });
+    const inbox = await app.inject({ url: "/api/v1/customer/me/contact-leads", headers: auth });
+    expect(inbox.json().items[0].recipientName).toBe("Second profile");
+    const foreignCard = await readyForClaim();
+    expect((await app.inject({ url: `/api/v1/customer/me?cardSlug=${foreignCard.publicSlug}`, headers: auth })).statusCode).toBe(403);
+    const own = await app.inject({ url: `/api/v1/customer/me?cardSlug=${first.publicSlug}`, headers: auth });
+    expect(own.json().profile.id).toBe(codes[1].profileId);
+    const updated = await app.inject({ method: "PATCH", url: `/api/v1/customer/me/profile?cardSlug=${first.publicSlug}`, headers: auth,
+      payload: { ...publicDetails, displayName: "Edited second" } });
+    expect(updated.statusCode).toBe(200);
+    expect((await request(`/api/v1/customer/cards/${second.publicSlug}`)).profile.displayName).toBe("Card Owner");
+    expect((await secretCodes(placed.id)).items.every((row: any) => row.secretCode === null && row.redeemedAt)).toBe(true);
+  });
+
+  it("rejects cancelled codes, temporary-profile publication, reserved stock and competing code redemptions", async () => {
+    const first = await readyForClaim(), second = await readyForClaim();
+    const placed = await request("/api/v1/orders", orderPayload());
+    const code = (await secretCodes(placed.id)).items[0];
+    const publish = await app.inject({ method: "PATCH", url: `/api/v1/profiles/${code.profileId}`, headers, payload: { published: true } });
+    expect(publish.statusCode).toBe(409);
+    await confirmPackage(placed.id);
+    await client.db.update(schema.cards).set({ inventoryStatus: "RESERVED" }).where(eq(schema.cards.id, first.id));
+    expect((await app.inject({ method: "POST", url: `/api/v1/customer/cards/${first.publicSlug}/activate`, payload: { secretCode: code.secretCode } })).statusCode).toBe(409);
+    await client.db.update(schema.cards).set({ inventoryStatus: "SALEABLE" }).where(eq(schema.cards.id, first.id));
+    const [one, two] = await Promise.all([activate(first.publicSlug, code.secretCode), activate(second.publicSlug, code.secretCode)]);
+    const results = await Promise.all([signup(one.claimToken, "race-one@example.com"), signup(two.claimToken, "race-two@example.com")]);
+    expect(results.map(r => r.statusCode).sort()).toEqual([201, 409]);
+    expect(await client.db.select().from(schema.customerAccounts)).toHaveLength(1);
+    const cancelled = await request("/api/v1/orders", orderPayload());
+    const otherCode = (await secretCodes(cancelled.id)).items[0].secretCode;
+    await confirmPackage(cancelled.id);
+    const unusedCard = results[0]!.statusCode === 201 ? second : first;
+    const abandoned = await activate(unusedCard.publicSlug, otherCode);
+    await request(`/api/v1/orders/admin/${cancelled.id}/cancel`, { reason: "Cancelled test order" });
+    expect((await signup(abandoned.claimToken, "cancelled-signup@example.com")).statusCode).toBe(409);
+    expect((await app.inject({ method: "POST", url: `/api/v1/customer/cards/${unusedCard.publicSlug}/activate`, payload: { secretCode: otherCode } })).statusCode).toBe(409);
+  });
+
+  it("withholds unpaid order codes and lists delivered temporary profiles for activation follow-up", async () => {
+    const card = await readyForClaim();
+    const placed = await request("/api/v1/orders", { ...orderPayload(), payment: { method: "BKASH", amountMinor: 56000, transactionId: "SECRET123456" } });
+    const post = (path: string, payload = {}) => app.inject({ method: "POST", url: `/api/v1/orders/admin/${placed.id}/${path}`, headers, payload });
+    expect((await post("activation-codes")).statusCode).toBe(409);
+    expect((await post("packing-check", { confirmed: true })).statusCode).toBe(409);
+    await request(`/api/v1/orders/admin/${placed.id}/verify-payment`, {});
+    const code = (await secretCodes(placed.id)).items[0];
+    await confirmPackage(placed.id);
+    await request(`/api/v1/orders/admin/${placed.id}/fulfillment`, { status: "SHIPPED", trackingId: "SECRET-TEST" });
+    await request(`/api/v1/reviews/admin/orders/${placed.id}/deliver`, {});
+    expect((await request("/api/v1/admin/activation-follow-up")).items).toEqual([expect.objectContaining({ cardId: null, profileId: code.profileId, orderId: placed.id })]);
+    const grant = await activate(card.publicSlug, code.secretCode);
+    expect((await signup(grant.claimToken, "delivered-secret@example.com")).statusCode).toBe(201);
+    expect((await client.db.select().from(schema.cards).where(eq(schema.cards.id, card.id)))[0]?.inventoryStatus).toBe("DISPATCHED");
+    expect((await request("/api/v1/admin/activation-follow-up")).items).toHaveLength(0);
+  });
 
   it("activates with a private code, signs up, then resolves subsequent scans to the owner's saved public profile", async () => {
     const card = await readyForClaim();
@@ -900,6 +1013,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     payload.customer.email = "invoice-activation@example.com";
     const placed = await request("/api/v1/orders", payload);
     const other = await request("/api/v1/orders", orderPayload());
+    await client.db.update(schema.storeOrders).set({ activationMethod: "LEGACY" }).where(sql`id in (${placed.id}, ${other.id})`);
     const post = (url: string, payload: object, auth = headers) => app.inject({ method: "POST", url, headers: auth, payload });
     const pack = (id: string, scans: string[], replace?: string[]) => post(`/api/v1/orders/admin/${id}/packing-check`, { scans, replace });
     const ship = () => post(`/api/v1/orders/admin/${placed.id}/fulfillment`, { status: "SHIPPED", trackingId: "INVOICE-TEST" });

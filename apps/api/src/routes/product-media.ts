@@ -1,3 +1,5 @@
+import { lockPrintedStock } from "../domain/printed-stock.js";
+import { orderProfileClaimable } from "../domain/order-activation.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -100,7 +102,9 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
       let subject: string;
       if (kind === "profile-claim") {
         const claim = await readClaimToken(request.headers.authorization?.replace(/^Bearer /, "") ?? "");
-        if (claim.orderId) {
+        if (claim.orderProfileId) {
+          await db.transaction(async tx => { await lockPrintedStock(tx); await orderProfileClaimable(tx, claim.cardId, claim.orderProfileId!); });
+        } else if (claim.orderId) {
           if (!await invoiceActivationTarget(and(eq(storeOrders.id, claim.orderId), eq(cards.id, claim.cardId)))) {
             return reply.code(401).send({ message: "Activation expired. Request a new email link." });
           }
