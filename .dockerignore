@@ -13,6 +13,7 @@
 !apps/api/drizzle/**
 !apps/api/assets/
 !apps/api/assets/oneinfo-email-logo.png
+!apps/api/assets/qr-center-logo.png
 !packages/
 !packages/contracts/
 !packages/contracts/package.json
