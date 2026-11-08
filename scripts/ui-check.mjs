@@ -239,6 +239,21 @@ try {
         await fill('Type',deletionSlug);await click('Delete permanently');await until(`!document.querySelector('.stock-delete-dialog[open]')&&document.querySelectorAll('.production-card-list button').length===2`);
         assert.equal((await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId))).length,2);
         assert.equal((await app.inject('/api/v1/customer/cards/'+deletionSlug)).statusCode,404);
+        const retained=(await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId)))[0];
+        await connection.db.update(schema.cards).set({inventoryStatus:'RESERVED'}).where(eq(schema.cards.id,retained.id));
+        await evaluate(`[...document.querySelectorAll('.production-card-list button')].find(button=>button.textContent.includes(${JSON.stringify(retained.publicSlug)})).click()`);
+        await click('Delete batch');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+        assert.equal(await evaluate(`document.querySelector('#stock-delete-title').textContent`),'Delete unused cards from batch');
+        await fill('Type',await evaluate(`document.querySelector('.stock-delete-dialog strong').textContent`));await click('Delete permanently');
+        await until(`!document.querySelector('.stock-delete-dialog[open]')&&document.querySelectorAll('.production-card-list button').length===1&&document.body.innerText.includes('Kept 1 protected card.')`);
+        assert.equal((await connection.db.select().from(schema.cards).where(eq(schema.cards.batchId,bulkId)))[0].id,retained.id);
+        assert.equal(await evaluate(`document.querySelector('.selected-production-card').textContent.includes(${JSON.stringify(retained.publicSlug)})`),true);
+        await click('Delete batch');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
+        await fill('Type',await evaluate(`document.querySelector('.stock-delete-dialog strong').textContent`));await click('Delete permanently');
+        await until(`document.querySelector('.stock-delete-error')?.textContent.includes('No unused cards')`);await click('Cancel');
+        await connection.db.update(schema.cards).set({inventoryStatus:'NOT_READY'}).where(eq(schema.cards.id,retained.id));
+        console.log('Mixed batch deletes unused cards, keeps reserved card/selection, and reports protected count PASS');
+
         await click('Delete batch');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
         await fill('Type',await evaluate(`document.querySelector('.stock-delete-dialog strong').textContent`));await click('Delete permanently');
         await until(`!document.querySelector('.stock-delete-dialog[open]')&&!document.querySelector('.selected-production-card')`);

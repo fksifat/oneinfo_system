@@ -228,17 +228,25 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
     onBusy(true); setDeleteError("");
     let deleted = false;
     try {
-      const result = await api<{ deleted: number; batchDeleted: boolean }>(`/api/v1/production/batches/${target.batchId}${target.cardId ? `/cards/${target.cardId}` : ""}`, {
+      const result = await api<{ deleted: number; skipped: number; cardIds: string[]; batchDeleted: boolean }>(`/api/v1/production/batches/${target.batchId}${target.cardId ? `/cards/${target.cardId}` : ""}`, {
         method: "DELETE", body: JSON.stringify({ confirmation: deleteConfirmation }),
       }, credentials);
       deleted = true;
+      const removedIds = result.cardIds ?? (target.cardId ? [target.cardId] : []);
       setDeleteTarget(null); setPrintCards([]); setPrintingComplete(false);
       if (currentBatchId.current === target.batchId) {
         if (result.batchDeleted) clearMissingBatch();
-        else { setBatch(current => current && { ...current, plannedQuantity: current.cards.length - 1, cards: current.cards.filter(card => card.id !== target.cardId) }); setSelectedId(""); }
+        else {
+          setBatch(current => {
+            if (!current) return current;
+            const cards = current.cards.filter(card => !removedIds.includes(card.id));
+            return { ...current, plannedQuantity: cards.length, cards };
+          });
+          setSelectedId(current => removedIds.includes(current) ? "" : current);
+        }
       }
       await refresh(); await onChanged();
-      onMessage(`Deleted ${result.deleted} QR/card${result.deleted === 1 ? "" : "s"}${result.batchDeleted ? " and the batch" : ""}. Removed from Admin inventory; saved card links are no longer available.`);
+      onMessage(`Deleted ${result.deleted} QR/card${result.deleted === 1 ? "" : "s"}${result.batchDeleted ? " and the empty batch" : ""}.${result.skipped ? ` Kept ${result.skipped} protected card${result.skipped === 1 ? "" : "s"}.` : ""} Deleted cards were removed from Admin inventory and their Oneinfo links no longer work.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not delete production stock.";
       if (deleted) onMessage(`Stock deleted. Refresh the dashboard: ${message}`);
@@ -288,9 +296,9 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
     </section>}
     {deleteTarget && <dialog ref={deleteDialog} className="stock-delete-dialog" aria-labelledby="stock-delete-title" aria-describedby="stock-delete-description" onCancel={event => { event.preventDefault(); if (!busy) setDeleteTarget(null); }}>
       <form onSubmit={event => void deleteStock(event)}>
-        <h2 id="stock-delete-title">{deleteTarget.cardId ? "Delete QR & link" : "Delete entire batch"}</h2>
-        <p id="stock-delete-description">Remove {deleteTarget.quantity} QR/card{deleteTarget.quantity === 1 ? "" : "s"} from Oneinfo and Admin inventory. Oneinfo card links will stop working. This cannot be undone in the console.</p>
-        <p>Only unassigned stock can be deleted. Assigned/reserved cards and claimed production jobs are protected. Deleting the last QR also removes its empty batch.</p>
+        <h2 id="stock-delete-title">{deleteTarget.cardId ? "Delete QR & link" : "Delete unused cards from batch"}</h2>
+        <p id="stock-delete-description">{deleteTarget.cardId ? "Remove this QR/card" : `Remove all eligible unused QR/cards from this ${deleteTarget.quantity}-card batch`} from Oneinfo and Admin inventory. Deleted Oneinfo card links will stop working. This cannot be undone in the console.</p>
+        <p>{deleteTarget.cardId ? "Only this unused card will be deleted. Assigned/reserved cards and cards with claimed production jobs cannot be deleted." : "Assigned/reserved cards and cards with claimed production jobs will be kept. Other unused cards will be deleted."} The batch is removed only when empty.</p>
         <p>Printed copies, physical NFC tags and external websites are not erased.</p>
         <label>Type <strong>{deleteTarget.label}</strong> to confirm<input autoFocus autoComplete="off" required value={deleteConfirmation} onChange={event => setDeleteConfirmation(event.target.value)} disabled={busy} /></label>
         {deleteError && <p role="alert" className="stock-delete-error">{deleteError}</p>}
