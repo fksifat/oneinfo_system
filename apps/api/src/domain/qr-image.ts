@@ -1,7 +1,11 @@
 import QRCode from "qrcode";
 import { PNG } from "pngjs";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
-export const qrGeneratorVersion = "oneinfo/dotted-arise-v1";
+const logoBytes = readFileSync(new URL("../../assets/qr-center-logo.png", import.meta.url));
+const logo = PNG.sync.read(logoBytes);
+export const qrGeneratorVersion = `oneinfo/dotted-logo-v2/${createHash("sha256").update(logoBytes).digest("hex").slice(0, 12)}`;
 const ink = [51, 66, 81] as const;
 const white = [255, 255, 255] as const;
 const width = 512;
@@ -37,26 +41,24 @@ export function productionQrImage(value: string): string {
   const centre = size / 2;
   const radius = Math.min(size * .095, 4.5);
   circle(centre, centre, radius, white);
-  circle(centre, centre, radius - .55, ink);
-  // The reference's A monogram is drawn as three simple strokes inside the badge.
-  const strokes = [
-    [[-.78,.66],[-.08,-.82],[.18,-.82],[-.43,.66]],
-    [[.18,-.5],[.78,.66],[.42,.66],[.02,-.16]],
-    [[-.13,.13],[.15,.13],[.3,.42],[-.27,.42]],
-  ] as const;
-  const markSize = (radius - .7) * scale;
+  const markScale = (radius - .7) * scale * 2 / Math.max(logo.width, logo.height);
+  const markWidth = logo.width * markScale, markHeight = logo.height * markScale;
   const origin = pixel(centre);
-  for (let y = Math.floor(origin - markSize); y <= Math.ceil(origin + markSize); y++) {
-    for (let x = Math.floor(origin - markSize); x <= Math.ceil(origin + markSize); x++) {
-      const px = (x + .5 - origin) / markSize, py = (y + .5 - origin) / markSize;
-      for (const polygon of strokes) {
-        let inside = false;
-        for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-          const [xi, yi] = polygon[i]!, [xj, yj] = polygon[j]!;
-          if ((yi > py) !== (yj > py) && px < (xj - xi) * (py - yi) / (yj - yi) + xi) inside = !inside;
-        }
-        if (inside) { paint(x, y, white); break; }
+  for (let y = Math.ceil(origin - markHeight / 2); y < origin + markHeight / 2; y++) {
+    for (let x = Math.ceil(origin - markWidth / 2); x < origin + markWidth / 2; x++) {
+      const sx = Math.max(0, Math.min(logo.width - 1, (x + .5 - origin + markWidth / 2) * logo.width / markWidth - .5));
+      const sy = Math.max(0, Math.min(logo.height - 1, (y + .5 - origin + markHeight / 2) * logo.height / markHeight - .5));
+      const left = Math.floor(sx), top = Math.floor(sy), dx = sx - left, dy = sy - top;
+      const color = [0, 0, 0];
+      let alpha = 0;
+      // Interpolate premultiplied pixels so transparent edges stay clean on white.
+      for (let row = 0; row < 2; row++) for (let col = 0; col < 2; col++) {
+        const offset = (Math.min(top + row, logo.height - 1) * logo.width + Math.min(left + col, logo.width - 1)) * 4;
+        const weight = (col ? dx : 1 - dx) * (row ? dy : 1 - dy) * logo.data[offset + 3]! / 255;
+        alpha += weight;
+        for (let c = 0; c < 3; c++) color[c] = color[c]! + logo.data[offset + c]! * weight;
       }
+      if (alpha) paint(x, y, color.map(channel => channel / alpha), alpha);
     }
   }
   return `data:image/png;base64,${PNG.sync.write(image, { filterType: 0, deflateLevel: 6, deflateStrategy: 0 }).toString("base64")}`;

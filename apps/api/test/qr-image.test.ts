@@ -1,8 +1,23 @@
 import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { PNG } from "pngjs";
 import jsQR from "jsqr";
-import { productionQrImage } from "../src/domain/qr-image.js";
+import { productionQrImage, qrGeneratorVersion } from "../src/domain/qr-image.js";
+
+it("embeds the supplied green logo and versions cached images by its file contents", () => {
+  const source = readFileSync(new URL("../assets/qr-center-logo.png", import.meta.url));
+  expect(qrGeneratorVersion).toContain(createHash("sha256").update(source).digest("hex").slice(0, 12));
+  expect(readFileSync(new URL("../../../.dockerignore", import.meta.url), "utf8")).toContain("!apps/api/assets/qr-center-logo.png");
+  const png = PNG.sync.read(Buffer.from(productionQrImage("https://oneinfo.online/c/logo?source=qr").split(",")[1]!, "base64"));
+  let greenPixels = 0;
+  for (let y = 220; y < 292; y++) for (let x = 220; x < 292; x++) {
+    const offset = (y * png.width + x) * 4;
+    if (png.data[offset + 1]! > png.data[offset]! + 30 && png.data[offset + 1]! > png.data[offset + 2]! + 10) greenPixels++;
+    expect(png.data[offset + 3]).toBe(255);
+  }
+  expect(greenPixels).toBeGreaterThan(100);
+});
 
 it.each([
   "https://oneinfo.online/c/1B66ylNKBeRl?source=qr",
