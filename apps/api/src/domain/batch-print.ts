@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { CreateBatchSchema } from "@oneinfo/contracts";
 import { and, desc, eq, isNotNull } from "drizzle-orm";
-import QRCode from "qrcode";
+import { productionQrImage, qrGeneratorVersion } from "./qr-image.js";
 import type { z } from "zod";
 import { config } from "../config.js";
 import type { db } from "../db/client.js";
@@ -60,13 +60,13 @@ export async function generateCardQr(tx: Transaction, card: typeof cards.$inferS
     throw Object.assign(new Error(`QR job for ${card.publicSlug} is not available to this station`), { statusCode: 409 });
   }
   const [existing] = await tx.select().from(qrArtifacts).where(eq(qrArtifacts.jobId, job.id)).orderBy(desc(qrArtifacts.generatedAt)).limit(1);
-  if (existing?.imageData) return { imageData: existing.imageData, generated: false };
-  const imageData = await QRCode.toDataURL(qrUrl(card.canonicalUrl), { errorCorrectionLevel: "H", margin: 4, width: 512 });
+  if (existing?.imageData && existing.generatorVersion === qrGeneratorVersion) return { imageData: existing.imageData, generated: false };
+  const imageData = productionQrImage(qrUrl(card.canonicalUrl));
   const imageBytes = Buffer.from(imageData.split(",")[1]!, "base64");
   const checksum = createHash("sha256").update(imageBytes).digest("hex");
   const artifact = { imageData, checksumSha256: checksum, format: "PNG", width: 512, height: 512,
-    generatorVersion: "qrcode-js/1.5.4", storageKey: `postgres://${card.id}/qr.png` };
-  if (existing) await tx.update(qrArtifacts).set(artifact).where(eq(qrArtifacts.id, existing.id));
+    generatorVersion: qrGeneratorVersion, storageKey: `postgres://${card.id}/qr.png` };
+  if (existing && !existing.imageData) await tx.update(qrArtifacts).set(artifact).where(eq(qrArtifacts.id, existing.id));
   else await tx.insert(qrArtifacts).values({ ...artifact, jobId: job.id, cardId: card.id, idempotencyKey: randomUUID() });
   if (job.status !== "COMPLETED") {
     await tx.update(productionJobs).set({ status: "COMPLETED", assignedStationId: stationId ?? null, claimedBy: actorId,

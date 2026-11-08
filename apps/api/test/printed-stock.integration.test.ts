@@ -78,6 +78,19 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
 
+  it("refreshes an older QR design without changing card links or discarding the previous artifact", async () => {
+    const created = await batch(1);
+    const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
+    const [original] = await client.db.select().from(schema.qrArtifacts);
+    await client.db.update(schema.qrArtifacts).set({ generatorVersion: "qrcode-js/1.5.4" }).where(eq(schema.qrArtifacts.id, original!.id));
+    const generated = await request(`/api/v1/production/batches/${created.id}/generate-qr`, {});
+    expect(generated.generated).toBe(1);
+    expect((await request(`/api/v1/production/batches/${created.id}/generate-qr`, {})).generated).toBe(0);
+    expect(await client.db.select().from(schema.qrArtifacts)).toHaveLength(2);
+    expect((await client.db.select().from(schema.cards))[0]!.canonicalUrl).toBe(card!.canonicalUrl);
+    expect((await client.db.select().from(schema.productionJobs)).find(job => job.type === "QR_GENERATION")!.status).toBe("COMPLETED");
+  });
+
   it("allocates unchanged legacy QR links only when their previous domain is explicitly configured", async () => {
     const { config } = await import("../src/config.js");
     const original = config.PUBLIC_CARD_BASE_URL_ALIASES;
