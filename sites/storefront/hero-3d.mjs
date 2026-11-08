@@ -1,71 +1,107 @@
 export function initializeHero3D(root) {
   if (!root) return;
-
-  void import("@google/model-viewer").catch(() => {});
-
   const viewer = root.querySelector("#hero-model-viewer");
+  if (!viewer) return;
+  const doc = root.ownerDocument;
+  const motion = doc.defaultView.matchMedia("(prefers-reduced-motion: reduce)");
   const buttons = [...root.querySelectorAll("[data-card-variant]")];
-  const titleEl = root.querySelector("#hero-card-title");
-  const descEl = root.querySelector("#hero-card-desc");
-  const flipBtn = root.querySelector("#hero-flip-btn");
-
+  const title = root.querySelector("#hero-card-title");
+  const description = root.querySelector("#hero-card-desc");
+  const poster = root.querySelector(".hero-poster");
+  const fallback = root.querySelector(".hero-fallback");
+  const flip = root.querySelector("#hero-flip-btn");
+  const toggle = root.querySelector("#hero-motion-btn");
+  const status = root.querySelector(".hero-model-status");
   const variants = {
-    black: {
-      model: "/assets/cards-final/black.glb",
-      title: "Matte Black NFC Card",
-      desc: "NTAG213 · 13.56 MHz contactless chip",
-    },
-    light: {
-      model: "/assets/cards-final/light.glb",
-      title: "Minimalist Light Card",
-      desc: "Architectural satin finish · Dynamic QR",
-    },
+    black: { title: "Matte Black", description: "A confident finish. A lasting impression.", poster: "black-studio-final.webp" },
+    light: { title: "Minimalist Light", description: "Understated style. A clear introduction.", poster: "light-studio-final.webp" },
   };
-
-  let isFlipped = false;
-
+  let rotating = !motion.matches;
+  let visible = false;
+  let ready = false;
+  let flipped = false;
+  function syncMotion() {
+    viewer.autoRotate = ready && rotating && visible && !doc.hidden && !motion.matches;
+    viewer.interpolationDecay = motion.matches ? 0 : 50;
+    toggle.textContent = rotating && !motion.matches ? "Pause rotation" : "Start rotation";
+    toggle.setAttribute("aria-pressed", String(rotating && !motion.matches));
+    toggle.disabled = !ready || motion.matches;
+    flip.disabled = !ready;
+  }
+  function stopRotation() { rotating = false; syncMotion(); }
+  function showError() {
+    ready = false;
+    root.dataset.modelState = "error";
+    fallback.hidden = false;
+    viewer.src = "";
+    status.textContent = "Showing a still preview. Choose a finish to try the 3D view again.";
+    syncMotion();
+  }
   function setVariant(name) {
     const config = variants[name];
-    if (!config || !viewer) return;
+    if (!config) return;
+    const src = `/assets/cards-final/${name}.glb`;
+    if (!viewer.src?.endsWith(src) || root.dataset.modelState === "error") {
+      ready = false;
+      root.dataset.modelState = "loading";
+      status.textContent = "Preparing your card preview…";
+      fallback.hidden = true;
+      viewer.src = src;
+    }
     root.dataset.heroActive = name;
-    if (viewer.src !== config.model && !viewer.src.endsWith(config.model)) {
-      viewer.src = config.model;
+    title.textContent = config.title;
+    description.textContent = config.description;
+    viewer.alt = `Oneinfo ${config.title} business card. Drag to explore the front and back.`;
+    for (const image of [poster, fallback]) {
+      image.src = `/assets/cards-final/${config.poster}`;
+      image.alt = `Oneinfo ${config.title} card`;
     }
-    if (titleEl) titleEl.textContent = config.title;
-    if (descEl) descEl.textContent = config.desc;
-    for (const btn of buttons) {
-      btn.setAttribute("aria-pressed", String(btn.dataset.cardVariant === name));
-    }
-    isFlipped = false;
+    for (const button of buttons) button.setAttribute("aria-pressed", String(button.dataset.cardVariant === name));
+    flipped = false;
+    flip.setAttribute("aria-label", "Show back of card");
+    viewer.resetTurntableRotation?.();
     viewer.cameraOrbit = "25deg 75deg 105%";
+    syncMotion();
   }
+  for (const button of buttons) button.addEventListener("click", () => setVariant(button.dataset.cardVariant));
+  flip.addEventListener("click", () => {
+    stopRotation();
+    viewer.resetTurntableRotation?.();
+    flipped = !flipped;
+    viewer.cameraOrbit = flipped ? "205deg 75deg 105%" : "25deg 75deg 105%";
+    flip.setAttribute("aria-label", flipped ? "Show front of card" : "Show back of card");
+  });
+  toggle.addEventListener("click", () => { rotating = !rotating; syncMotion(); });
+  viewer.addEventListener("pointerdown", stopRotation);
+  viewer.addEventListener("keydown", stopRotation);
+  viewer.addEventListener("load", () => {
+    ready = true;
+    root.dataset.modelState = "ready";
+    fallback.hidden = true;
+    status.textContent = "Drag to explore, or use the turn button to see the other side.";
+    syncMotion();
+  });
+  viewer.addEventListener("error", showError);
+  doc.addEventListener("visibilitychange", syncMotion);
+  motion.addEventListener("change", () => { rotating = !motion.matches; syncMotion(); });
+  const observer = new doc.defaultView.IntersectionObserver(([entry]) => { visible = entry.isIntersecting; syncMotion(); });
+  observer.observe(viewer);
+  setVariant(root.dataset.heroActive || "black");
+  syncMotion();
+  void import("@google/model-viewer").catch(showError);
+}
 
-  for (const button of buttons) {
+export function initializeCardPreviews(root) {
+  if (!root) return;
+  for (const card of root.querySelectorAll(".card-preview")) {
+    const button = card.querySelector("button");
     button.addEventListener("click", () => {
-      setVariant(button.dataset.cardVariant);
-    });
-  }
-
-  if (flipBtn && viewer) {
-    flipBtn.addEventListener("click", () => {
-      isFlipped = !isFlipped;
-      viewer.cameraOrbit = isFlipped ? "205deg 75deg 105%" : "25deg 75deg 105%";
-    });
-  }
-
-  const viewport = root.querySelector(".hero-3d-viewport");
-  if (viewport) {
-    viewport.addEventListener("mousemove", (e) => {
-      const rect = viewport.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width - 0.5;
-      const y = (e.clientY - rect.top) / rect.height - 0.5;
-      viewport.style.setProperty("--tilt-x", `${(-y * 7).toFixed(2)}deg`);
-      viewport.style.setProperty("--tilt-y", `${(x * 7).toFixed(2)}deg`);
-    });
-    viewport.addEventListener("mouseleave", () => {
-      viewport.style.setProperty("--tilt-x", "0deg");
-      viewport.style.setProperty("--tilt-y", "0deg");
+      const back = card.dataset.preview !== "back";
+      card.dataset.preview = back ? "back" : "front";
+      button.setAttribute("aria-pressed", String(back));
+      const heading = card.querySelector("h3").textContent.toLowerCase();
+      button.setAttribute("aria-label", `Show ${back ? "front" : "back"} of ${heading} design preview`);
+      card.querySelector(".preview-turn-hint").lastChild.textContent = back ? " View front" : " Turn card";
     });
   }
 }
-

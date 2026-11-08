@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { initializeNfcDeck } from "../sites/storefront/nfc-deck.mjs";
-import { initializeHero3D } from "../sites/storefront/hero-3d.mjs";
+import { initializeHero3D, initializeCardPreviews } from "../sites/storefront/hero-3d.mjs";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
 
@@ -67,42 +67,80 @@ test("storefront uses defined SVG icons instead of decorative Unicode symbols", 
   for (const match of references) assert.ok(symbols.has(match[1] ?? match[2]), `Undefined icon: ${match[0]}`);
 });
 
-test("hero 3D stage toggles card variants and orbit orientation", () => {
-  const viewer = { src: "/assets/cards-final/black.glb", cameraOrbit: "25deg 75deg 105%" };
-  const title = { textContent: "" };
-  const desc = { textContent: "" };
-  const flipBtn = { addEventListener(evt, handler) { this.click = handler; } };
-  const buttons = ["black", "light"].map(variant => ({
-    dataset: { cardVariant: variant },
-    attributes: {},
-    setAttribute(name, value) { this.attributes[name] = value; },
-    addEventListener(name, handler) { this.click = handler; },
-  }));
-
-  const root = {
-    dataset: {},
-    querySelector(selector) {
-      if (selector === "#hero-model-viewer") return viewer;
-      if (selector === "#hero-card-title") return title;
-      if (selector === "#hero-card-desc") return desc;
-      if (selector === "#hero-flip-btn") return flipBtn;
-      return null;
-    },
-    querySelectorAll(selector) {
-      if (selector === "[data-card-variant]") return buttons;
-      return [];
-    },
-  };
-
+function eventTarget(extra = {}) {
+  return { ...extra, events: {}, attributes: {}, setAttribute(key, value) { this.attributes[key] = value; },
+    addEventListener(event, handler) { this.events[event] = handler; }, emit(event) { this.events[event]?.(); } };
+}
+function heroFixture(reduced = false) {
+  const media = eventTarget({ matches: reduced });
+  let visibility;
+  const doc = eventTarget({ hidden: false, defaultView: { matchMedia: () => media,
+    IntersectionObserver: class { constructor(callback) { visibility = callback; } observe() {} } } });
+  const viewer = eventTarget({ src: "/assets/cards-final/black.glb", resetTurntableRotation() { this.reset = true; } });
+  const elements = Object.fromEntries(["#hero-card-title", "#hero-card-desc", ".hero-poster", ".hero-fallback", "#hero-flip-btn", "#hero-motion-btn", ".hero-model-status"].map(id => [id, eventTarget({ textContent: "" })]));
+  elements["#hero-model-viewer"] = viewer;
+  const buttons = ["black", "light"].map(name => eventTarget({ dataset: { cardVariant: name } }));
+  const root = { ownerDocument: doc, dataset: { heroActive: "black" }, querySelector: id => elements[id], querySelectorAll: () => buttons };
   initializeHero3D(root);
-  buttons[1].click(); // switch to light
-  assert.equal(root.dataset.heroActive, "light");
-  assert.equal(viewer.src, "/assets/cards-final/light.glb");
-  assert.equal(title.textContent, "Minimalist Light Card");
-  assert.equal(buttons[1].attributes["aria-pressed"], "true");
+  return { root, doc, media, viewer, buttons, elements, visible: value => visibility([{ isIntersecting: value }]) };
+}
 
-  flipBtn.click(); // flip to inspect back
-  assert.equal(viewer.cameraOrbit, "205deg 75deg 105%");
-  flipBtn.click(); // flip back
-  assert.equal(viewer.cameraOrbit, "25deg 75deg 105%");
+test("3D motion pauses offscreen, in a hidden tab, on interaction and for reduced motion", () => {
+  const f = heroFixture();
+  const toggle = f.elements["#hero-motion-btn"];
+  assert.equal(f.viewer.autoRotate, false);
+  f.viewer.emit("load"); f.visible(true);
+  assert.equal(f.viewer.autoRotate, true);
+  f.visible(false); assert.equal(f.viewer.autoRotate, false);
+  f.visible(true); f.doc.hidden = true; f.doc.emit("visibilitychange");
+  assert.equal(f.viewer.autoRotate, false);
+  f.doc.hidden = false; f.doc.emit("visibilitychange");
+  assert.equal(f.viewer.autoRotate, true);
+  f.viewer.emit("pointerdown"); assert.equal(f.viewer.autoRotate, false);
+  toggle.emit("click"); assert.equal(f.viewer.autoRotate, true);
+  toggle.emit("click"); assert.equal(f.viewer.autoRotate, false);
+  f.media.matches = true; f.media.emit("change");
+  assert.equal(f.viewer.autoRotate, false);
+  assert.equal(f.viewer.interpolationDecay, 0);
+  assert.equal(toggle.disabled, true);
+  const reduced = heroFixture(true); reduced.viewer.emit("load"); reduced.visible(true);
+  assert.equal(reduced.viewer.autoRotate, false);
+});
+
+test("finish changes update model and poster; flips stop rotation; failures have a still fallback", () => {
+  const f = heroFixture(); f.buttons[1].emit("click");
+  assert.equal(f.root.dataset.heroActive, "light");
+  assert.equal(f.viewer.src, "/assets/cards-final/light.glb");
+  assert.equal(f.elements["#hero-card-title"].textContent, "Minimalist Light");
+  assert.match(f.elements[".hero-poster"].src, /light-studio-final.webp$/);
+  assert.equal(f.buttons[1].attributes["aria-pressed"], "true");
+  f.viewer.emit("load"); f.visible(true);
+  f.elements["#hero-flip-btn"].emit("click");
+  assert.equal(f.viewer.cameraOrbit, "205deg 75deg 105%");
+  assert.equal(f.viewer.autoRotate, false); assert.equal(f.viewer.reset, true);
+  f.elements["#hero-flip-btn"].emit("click");
+  assert.equal(f.viewer.cameraOrbit, "25deg 75deg 105%");
+  f.viewer.emit("error");
+  assert.equal(f.elements[".hero-fallback"].hidden, false);
+  assert.equal(f.elements["#hero-flip-btn"].disabled, true);
+  f.buttons[0].emit("click"); assert.equal(f.root.dataset.modelState, "loading");
+  f.viewer.emit("load"); assert.equal(f.elements[".hero-fallback"].hidden, true);
+  assert.equal(f.elements["#hero-flip-btn"].disabled, false);
+});
+
+test("design previews turn both ways with accessible state and labels", () => {
+  const button = eventTarget(); const hint = { lastChild: { textContent: " Turn card" } };
+  const card = { dataset: { preview: "front" }, querySelector: selector => selector === "button" ? button : selector === "h3" ? { textContent: "Your professional introduction" } : hint };
+  initializeCardPreviews({ querySelectorAll: () => [card] });
+  button.emit("click"); assert.equal(card.dataset.preview, "back");
+  assert.equal(button.attributes["aria-pressed"], "true"); assert.match(button.attributes["aria-label"], /^Show front/);
+  button.emit("click"); assert.equal(card.dataset.preview, "front");
+  assert.equal(hint.lastChild.textContent, " Turn card");
+});
+
+test("storefront copy omits chip specifications and production details", () => {
+  for (const name of ["index.html", "app.js", "hero-3d.mjs"]) {
+    const text = readFileSync(new URL(`../sites/storefront/${name}`, import.meta.url), "utf8");
+    assert.doesNotMatch(text, /NTAG\d+|13\.56|MHz|contactless chip|optical QR|Hardware verified|Identity allocated|Workstation prep|Free lifetime/i);
+  }
 });

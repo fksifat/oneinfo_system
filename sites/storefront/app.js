@@ -1,7 +1,7 @@
 import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
-import { initializeHero3D } from "./hero-3d.mjs";
+import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
 
 (function () {
@@ -9,6 +9,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
 
   initializeNfcDeck(document.querySelector(".nfc-deck"));
   initializeHero3D(document.querySelector("#hero-3d"));
+  initializeCardPreviews(document.querySelector(".card-showcase"));
 
   const icon = name => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#${name}"></use></svg>`;
   const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -335,9 +336,9 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const fmt = date => date ? escapeHtml(new Date(date).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })) : "";
     const stages = [
       ["Received", "Order placed", isConfirmed, fmt(order.createdAt) || "Awaiting order", order.paymentVerifiedAt ? "Payment verified" : "Order confirmed"],
-      [order.invoiceNumber ? "Cards packed" : "Card & QR Generated", order.invoiceNumber ? "Ready stock" : "Identity allocated", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "QR generated"}`, order.invoiceNumber ? "Linked during packing" : "Unique slug & optical QR"],
-      ["NFC & QC Test OK", "Hardware verified", qcReady, `${qcReady ? total : cards.qcPassed}/${total} NFC & QC OK`, "NTAG213 write & read-back"],
-      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Workstation prep", order.invoiceNumber ? "Activate by invoice after delivery" : "Sealed with activation code"],
+      [order.invoiceNumber ? "Cards packed" : "Card prepared", order.invoiceNumber ? "Ready for you" : "Your card is taking shape", qrReady, `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "cards prepared"}`, order.invoiceNumber ? "Prepared for your order" : "Prepared for your profile"],
+      ["Quality checked", "Checked before dispatch", qcReady, `${qcReady ? total : cards.qcPassed}/${total} cards checked`, "Sharing and card quality reviewed"],
+      ["Processing", order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", pastProcessing, fmt(order.processingAt) || "Getting ready to ship", order.invoiceNumber ? "Activate by invoice after delivery" : "Packed with setup instructions"],
       ["Shipped", "Handed to courier", pastShipped, fmt(order.shippedAt) || "Courier handoff", order.courierTrackingId ? `ID: ${escapeHtml(order.courierTrackingId)}` : "Nationwide delivery"],
       ["Delivered", "In client’s hands", isDelivered, fmt(order.deliveredAt) || "Final handoff", isDelivered ? "Ready to tap & activate" : "Reaching your address"],
     ];
@@ -370,7 +371,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const token = rawToken || savedToken;
     activeTrackingToken = token;
     if (!token) {
-      content.innerHTML = `<form class="tracking-lookup-form"><label>Private tracking link or token<input name="token" placeholder="Paste #track/... link or token" required /></label><button class="button button-primary" type="submit">Track order</button></form>${trackingPipelineMarkup({ status: "RECEIVED", createdAt: new Date().toISOString(), cards: { total: 1, qrGenerated: 1, nfcWritten: 0, qcPassed: 0 } }, true)}`;
+      content.innerHTML = `<form class="tracking-lookup-form"><label>Your private tracking link<input name="token" placeholder="Paste the tracking link from your email" required /></label><button class="button button-primary" type="submit">Track order</button></form>${trackingPipelineMarkup({ status: "RECEIVED", createdAt: new Date().toISOString(), cards: { total: 1, qrGenerated: 1, nfcWritten: 0, qcPassed: 0 } }, true)}`;
       $(".tracking-lookup-form", content)?.addEventListener("submit", event => {
         event.preventDefault();
         const input = event.currentTarget.elements.token.value.trim().split("#track/").pop().replace(/^\/+/, "");
@@ -603,10 +604,11 @@ import logoUrl from "./assets/oneinfo-logo.svg";
 
   $(".demo-trigger").addEventListener("click", () => openModal("experience-modal"));
   $(".demo-phone").addEventListener("click", (event) => {
-    $("b", event.currentTarget).textContent = "Profile opened";
-    $("small", event.currentTarget).textContent = "Connected with Oneinfo";
-    event.currentTarget.classList.remove("tapped");
-    requestAnimationFrame(() => event.currentTarget.classList.add("tapped"));
+    const phone = event.currentTarget;
+    $("b", phone).textContent = "Profile opened";
+    $("small", phone).textContent = "Connected with Oneinfo";
+    phone.classList.remove("tapped");
+    requestAnimationFrame(() => phone.classList.add("tapped"));
   });
   $(".team-trigger").addEventListener("click", () => openModal("team-modal"));
   $(".policy-trigger").addEventListener("click", () => toast("Delivery charges and payment options are shown at checkout."));
@@ -1082,15 +1084,13 @@ import logoUrl from "./assets/oneinfo-logo.svg";
 
   const menuTrigger = $(".menu-trigger");
   const mobileMenu = $("#mobile-menu");
-  menuTrigger.addEventListener("click", () => {
-    const open = menuTrigger.getAttribute("aria-expanded") === "true";
-    menuTrigger.setAttribute("aria-expanded", String(!open));
-    mobileMenu.hidden = open;
-  });
-  $$("a", mobileMenu).forEach((link) => link.addEventListener("click", () => {
-    mobileMenu.hidden = true;
-    menuTrigger.setAttribute("aria-expanded", "false");
-  }));
+  function setMobileMenu(open) {
+    menuTrigger.setAttribute("aria-expanded", String(open));
+    menuTrigger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+    mobileMenu.hidden = !open;
+  }
+  menuTrigger.addEventListener("click", () => setMobileMenu(mobileMenu.hidden));
+  $$("a", mobileMenu).forEach(link => link.addEventListener("click", () => setMobileMenu(false)));
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
@@ -1103,6 +1103,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     const modal = $(".modal.open");
     if (modal) closeModal(modal);
     else if ($(".cart-drawer.open")) closeCart();
+    else if (!mobileMenu.hidden) { setMobileMenu(false); menuTrigger.focus(); }
   });
 
   $("#year").textContent = String(new Date().getFullYear());
