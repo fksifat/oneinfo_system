@@ -142,22 +142,43 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(await client.db.select().from(schema.cards)).toHaveLength(1);
   });
 
-  it("keeps the whole batch when an order owns a card but still permits deletion of an unused sibling", async () => {
-    const created = await batch(2);await confirm(created.id);await order();
+  it("deletes unused siblings while retaining an order's reserved card and the confirmed batch", async () => {
+    const created = await batch(4);await confirm(created.id);await order(2);
     const rows = await client.db.select().from(schema.cards);
-    const reserved = rows.find(card => card.inventoryStatus === "RESERVED")!, free = rows.find(card => card.id !== reserved.id)!;
-    expect((await removeStock(created)).statusCode).toBe(409);
+    const protectedCards = rows.filter(card => card.inventoryStatus === "RESERVED");
+    const reserved = protectedCards[0]!;
+    await phone();
+    await request("/api/v1/local-nfc/expected-card", { cardId: reserved.id });
     expect((await removeStock(created, reserved)).statusCode).toBe(409);
-    expect(await client.db.select().from(schema.cards)).toHaveLength(2);
+    expect((await removeStock(created, undefined, "wrong code")).statusCode).toBe(400);
+    expect(await client.db.select().from(schema.cards)).toHaveLength(4);
+    const removed = await removeStock(created);
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(removed.json()).toMatchObject({ deleted: 2, skipped: 2, batchDeleted: false });
+    expect(removed.json().cardIds).not.toContain(reserved.id);
+    expect((await client.db.select().from(schema.cards)).map(card => card.id).sort()).toEqual(protectedCards.map(card => card.id).sort());
     expect(await client.db.select().from(schema.qrArtifacts)).toHaveLength(2);
-    expect((await removeStock(created, free)).statusCode).toBe(200);
-    expect((await request("/api/v1/admin/cards")).items).toHaveLength(1);
-    expect((await request(`/api/v1/production/batches/${created.id}`)).plannedQuantity).toBe(1);
-    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(1);
+    expect((await request("/api/v1/admin/cards")).items).toHaveLength(2);
+    expect(await request(`/api/v1/production/batches/${created.id}`)).toMatchObject({ plannedQuantity: 2, printConfirmedAt: expect.any(String) });
+    expect((await request("/api/v1/local-nfc/latest-qr-scan")).expected.cardId).toBe(reserved.id);
+    expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(2);
+    const audit = await client.db.select().from(schema.auditLogs).where(eq(schema.auditLogs.action, "PRODUCTION_BATCH_STOCK_DELETED"));
+    expect(audit[0]!.metadata).toMatchObject({ skipped: 2, batchDeleted: false });
+    expect((await removeStock(created)).statusCode).toBe(409);
+  });
+
+  it("skips cards with in-flight jobs while deleting other unused cards", async () => {
+    const created = await batch(2);
+    const rows = await client.db.select().from(schema.cards);
+    const job = (await client.db.select().from(schema.productionJobs).where(eq(schema.productionJobs.cardId, rows[0]!.id))).find(item => item.type === "NFC_ENCODING")!;
+    await request(`/api/v1/production/jobs/${job.id}/claim`, { idempotencyKey: randomUUID() });
+    expect((await removeStock(created)).json()).toMatchObject({ deleted: 1, skipped: 1, batchDeleted: false });
+    expect(await client.db.select().from(schema.cards)).toEqual([rows[0]]);
+    expect(await client.db.select().from(schema.productionJobs)).toHaveLength(3);
   });
 
   it.each(["profile", "customer", "company", "dispatched"] as const)("protects %s-linked cards from deletion", async kind => {
-    const created = await batch(1);
+    const created = await batch(2);
     const [card] = await client.db.select().from(schema.cards);
     const profile = await request("/api/v1/profiles", { publicSlug: `delete-guard-${kind}`, displayName: "Protected Owner" });
     const [account] = await client.db.insert(schema.customerAccounts).values({ email: randomUUID() + "@example.com", passwordHash: "test-only", profileId: profile.id }).returning();
@@ -166,6 +187,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       await client.db.update(schema.cards).set({ companyId: company!.id }).where(eq(schema.cards.id, card!.id));
     } else await client.db.update(schema.cards).set(kind === "profile" ? { profileId: profile.id } : kind === "customer" ? { customerAccountId: account!.id } : { inventoryStatus: "DISPATCHED" }).where(eq(schema.cards.id, card!.id));
     expect((await removeStock(created, card!)).statusCode).toBe(409);
+    expect((await removeStock(created)).json()).toMatchObject({ deleted: 1, skipped: 1, batchDeleted: false });
     expect(await client.db.select().from(schema.cards)).toHaveLength(1);
     expect(await client.db.select().from(schema.customerAccounts)).toHaveLength(1);
   });

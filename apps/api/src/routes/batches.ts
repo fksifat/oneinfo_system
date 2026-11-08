@@ -33,7 +33,7 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
     const result = await deleteProductionStock(batchId, cardId, confirmation, actor.operatorId, request.id);
     try { forgetProductionCards(result.cardIds); }
     catch { request.log.warn("Deleted stock; NFC state cleanup could not be saved"); }
-    return { deleted: result.deleted, batchId, batchDeleted: result.batchDeleted };
+    return { deleted: result.deleted, skipped: result.skipped, cardIds: result.cardIds, batchId, batchDeleted: result.batchDeleted };
   });
 
   app.post("/", async (request, reply) => {
