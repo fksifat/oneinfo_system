@@ -161,7 +161,8 @@ try {
       if(label==='Client profiles'){
         await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);await inspect('admin-profile-editor-'+width);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.activeElement)`),true);
         if(width===1440){await uploadPhoto();await fill('Public slug','ui-created-profile');await fill('Display name','UI Created Profile');failProfileSave=true;await click('Save profile');await until(`!!document.querySelector('.profile-save-error')`);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.querySelector('[role=alert]'))`),true);failProfileSave=false;await click('Save profile');await until(`!document.querySelector('.editor-panel[open]')`);await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);}
-        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await delay(100);assert.equal(await evaluate(`!!document.querySelector('.editor-panel[open]')`),false);console.log('profile-editor-escape PASS');
+        await until(`document.querySelector('.editor-panel[open]')?.querySelector('[aria-label="Close profile editor"]')?.disabled===false&&document.querySelector('.editor-panel').contains(document.activeElement)`);
+        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.editor-panel[open]')`);console.log('profile-editor-escape PASS');
       }
       if(label==='Products'){const opened=await evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Edit ')&&b.classList.contains('catalog-secondary'));if(!b)return false;b.click();return true})()`);if(opened){await delay(200);await inspect('admin-product-editor-'+width);for(const section of ['Details','Colours & prices','Media','Warranty','Publishing']){await evaluate(`(()=>{const b=[...document.querySelectorAll('.catalog-editor-nav button')].find(b=>b.textContent===${JSON.stringify(section)});b.click()})()`);assert.equal(await evaluate(`document.querySelectorAll('.catalog-section:not([hidden])').length`),1);}await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});}}
       if(label==='Orders'){
@@ -430,7 +431,7 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width:320,height:844,deviceScaleFactor:1,mobile:true});await inspect('company-public-profile-320');
   assert.equal(browserErrors.length,0,browserErrors.join('\n'));
   console.log('PASS: company setup, employee welcome email and edit link, card assignment, contact search, analytics, security, and public directory.');
-} catch(error) { console.log('UI AUDIT FAILED:',error.message); process.exitCode=1; } finally {
+} catch(error) { console.log('UI AUDIT FAILED:',error.stack??error.message); process.exitCode=1; } finally {
   closing=true;
   clearInterval(globalThis.uiHeartbeat);
   if(socket)socket.onmessage=null;
