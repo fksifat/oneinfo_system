@@ -327,11 +327,44 @@ export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMi
 export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
   v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
 
+export const CardLayoutSchema = z.enum([
+  "left",
+  "center",
+  "right",
+  "reverse",
+  "split-logo-left",
+  "split-logo-right",
+  "diagonal",
+  "column",
+  "header",
+  "bottom-left",
+  "bottom-center",
+  "bottom-right",
+]);
+export type CardLayout = z.infer<typeof CardLayoutSchema>;
+
+export const SurfaceMotifSchema = z.enum([
+  "facets",
+  "contour",
+  "architectural",
+  "inlay",
+  "minimal",
+]);
+export type SurfaceMotif = z.infer<typeof SurfaceMotifSchema>;
+
+export const HexColorSchema = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/i);
+
 export const ProductCustomizationSchema = z.object({
   name: z.string().trim().min(1).max(50),
   title: z.string().trim().max(60).optional().default(""),
-  position: z.enum(["bottom-left", "bottom-center", "center", "bottom-right"]).default("bottom-left"),
+  layout: CardLayoutSchema.default("left"),
+  surfaceMotif: SurfaceMotifSchema.default("facets"),
+  surfaceColor: HexColorSchema.default("#0a0b0d"),
+  accentColor: HexColorSchema.default("#d8b26e"),
   font: z.enum(["sans", "serif", "mono"]).default("sans"),
+  finish: z.enum(["matte", "brushed", "gloss"]).default("matte").optional(),
+  position: z.string().optional(),
+  presetId: z.string().max(30).optional(),
 });
 export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
 

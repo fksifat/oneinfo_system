@@ -39,7 +39,7 @@ function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
   return <details className="operation-panel order-packing" open={initiallyOpen || undefined}>
     <summary>Pack cards & activation codes</summary>
     <p>{quantity} temporary profile{quantity === 1 ? "" : "s"} · One private code per card. Physical cards are linked only when clients activate them.</p>
-    <ol>{order.items.map((item, i) => <li key={i}>{item.quantity} × {item.name} · {item.variantName}{item.customization ? ` [Custom: ${item.customization.name}]` : ""}</li>)}</ol>
+    <ol>{order.items.map((item, i) => <li key={i}>{item.quantity} × {item.name} · {item.variantName}{item.customization ? ` [Custom: ${item.customization.name}${item.customization.surfaceMotif ? ` · ${item.customization.surfaceMotif}` : ""}]` : ""}</li>)}</ol>
     <button type="button" disabled={busy || !paid} onClick={() => void run(async () => {
       setCodes((await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" })).items);
     })}>{busy ? "Loading…" : codes ? "Refresh secret codes" : "Show secret codes"}</button>
@@ -85,7 +85,7 @@ function LegacyOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
       <h1>Oneinfo packing slip</h1><p>${order.invoiceNumber ? `Invoice ${escape(order.invoiceNumber)}` : `Order ${escape(order.id)}`}</p>
       <p>${escape(order.customer.name)}<br>${escape(order.customer.phone)}<br>${escape(order.deliveryAddress.addressLine)}<br>
       ${escape(order.deliveryAddress.district)} ${escape(order.deliveryAddress.postalCode ?? "")}</p>
-      <h2>Items</h2><ul>${order.items.map(item => `<li>${item.quantity} × ${escape(item.name)} · ${escape(item.variantName)}${item.customization ? ` [Custom: ${escape(item.customization.name)}]` : ""}</li>`).join("")}</ul>
+      <h2>Items</h2><ul>${order.items.map(item => `<li>${item.quantity} × ${escape(item.name)} · ${escape(item.variantName)}${item.customization ? ` [Custom: ${escape(item.customization.name)}${item.customization.surfaceMotif ? ` · ${escape(item.customization.surfaceMotif)}` : ""}]` : ""}</li>`).join("")}</ul>
       <p>Verified cards: ${cards.map(card => escape(card.publicSlug)).join(", ")}</p><button type="button">Print packing slip</button></html>`);
     tab.document.close();
     tab.document.querySelector("button")?.addEventListener("click", () => tab.print());
@@ -107,7 +107,7 @@ function LegacyOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
       finally { setBusy(false); }
     }}>
       {invoiceOrder && <><p>Pick any ready cards of the correct finish. Scan the ones going into this package, in the order shown below.</p>
-        <ol>{order.items.map((item, index) => <li key={index}>{item.quantity} × {item.name} · {item.variantName}{item.customization ? ` [Custom: ${item.customization.name}]` : ""}</li>)}</ol></>}
+        <ol>{order.items.map((item, index) => <li key={index}>{item.quantity} × {item.name} · {item.variantName}{item.customization ? ` [Custom: ${item.customization.name}${item.customization.surfaceMotif ? ` · ${item.customization.surfaceMotif}` : ""}]` : ""}</li>)}</ol></>}
       <label>Scan or paste one QR link or card code per line
         <textarea value={scans} onChange={e => setScans(e.target.value)} required rows={3} maxLength={500000} />
       </label><button className="button-action button-action-primary" disabled={busy}>{busy ? "Checking…" : invoiceOrder ? "Confirm packed cards" : "Check packed cards"}</button>

@@ -1,5 +1,5 @@
 import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
-import { addCartVariant, reconcileCartItems, productRoute } from "./catalog.js";
+import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
@@ -157,7 +157,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
             <div class="cart-item-info">
               <strong>${escapeHtml(item.name)}</strong>
               <span>${escapeHtml(item.variantName)}</span>
-              ${item.customization ? `<span class="cart-custom-badge">✦ Custom: ${escapeHtml(item.customization.name)}${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""} (${escapeHtml(item.customization.position.replace("-", " "))})</span>` : ""}
+              ${item.customization ? `<span class="cart-custom-badge">✦ Custom: <strong>${escapeHtml(item.customization.name)}</strong>${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""}<small style="display:block; opacity:0.85; margin-top:2px; font-weight:500;">${escapeHtml(String(item.customization.layout || item.customization.position || "left").replace("-", " "))} · ${escapeHtml(item.customization.surfaceMotif || "facets")} · ${escapeHtml(item.customization.font || "sans")}<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.surfaceColor || '#0a0b0d')}; vertical-align:middle; margin:0 2px 0 4px; border:1px solid #777;"></span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.accentColor || '#d8b26e')}; vertical-align:middle; border:1px solid #777;"></span></small></span>` : ""}
               <span>Qty ${item.quantity}</span>
             </div>
             <div class="cart-item-actions">
@@ -247,19 +247,29 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       const percent = discountPercent(v);
       const sale = v.salePriceMinor !== null;
       const quantity = quantities.get(p.id) ?? 1;
-      const custom = productCustomizations.get(p.id) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+      const custom = productCustomizations.get(p.id) ?? defaultCustomization("01");
       const isCustomizable = detail && p.customizable;
-      const illustration = `<div class="mini-product-card ${v.appearance}-card ${isCustomizable ? "customizable-card" : ""}" style="background:${escapeHtml(v.colorHex)}">
+      const isLight = isCustomizable ? isColorLight(custom.surfaceColor) : (v.appearance === "light");
+      const surfaceBg = isCustomizable ? escapeHtml(custom.surfaceColor) : escapeHtml(v.colorHex);
+      const cardAccent = isCustomizable ? escapeHtml(custom.accentColor) : 'var(--accent)';
+      const layoutClass = isCustomizable ? `layout-${escapeHtml(custom.layout || 'left')}` : "";
+      const motifClass = isCustomizable ? `motif-${escapeHtml(custom.surfaceMotif || 'facets')}` : "";
+      const luminanceClass = isLight ? "is-light-surface light-card" : "dark-card";
+
+      const illustration = `<div class="mini-product-card ${v.appearance}-card ${isCustomizable ? `customizable-card ${layoutClass} ${motifClass} ${luminanceClass}` : ""}" style="background:${surfaceBg}; --card-accent:${cardAccent};">
+        ${isCustomizable ? renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor) : ""}
+        ${isCustomizable && custom.layout === "column" ? `<div class="card-side-column-bar" aria-hidden="true"></div>` : ""}
+        ${isCustomizable && custom.layout === "header" ? `<div class="card-header-banner" aria-hidden="true"></div>` : ""}
         <div class="card-header-row">
           <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
-          <span class="card-nfc-wave" aria-hidden="true">
+          <span class="card-nfc-wave" aria-hidden="true" style="color:${isCustomizable ? escapeHtml(custom.accentColor) : 'currentColor'};">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8.5 16.5a5 5 0 0 1 0-7"/><path d="M12 19a8.5 8.5 0 0 1 0-14"/><path d="M15.5 21.5a12 12 0 0 1 0-19"/></svg>
           </span>
         </div>
         ${isCustomizable ? `
-          <div class="card-custom-text pos-${escapeHtml(custom.position)} font-${escapeHtml(custom.font)}">
+          <div class="card-custom-text pos-${escapeHtml(custom.layout || custom.position || 'left')} font-${escapeHtml(custom.font)}">
             <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}">${escapeHtml(custom.name || "Your Name")}</strong>
-            <span class="card-custom-title ${!custom.title ? "is-placeholder" : ""}">${escapeHtml(custom.title || "Your Title / Role")}</span>
+            <span class="card-custom-title ${!custom.title ? "is-placeholder" : ""}" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.title || "Your Title / Role")}</span>
           </div>
         ` : `<strong>${escapeHtml(p.name)}</strong>`}
       </div>`;
@@ -293,27 +303,119 @@ import logoUrl from "./assets/oneinfo-logo.svg";
             </div>
             <span class="customizer-badge-free">Included free</span>
           </div>
-          <p class="customizer-desc">Your custom name and title will be laser-engraved onto the card.</p>
+          <p class="customizer-desc">Choose from our 10 signature design editions or custom-configure your surface motif, base colour, foil inlay, and layout.</p>
           <div class="customizer-form">
-            <div class="custom-field">
-              <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span><small class="char-count" id="name-count-${escapeHtml(p.id)}">${(custom.name || "").length}/50</small></label>
-              <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="50" placeholder="e.g. Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
-            </div>
-            <div class="custom-field">
-              <label for="custom-title-${escapeHtml(p.id)}"><span>Title or Subline <small>(optional)</small></span><small class="char-count" id="title-count-${escapeHtml(p.id)}">${(custom.title || "").length}/60</small></label>
-              <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="60" placeholder="e.g. Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
-            </div>
-            <div class="custom-field">
-              <label>Name Placement</label>
-              <div class="customizer-pills" role="radiogroup" aria-label="Name placement">
-                <button type="button" class="customizer-pill ${custom.position === 'bottom-left' ? 'is-selected' : ''}" data-custom-set="position" data-value="bottom-left" aria-checked="${custom.position === 'bottom-left'}" role="radio"><span class="pill-dot"></span> Bottom Left</button>
-                <button type="button" class="customizer-pill ${custom.position === 'bottom-center' ? 'is-selected' : ''}" data-custom-set="position" data-value="bottom-center" aria-checked="${custom.position === 'bottom-center'}" role="radio"><span class="pill-dot"></span> Bottom Center</button>
-                <button type="button" class="customizer-pill ${custom.position === 'center' ? 'is-selected' : ''}" data-custom-set="position" data-value="center" aria-checked="${custom.position === 'center'}" role="radio"><span class="pill-dot"></span> Center</button>
-                <button type="button" class="customizer-pill ${custom.position === 'bottom-right' ? 'is-selected' : ''}" data-custom-set="position" data-value="bottom-right" aria-checked="${custom.position === 'bottom-right'}" role="radio"><span class="pill-dot"></span> Bottom Right</button>
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>1. Quick Presets (10 Premium Editions)</span>
+                <small>1-click apply matching design</small>
+              </div>
+              <div class="preset-chips-scroll" role="radiogroup" aria-label="10 Premium Presets">
+                ${PREMIUM_PRESETS.map(preset => `
+                  <button type="button" class="preset-chip ${custom.presetId === preset.id ? "is-selected" : ""}" data-custom-preset="${preset.id}" aria-checked="${custom.presetId === preset.id}" role="radio" title="${escapeHtml(preset.subtitle)}">
+                    <span class="preset-swatches">
+                      <span class="preset-swatch-base" style="background:${preset.surfaceColor};"></span>
+                      <span class="preset-swatch-accent" style="background:${preset.accentColor};"></span>
+                    </span>
+                    <span class="preset-chip-text">
+                      <strong>${escapeHtml(preset.name)}</strong>
+                      <small>${escapeHtml(preset.label)}</small>
+                    </span>
+                  </button>
+                `).join("")}
               </div>
             </div>
-            <div class="custom-field">
-              <label>Typography Style</label>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>2. Cardholder Details</span>
+                <small>Laser-engraved onto card</small>
+              </div>
+              <div class="customizer-identity-grid">
+                <div class="custom-field">
+                  <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span><small class="char-count" id="name-count-${escapeHtml(p.id)}">${(custom.name || "").length}/50</small></label>
+                  <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="50" placeholder="e.g. Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
+                </div>
+                <div class="custom-field">
+                  <label for="custom-title-${escapeHtml(p.id)}"><span>Title / Subline <small>(optional)</small></span><small class="char-count" id="title-count-${escapeHtml(p.id)}">${(custom.title || "").length}/60</small></label>
+                  <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="60" placeholder="e.g. Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
+                </div>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>3. Surface Area & Texture Motif</span>
+                <small>Decorative vector inlay</small>
+              </div>
+              <div class="customizer-pills" role="radiogroup" aria-label="Surface motif">
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'facets' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="facets" role="radio" aria-checked="${custom.surfaceMotif === 'facets'}"><span class="motif-mini-icon facets-icon"></span> Layered Facets</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'contour' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="contour" role="radio" aria-checked="${custom.surfaceMotif === 'contour'}"><span class="motif-mini-icon contour-icon"></span> Contour Engraving</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'architectural' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="architectural" role="radio" aria-checked="${custom.surfaceMotif === 'architectural'}"><span class="motif-mini-icon architectural-icon"></span> Architectural Corner</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'inlay' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="inlay" role="radio" aria-checked="${custom.surfaceMotif === 'inlay'}"><span class="motif-mini-icon inlay-icon"></span> Diagonal Inlay</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'minimal' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="minimal" role="radio" aria-checked="${custom.surfaceMotif === 'minimal'}"><span class="motif-mini-icon minimal-icon"></span> Clean Minimal</button>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="color-config-cols">
+                <div class="color-picker-group">
+                  <div class="customizer-section-title">
+                    <span>4a. Surface Base Colour</span>
+                    <small id="surface-color-name-${escapeHtml(p.id)}">${escapeHtml(SURFACE_COLORS.find(c => c.hex.toLowerCase() === custom.surfaceColor.toLowerCase())?.name || custom.surfaceColor)}</small>
+                  </div>
+                  <div class="color-swatches-grid" role="radiogroup" aria-label="Surface base colour">
+                    ${SURFACE_COLORS.map(c => `
+                      <button type="button" class="palette-swatch ${custom.surfaceColor.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}" data-custom-set="surfaceColor" data-value="${c.hex}" style="--swatch-color:${c.hex};" title="${escapeHtml(c.name)} (${c.hex})" aria-label="${escapeHtml(c.name)}" role="radio" aria-checked="${custom.surfaceColor.toLowerCase() === c.hex.toLowerCase()}"><span class="swatch-indicator"></span></button>
+                    `).join("")}
+                    <label class="palette-swatch custom-hex-swatch" title="Pick custom base colour" style="--swatch-color:${escapeHtml(custom.surfaceColor)};">
+                      <input type="color" value="${escapeHtml(custom.surfaceColor)}" data-custom-color="surfaceColor" aria-label="Custom surface colour" />
+                      <span class="custom-icon" aria-hidden="true">+</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="color-picker-group">
+                  <div class="customizer-section-title">
+                    <span>4b. Foil & Accent Colour</span>
+                    <small id="accent-color-name-${escapeHtml(p.id)}">${escapeHtml(ACCENT_COLORS.find(c => c.hex.toLowerCase() === custom.accentColor.toLowerCase())?.name || custom.accentColor)}</small>
+                  </div>
+                  <div class="color-swatches-grid" role="radiogroup" aria-label="Foil inlay accent colour">
+                    ${ACCENT_COLORS.map(c => `
+                      <button type="button" class="palette-swatch ${custom.accentColor.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}" data-custom-set="accentColor" data-value="${c.hex}" style="--swatch-color:${c.hex};" title="${escapeHtml(c.name)} (${c.hex})" aria-label="${escapeHtml(c.name)}" role="radio" aria-checked="${custom.accentColor.toLowerCase() === c.hex.toLowerCase()}"><span class="swatch-indicator"></span></button>
+                    `).join("")}
+                    <label class="palette-swatch custom-hex-swatch" title="Pick custom foil colour" style="--swatch-color:${escapeHtml(custom.accentColor)};">
+                      <input type="color" value="${escapeHtml(custom.accentColor)}" data-custom-color="accentColor" aria-label="Custom accent colour" />
+                      <span class="custom-icon" aria-hidden="true">+</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>5. Layout & Placement</span>
+                <small>10 Design Layouts</small>
+              </div>
+              <div class="customizer-pills" role="radiogroup" aria-label="Layout placement">
+                <button type="button" class="customizer-pill ${custom.layout === 'left' ? 'is-selected' : ''}" data-custom-set="layout" data-value="left" role="radio" aria-checked="${custom.layout === 'left'}"><span class="pill-dot"></span> Classic Left</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'center' ? 'is-selected' : ''}" data-custom-set="layout" data-value="center" role="radio" aria-checked="${custom.layout === 'center'}"><span class="pill-dot"></span> Centered Stack</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'right' ? 'is-selected' : ''}" data-custom-set="layout" data-value="right" role="radio" aria-checked="${custom.layout === 'right'}"><span class="pill-dot"></span> Right Aligned</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'reverse' ? 'is-selected' : ''}" data-custom-set="layout" data-value="reverse" role="radio" aria-checked="${custom.layout === 'reverse'}"><span class="pill-dot"></span> Reverse Stack</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'split-logo-left' ? 'is-selected' : ''}" data-custom-set="layout" data-value="split-logo-left" role="radio" aria-checked="${custom.layout === 'split-logo-left'}"><span class="pill-dot"></span> Logo Left / Name Right</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'split-logo-right' ? 'is-selected' : ''}" data-custom-set="layout" data-value="split-logo-right" role="radio" aria-checked="${custom.layout === 'split-logo-right'}"><span class="pill-dot"></span> Name Left / Logo Right</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'diagonal' ? 'is-selected' : ''}" data-custom-set="layout" data-value="diagonal" role="radio" aria-checked="${custom.layout === 'diagonal'}"><span class="pill-dot"></span> Diagonal Corners</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'column' ? 'is-selected' : ''}" data-custom-set="layout" data-value="column" role="radio" aria-checked="${custom.layout === 'column'}"><span class="pill-dot"></span> Side Column</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'header' ? 'is-selected' : ''}" data-custom-set="layout" data-value="header" role="radio" aria-checked="${custom.layout === 'header'}"><span class="pill-dot"></span> Header Bar</button>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>6. Typography Style</span>
+                <small>Precision typography</small>
+              </div>
               <div class="customizer-pills" role="radiogroup" aria-label="Typography style">
                 <button type="button" class="customizer-pill ${custom.font === 'sans' ? 'is-selected' : ''}" data-custom-set="font" data-value="sans" aria-checked="${custom.font === 'sans'}" role="radio"><span class="font-sample" style="font-family: inherit; font-weight: 700;">Aa</span> Modern Sans</button>
                 <button type="button" class="customizer-pill ${custom.font === 'serif' ? 'is-selected' : ''}" data-custom-set="font" data-value="serif" aria-checked="${custom.font === 'serif'}" role="radio"><span class="font-sample" style="font-family: Georgia, serif; font-style: italic; font-weight: 700;">Aa</span> Luxury Serif</button>
@@ -562,6 +664,117 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     }
   }
   $("#catalog-retry").addEventListener("click", () => void loadProducts());
+
+  function syncCustomCardPreview(productId) {
+    const card = $("#product-detail .mini-product-card.customizable-card");
+    if (!card) return;
+    const custom = productCustomizations.get(productId) ?? defaultCustomization("01");
+    const light = isColorLight(custom.surfaceColor);
+
+    card.style.background = custom.surfaceColor;
+    card.style.setProperty("--card-accent", custom.accentColor);
+    card.classList.toggle("is-light-surface", light);
+    card.classList.toggle("light-card", light);
+    card.classList.toggle("dark-card", !light);
+
+    card.className = card.className
+      .replace(/\blayout-\S+/g, "")
+      .replace(/\bmotif-\S+/g, "")
+      .trim() + ` layout-${custom.layout || 'left'} motif-${custom.surfaceMotif || 'facets'}`;
+
+    const existingMotif = card.querySelector(".card-surface-motif");
+    const nextMotifHtml = renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor);
+    if (existingMotif) {
+      if (nextMotifHtml) existingMotif.outerHTML = nextMotifHtml;
+      else existingMotif.remove();
+    } else if (nextMotifHtml) {
+      card.insertAdjacentHTML("afterbegin", nextMotifHtml);
+    }
+
+    const colBar = card.querySelector(".card-side-column-bar");
+    if (custom.layout === "column") {
+      if (!colBar) card.insertAdjacentHTML("afterbegin", `<div class="card-side-column-bar" aria-hidden="true"></div>`);
+    } else if (colBar) {
+      colBar.remove();
+    }
+
+    const headerBanner = card.querySelector(".card-header-banner");
+    if (custom.layout === "header") {
+      if (!headerBanner) card.insertAdjacentHTML("afterbegin", `<div class="card-header-banner" aria-hidden="true"></div>`);
+    } else if (headerBanner) {
+      headerBanner.remove();
+    }
+
+    const nfcWave = card.querySelector(".card-nfc-wave");
+    if (nfcWave) nfcWave.style.color = custom.accentColor;
+
+    const textEl = card.querySelector(".card-custom-text");
+    if (textEl) {
+      textEl.className = textEl.className
+        .replace(/\bpos-\S+/g, "")
+        .replace(/\bfont-\S+/g, "")
+        .trim() + ` pos-${custom.layout || custom.position || 'left'} font-${custom.font || 'sans'}`;
+    }
+    const nameEl = card.querySelector(".card-custom-name");
+    if (nameEl) {
+      nameEl.textContent = custom.name ? custom.name.trim() : "Your Name";
+      nameEl.classList.toggle("is-placeholder", !custom.name);
+    }
+    const titleEl = card.querySelector(".card-custom-title");
+    if (titleEl) {
+      titleEl.textContent = custom.title ? custom.title.trim() : "Your Title / Role";
+      titleEl.classList.toggle("is-placeholder", !custom.title);
+      titleEl.style.color = custom.accentColor;
+    }
+  }
+
+  function applyPreset(productId, presetId) {
+    const preset = PREMIUM_PRESETS.find(p => p.id === presetId);
+    if (!preset) return;
+    const current = productCustomizations.get(productId) ?? defaultCustomization(presetId);
+    current.presetId = preset.id;
+    current.layout = preset.layout;
+    current.surfaceMotif = preset.motif;
+    current.surfaceColor = preset.surfaceColor;
+    current.accentColor = preset.accentColor;
+    current.position = preset.layout;
+    productCustomizations.set(productId, current);
+
+    const studio = $(`[data-product-id="${productId}"].card-customizer-studio`);
+    if (studio) {
+      studio.querySelectorAll(".preset-chip").forEach(chip => {
+        const match = chip.dataset.customPreset === preset.id;
+        chip.classList.toggle("is-selected", match);
+        chip.setAttribute("aria-checked", String(match));
+      });
+      studio.querySelectorAll('[data-custom-set="surfaceMotif"]').forEach(btn => {
+        const match = btn.dataset.value === preset.motif;
+        btn.classList.toggle("is-selected", match);
+        btn.setAttribute("aria-checked", String(match));
+      });
+      studio.querySelectorAll('[data-custom-set="surfaceColor"]').forEach(btn => {
+        const match = btn.dataset.value.toLowerCase() === preset.surfaceColor.toLowerCase();
+        btn.classList.toggle("is-selected", match);
+        btn.setAttribute("aria-checked", String(match));
+      });
+      studio.querySelectorAll('[data-custom-set="accentColor"]').forEach(btn => {
+        const match = btn.dataset.value.toLowerCase() === preset.accentColor.toLowerCase();
+        btn.classList.toggle("is-selected", match);
+        btn.setAttribute("aria-checked", String(match));
+      });
+      studio.querySelectorAll('[data-custom-set="layout"]').forEach(btn => {
+        const match = btn.dataset.value === preset.layout;
+        btn.classList.toggle("is-selected", match);
+        btn.setAttribute("aria-checked", String(match));
+      });
+      const sLabel = $(`#surface-color-name-${productId}`);
+      if (sLabel) sLabel.textContent = SURFACE_COLORS.find(c => c.hex.toLowerCase() === preset.surfaceColor.toLowerCase())?.name || preset.surfaceColor;
+      const aLabel = $(`#accent-color-name-${productId}`);
+      if (aLabel) aLabel.textContent = ACCENT_COLORS.find(c => c.hex.toLowerCase() === preset.accentColor.toLowerCase())?.name || preset.accentColor;
+    }
+    syncCustomCardPreview(productId);
+  }
+
   async function handleProductClick(event) {
     if (event.target.closest(".detail-retry")) { void loadProducts(); return; }
     const quantityButton = event.target.closest("[data-quantity-step]");
@@ -600,6 +813,13 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       selectedMedia.set(variantId, Number(mediaButton.dataset.media));
       renderRoute(); return;
     }
+    const presetBtn = event.target.closest("[data-custom-preset]");
+    if (presetBtn) {
+      const studio = presetBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (productId) applyPreset(productId, presetBtn.dataset.customPreset);
+      return;
+    }
     const pill = event.target.closest("[data-custom-set]");
     if (pill) {
       const studio = pill.closest(".card-customizer-studio");
@@ -607,24 +827,34 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       if (!productId) return;
       const prop = pill.dataset.customSet;
       const val = pill.dataset.value;
-      const current = productCustomizations.get(productId) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       current[prop] = val;
+      if (prop === "layout") current.position = val;
+      if (prop === "surfaceMotif" || prop === "surfaceColor" || prop === "accentColor" || prop === "layout") {
+        current.presetId = undefined;
+        studio.querySelectorAll(".preset-chip").forEach(chip => {
+          chip.classList.remove("is-selected");
+          chip.setAttribute("aria-checked", "false");
+        });
+      }
       productCustomizations.set(productId, current);
 
-      pill.closest(".customizer-pills")?.querySelectorAll(".customizer-pill").forEach(p => {
+      const group = pill.closest(".customizer-pills, .color-swatches-grid");
+      group?.querySelectorAll(".customizer-pill, .palette-swatch").forEach(p => {
         const isMatch = p === pill;
         p.classList.toggle("is-selected", isMatch);
         p.setAttribute("aria-checked", String(isMatch));
       });
 
-      const textEl = $("#product-detail .card-custom-text");
-      if (textEl) {
-        if (prop === "position") {
-          textEl.className = textEl.className.replace(/\bpos-\S+/g, "").trim() + ` pos-${val}`;
-        } else if (prop === "font") {
-          textEl.className = textEl.className.replace(/\bfont-\S+/g, "").trim() + ` font-${val}`;
-        }
+      if (prop === "surfaceColor") {
+        const label = $(`#surface-color-name-${productId}`);
+        if (label) label.textContent = SURFACE_COLORS.find(c => c.hex.toLowerCase() === val.toLowerCase())?.name || val;
+      } else if (prop === "accentColor") {
+        const label = $(`#accent-color-name-${productId}`);
+        if (label) label.textContent = ACCENT_COLORS.find(c => c.hex.toLowerCase() === val.toLowerCase())?.name || val;
       }
+
+      syncCustomCardPreview(productId);
       return;
     }
     const swatch = event.target.closest(".colour-swatch");
@@ -656,7 +886,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
 
       let customization = null;
       if (product.customizable) {
-        const draft = productCustomizations.get(productId) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+        const draft = productCustomizations.get(productId) ?? defaultCustomization("01");
         if (!draft.name || !draft.name.trim()) {
           toast("Please enter your cardholder name to personalize your card.");
           $(`#custom-name-${productId}`)?.focus();
@@ -669,8 +899,14 @@ import logoUrl from "./assets/oneinfo-logo.svg";
         customization = {
           name: draft.name.trim(),
           title: (draft.title || "").trim(),
-          position: draft.position || "bottom-left",
+          layout: draft.layout || "left",
+          surfaceMotif: draft.surfaceMotif || "facets",
+          surfaceColor: draft.surfaceColor || "#0a0b0d",
+          accentColor: draft.accentColor || "#d8b26e",
           font: draft.font || "sans",
+          finish: draft.finish || "matte",
+          ...(draft.presetId ? { presetId: draft.presetId } : {}),
+          position: draft.layout || draft.position || "left",
         };
       }
 
@@ -683,13 +919,36 @@ import logoUrl from "./assets/oneinfo-logo.svg";
   $(".product-grid").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("input", event => {
+    const colorInput = event.target.closest("[data-custom-color]");
+    if (colorInput) {
+      const studio = colorInput.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const prop = colorInput.dataset.customColor;
+      const val = colorInput.value;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current[prop] = val;
+      current.presetId = undefined;
+      productCustomizations.set(productId, current);
+
+      colorInput.closest(".custom-hex-swatch")?.style.setProperty("--swatch-color", val);
+      const group = colorInput.closest(".color-swatches-grid");
+      group?.querySelectorAll(".palette-swatch").forEach(s => s.classList.remove("is-selected"));
+      colorInput.closest(".custom-hex-swatch")?.classList.add("is-selected");
+
+      const label = $(`#${prop === "surfaceColor" ? "surface" : "accent"}-color-name-${productId}`);
+      if (label) label.textContent = val.toUpperCase();
+
+      syncCustomCardPreview(productId);
+      return;
+    }
     const input = event.target.closest("[data-custom-input]");
     if (!input) return;
     const studio = input.closest(".card-customizer-studio");
     const productId = studio?.dataset.productId;
     if (!productId) return;
     const field = input.dataset.customInput;
-    const current = productCustomizations.get(productId) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+    const current = productCustomizations.get(productId) ?? defaultCustomization("01");
     current[field] = input.value;
     productCustomizations.set(productId, current);
 

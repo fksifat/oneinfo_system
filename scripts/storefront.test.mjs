@@ -4,7 +4,11 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { initializeNfcDeck } from "../sites/storefront/nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "../sites/storefront/hero-3d.mjs";
-import { addCartVariant, reconcileCartItems } from "../sites/storefront/catalog.js";
+import {
+  addCartVariant, reconcileCartItems,
+  PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS,
+  isColorLight, defaultCustomization, renderSurfaceMotifSvg,
+} from "../sites/storefront/catalog.js";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
 
@@ -175,4 +179,64 @@ test("customized card variations are stored, differentiated, and reconciled in c
   assert.equal(reconciled.length, 2);
   assert.deepEqual(reconciled[0].customization, custom1);
   assert.deepEqual(reconciled[1].customization, custom2);
+});
+
+test("customizer presets and vector surface motifs cover all 10 premium designs", () => {
+  assert.equal(PREMIUM_PRESETS.length, 10);
+  assert.equal(PREMIUM_PRESETS[0].id, "01");
+  assert.equal(PREMIUM_PRESETS[9].id, "10");
+
+  const defaultSetup = defaultCustomization("01");
+  assert.equal(defaultSetup.layout, "left");
+  assert.equal(defaultSetup.surfaceMotif, "facets");
+  assert.equal(defaultSetup.surfaceColor, "#0a0b0d");
+  assert.equal(defaultSetup.accentColor, "#d8b26e");
+
+  // Verify all 5 surface motifs produce expected vector overlays
+  for (const motif of ["facets", "contour", "architectural", "inlay"]) {
+    const svg = renderSurfaceMotifSvg(motif, "#d8b26e");
+    assert.match(svg, /<svg class="card-surface-motif/);
+    assert.match(svg, /#d8b26e/);
+  }
+  assert.equal(renderSurfaceMotifSvg("minimal", "#d8b26e"), "");
+
+  // Verify luminance check
+  assert.equal(isColorLight("#0a0b0d"), false);
+  assert.equal(isColorLight("#0a121e"), false);
+  assert.equal(isColorLight("#0d1f18"), false);
+  assert.equal(isColorLight("#1f0a12"), false);
+  assert.equal(isColorLight("#f7f5f0"), true);
+
+  // Verify full customization object cart differentiation
+  const product = { id: "p1", name: "Oneinfo Signature", customizable: true };
+  const variant = { id: "v1", name: "Soft-Touch Black", colorHex: "#0a201f", available: true, priceMinor: 179000, salePriceMinor: null };
+  const customFacets = {
+    name: "Avery Morgan",
+    title: "Managing Director",
+    presetId: "01",
+    layout: "left",
+    surfaceMotif: "facets",
+    surfaceColor: "#0a0b0d",
+    accentColor: "#d8b26e",
+    font: "sans",
+  };
+  const customContour = {
+    name: "Avery Morgan",
+    title: "Managing Director",
+    presetId: "02",
+    layout: "right",
+    surfaceMotif: "contour",
+    surfaceColor: "#0a121e",
+    accentColor: "#e2e8f0",
+    font: "serif",
+  };
+
+  let cart = [];
+  cart = addCartVariant(cart, product, variant, 1, customFacets);
+  cart = addCartVariant(cart, product, variant, 1, customContour);
+  assert.equal(cart.length, 2);
+  assert.equal(cart[0].customization.surfaceMotif, "facets");
+  assert.equal(cart[1].customization.surfaceMotif, "contour");
+  assert.equal(cart[0].customization.surfaceColor, "#0a0b0d");
+  assert.equal(cart[1].customization.surfaceColor, "#0a121e");
 });
