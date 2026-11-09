@@ -207,13 +207,30 @@
 .store-team-copy li { padding: 9px 0 9px 22px; position: relative; }
 .store-team-copy li::before { content: ''; position: absolute; left: 2px; top: 14px; width: 5px; height: 9px; border: solid #c8a165; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
 .team-stack { min-height: 435px; position: relative; }
-.team-identity { position: absolute; width: 78%; aspect-ratio: 1.58; padding: 28px; display: flex; flex-direction: column; border-radius: 15px; box-shadow: 0 22px 35px rgba(0, 0, 0, 0.4); color: #121316; }
-.team-identity img { width: 104px; height: auto; margin-bottom: auto; }
-.team-identity span { font-size: .65rem; }
-.team-identity strong { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
-.team-identity-one { top: 0; right: 2%; background: #e2d7c3; transform: rotate(6deg); }
-.team-identity-two { top: 24%; left: 1%; background: #f0eae1; transform: rotate(-5deg); }
-.team-identity-three { top: 45%; right: 0; background: #f9f8f5; transform: rotate(2deg); }
+.team-identity {
+  position: absolute;
+  width: 78%;
+  aspect-ratio: 1.59;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 24px 50px -10px rgba(0, 0, 0, 0.65), 0 10px 22px rgba(0, 0, 0, 0.4);
+  transition: transform var(--dur-normal) var(--ease-premium), box-shadow var(--dur-normal) var(--ease-premium);
+}
+.team-identity img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 13px;
+}
+.team-identity-one { top: 0; right: 2%; transform: rotate(6deg); }
+.team-identity-two { top: 24%; left: 1%; transform: rotate(-5deg); }
+.team-identity-three { top: 45%; right: 0; transform: rotate(2deg); }
+.team-identity-one:hover { transform: rotate(6deg) translateY(-8px) scale(1.02); z-index: 5; box-shadow: 0 32px 65px -10px rgba(0, 0, 0, 0.85); }
+.team-identity-two:hover { transform: rotate(-5deg) translateY(-8px) scale(1.02); z-index: 5; box-shadow: 0 32px 65px -10px rgba(0, 0, 0, 0.85); }
+.team-identity-three:hover { transform: rotate(2deg) translateY(-8px) scale(1.02); z-index: 5; box-shadow: 0 32px 65px -10px rgba(0, 0, 0, 0.85); }
 .team-stack-caption { position: absolute; bottom: -5px; right: 0; font-size: .64rem; color: #8c8577; }
 .store-faq { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 70px; }
 .store-faq > div > p:last-child { font-size: .9rem; line-height: 1.8; }
@@ -555,7 +572,7 @@
   .deck-connection { left: 0; bottom: 0; }
   .profile-intro { gap: 40px; }
   .store-teams { gap: 35px; }
-  .team-identity { width: 90%; padding: 21px; }
+  .team-identity { width: 90%; padding: 0; }
   .team-stack { min-height: 400px; }
 }
 @media (max-width: 760px) {
@@ -637,9 +654,7 @@
   .product-grid .product-price { gap: 3px 7px; }
   .product-grid .product-price strong { font-size: 1rem; }
   .team-stack { min-height: 345px; }
-  .team-identity { width: 90%; padding: 20px; }
-  .team-identity img { width: 88px; }
-  .team-identity strong { font-size: .95rem; }
+  .team-identity { width: 90%; padding: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .deck-card { transition: none; } }
 @media (prefers-reduced-transparency: reduce) {
