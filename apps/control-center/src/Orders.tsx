@@ -414,11 +414,16 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               </div>
               <ul className="order-items-list">
                 {order.items.map(item => (
-                  <li key={`${item.productId}:${item.variantId}`} className="order-item-row">
+                  <li key={`${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : ""}`} className="order-item-row">
                     <span className="order-item-qty">{item.quantity}×</span>
                     <div className="order-item-details">
                       <strong className="order-item-title">{item.name}</strong>
                       <span className="order-item-variant">{item.variantName}</span>
+                      {item.customization && (
+                        <span className="order-item-customization" style={{ display: "block", fontSize: "0.78rem", color: "var(--accent, #9e7938)", marginTop: "3px" }}>
+                          ✦ Custom: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""} · {item.customization.position.replace("-", " ")} ({item.customization.font})
+                        </span>
+                      )}
                     </div>
                     <span className="order-item-amount">{bdt(item.unitPriceMinor * item.quantity)}</span>
                   </li>

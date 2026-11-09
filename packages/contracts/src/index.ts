@@ -327,6 +327,14 @@ export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMi
 export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
   v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
 
+export const ProductCustomizationSchema = z.object({
+  name: z.string().trim().min(1).max(50),
+  title: z.string().trim().max(60).optional().default(""),
+  position: z.enum(["bottom-left", "bottom-center", "center", "bottom-right"]).default("bottom-left"),
+  font: z.enum(["sans", "serif", "mono"]).default("sans"),
+});
+export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
+
 export const ProductInputSchema = z.object({
   slug: z.string().trim().min(3).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   name: z.string().trim().min(2).max(120),
@@ -334,6 +342,7 @@ export const ProductInputSchema = z.object({
   description: z.string().trim().max(1000).default(""),
   warranty: z.string().trim().max(2000).default(""),
   warrantyIsDemo: z.boolean().default(false),
+  customizable: z.boolean().default(false),
   variants: z.array(ProductVariantSchema).min(1).max(40).superRefine((variants, ctx) => {
     if (new Set(variants.map(v => v.id)).size !== variants.length)
       ctx.addIssue({ code: "custom", message: "Colour IDs must be unique" });
@@ -403,6 +412,7 @@ const OrderLineSchema = z.object({
   variantId: z.uuid(),
   quantity: z.number().int().min(1).max(99),
   unitPriceMinor: z.number().int().min(1).max(100_000_000),
+  customization: ProductCustomizationSchema.nullable().optional(),
 });
 export const CouponCodeSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9_-]{2,31}$/);
 export const StoreCouponSchema = z.object({
@@ -444,7 +454,7 @@ export const PlaceOrderSchema = z.object({
     transactionId: BkashTransactionIdSchema.optional(),
   }).optional(),
   items: z.array(OrderLineSchema).min(1).max(50).refine(
-    items => new Set(items.map(item => `${item.productId}:${item.variantId}`)).size === items.length,
+    items => new Set(items.map(item => `${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : ""}`)).size === items.length,
     "Order lines must be unique",
   ),
 });
