@@ -16,11 +16,11 @@ import { TeamAdmin, TeamPortal } from "./TeamPortal.js";
 import { ActivationCode } from "./ActivationCode.js";
 import { CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 
-type View = "orders" | "tracking" | "products" | "reviews" | "overview" | "profiles" | "cards" | "batches" | "stations" | "audit" | "production" | "companies";
+type View = "orders" | "tracking" | "products" | "reviews" | "overview" | "profiles" | "cards" | "assigned" | "batches" | "stations" | "audit" | "production" | "companies";
 const nav: { id: View; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "◫" }, { id: "products", label: "Products", icon: "▣" },
   { id: "orders", label: "Orders", icon: "≡" }, { id: "tracking", label: "Card pipeline", icon: "→" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
-  { id: "cards", label: "Cards & inventory", icon: "▱" }, { id: "batches", label: "Production batches", icon: "▦" },
+  { id: "cards", label: "Cards & inventory", icon: "▱" }, { id: "assigned", label: "Assigned cards", icon: "◎" }, { id: "batches", label: "Production batches", icon: "▦" },
   { id: "production", label: "NFC & QR operations", icon: "⌁" }, { id: "stations", label: "Stations", icon: "⌂" },
   { id: "audit", label: "Audit history", icon: "≡" },
   { id: "companies", label: "Companies", icon: "▦" },
@@ -28,7 +28,7 @@ const nav: { id: View; label: string; icon: string }[] = [
 const currentView = () => nav.find(item => item.id === window.location.hash.slice(1))?.id ?? "overview";
 const navGroups: { label: string; pages: View[] }[] = [
   { label: "Workspace", pages: ["overview", "orders", "tracking", "products", "reviews"] },
-  { label: "Production", pages: ["cards", "batches", "production", "stations"] },
+  { label: "Production", pages: ["cards", "assigned", "batches", "production", "stations"] },
   { label: "People & activity", pages: ["profiles", "companies", "audit"] },
 ];
 
@@ -73,6 +73,8 @@ interface Card {
   canonicalUrl: string;
   profileId: string | null;
   customerAccountId: string | null;
+  companyId: string | null;
+  claimedAt: string | null;
   lifecycleStatus: string;
   qrStatus: string;
   nfcStatus: string;
@@ -134,7 +136,7 @@ function NavIcon({ name }: { name: string }) {
     {name === "tracking" ? <><path d="M4 12h14m-5-5 5 5-5 5" /><circle cx="4" cy="12" r="1.5" /></> : null}
     {name === "reviews" ? <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 3.5Z" /> : null}
     {name === "profiles" ? <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c.3-3.4 2.1-5.2 5.5-5.2s5.2 1.8 5.5 5.2M16 5.3a3.2 3.2 0 0 1 0 6.1M17 14.9c2.2.5 3.4 2.2 3.6 5.1" /></> : null}
-    {name === "cards" ? <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.4-1.5 1.4-2.2 3-2.2s2.6.7 3 2.2M14 10h4M14 14h4" /></> : null}
+    {name === "cards" || name === "assigned" ? <><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.4-1.5 1.4-2.2 3-2.2s2.6.7 3 2.2M14 10h4M14 14h4" /></> : null}
     {name === "batches" ? <><path d="m12 3.5 8 4.2-8 4.2-8-4.2 8-4.2Z" /><path d="m4 12 8 4.2 8-4.2M4 16.3l8 4.2 8-4.2" /></> : null}
     {name === "production" ? <><path d="M7 7a7 7 0 0 1 11.8 4.9M17 17a7 7 0 0 1-11.8-4.9" /><path d="M18.8 7v4.9h-4.9M5.2 17v-4.9h4.9" /><path d="M10 10h.01M14 14h.01" /></> : null}
     {name === "stations" ? <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4M7 8h10" /></> : null}
@@ -207,7 +209,7 @@ export function App() {
   const [listPage, setListPage] = useState(1);
   const [listQuery, setListQuery] = useState("");
   const [listMore, setListMore] = useState({ profiles: false, batches: false, audit: false });
-  useEffect(() => { setSearch(""); setListQuery(""); setListPage(1); }, [view]);
+  useEffect(() => { setSearch(""); setListQuery(""); setListPage(1); setCardPages(1); }, [view]);
   useEffect(() => { const timer = setTimeout(() => { setListQuery(search); setListPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
   const listParams = (target: string) => `?page=${view === target ? listPage : 1}&query=${encodeURIComponent(view === target ? listQuery : "")}${target === "profiles" && view === target && draftProfiles ? "&visibility=draft" : ""}`;
   const [syncError, setSyncError] = useState("");
@@ -251,7 +253,7 @@ export function App() {
           const items: CardRow[] = [];
           let hasMore = true;
           for (let page = 0; page < cardPages && hasMore; page++) {
-            const response = await api<{ items: CardRow[]; hasMore: boolean }>(`/api/v1/admin/cards${items.length ? `?beforeId=${items.at(-1)!.card.id}` : ""}`, token);
+            const response = await api<{ items: CardRow[]; hasMore: boolean }>(`/api/v1/admin/cards?assignment=${view === "assigned" ? "assigned" : "inventory"}${items.length ? `&beforeId=${items.at(-1)!.card.id}` : ""}`, token);
             items.push(...response.items); hasMore = response.hasMore;
           }
           return { items, hasMore };
@@ -513,13 +515,13 @@ export function App() {
           </section>
         ) : null}
 
-        {view === "cards" ? (
+        {view === "cards" || view === "assigned" ? (
           <>
             <CardLookup token={token} />
             <DataPanel
-              title="Confirmed printed QR stock"
-              columns={["Card / QR", "Profile", "QR", "NFC", "QC", "Inventory", "Private activation"]}
-              rows={cards.map(({ card, profileName, imageData, activationCodeIssuedAt }) => [
+              title={view === "assigned" ? "Assigned client cards" : "Unassigned printed QR stock"}
+              columns={["Card / QR", "Profile", "QR", "NFC", "QC", view === "assigned" ? "Card state" : "Inventory", view === "assigned" ? "Ownership" : "Private activation"]}
+              rows={cards.filter(({ card }) => Boolean(card.profileId || card.customerAccountId || card.companyId || card.claimedAt) === (view === "assigned")).map(({ card, profileName, imageData, activationCodeIssuedAt }) => [
                 <div key={card.id} className="card-qr-cell">
                   <a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="qr-thumb-anchor" title={"Open " + card.publicSlug}>
                     {imageData ? (
@@ -551,19 +553,19 @@ export function App() {
                 ) : (
                   <span className="awaiting-signup-pill" key="awaiting">
                     <span className="status-dot"></span>
-                    Awaiting signup
+                    {card.companyId ? "Company card" : "Awaiting signup"}
                   </span>
                 ),
                 <StatusBadge key="qr" value={card.qrStatus} />,
                 <StatusBadge key="nfc" value={card.nfcStatus} />,
                 <StatusBadge key="qc" value={card.qcStatus} />,
-                <StatusBadge key="inv" value={card.inventoryStatus} />,
-                <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />
+                <StatusBadge key="inv" value={view === "assigned" ? card.lifecycleStatus : card.inventoryStatus} />,
+                view === "assigned" ? <span key="ownership" className="table-status-pill is-good">{card.companyId ? "Company assigned" : "Client assigned"}</span> : <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />
               ])}
             />
             {moreCards && (
               <div className="table-footer-action">
-                <button className="quiet" onClick={() => setCardPages(count => count + 1)}>Load more QR codes</button>
+                <button className="quiet" onClick={() => setCardPages(count => count + 1)}>Load more {view === "assigned" ? "assigned cards" : "QR codes"}</button>
               </div>
             )}
           </>
@@ -892,9 +894,9 @@ function BatchProgress({ current, total, label }: { current: number; total: numb
 function StatusBadge({ value }: { value: string }) {
   const norm = value.toUpperCase();
   let tone = "is-neutral";
-  if (["PASSED", "GENERATED", "WRITTEN", "ACTIVE", "READY", "ONLINE", "PUBLISHED", "SALEABLE", "COMPLETED"].includes(norm)) tone = "is-good";
+  if (["PASSED", "GENERATED", "WRITTEN", "ACTIVE", "ACTIVATED", "READY", "ONLINE", "PUBLISHED", "SALEABLE", "COMPLETED"].includes(norm)) tone = "is-good";
   else if (["RESERVED", "PENDING", "UNWRITTEN", "BLANK", "NOT_READY", "DRAFT", "IN_PRODUCTION"].includes(norm)) tone = "is-warn";
-  else if (["FAILED", "RETRYABLE_FAILURE", "REVOKED", "REJECTED"].includes(norm)) tone = "is-bad";
+  else if (["FAILED", "RETRYABLE_FAILURE", "REVOKED", "REJECTED", "SUSPENDED"].includes(norm)) tone = "is-bad";
 
   return (
     <span className={"table-status-pill " + tone}>
