@@ -49,7 +49,7 @@ export function BatchReprint({ batchId, token, onClose }: { batchId: string; tok
         <div>
           <span className="eyebrow">HARDWARE REPRINT UTILITY</span>
           <h2>Reprint selected cards</h2>
-          <p>Select cards to download a high-resolution print sheet using their saved vector QR codes.</p>
+          <p>Select cards to download a high-resolution print sheet using their saved QR images.</p>
         </div>
         <button className="quiet reprint-close-button" type="button" onClick={onClose}>Close reprint ×</button>
       </div>
@@ -59,6 +59,10 @@ export function BatchReprint({ batchId, token, onClose }: { batchId: string; tok
         <>
           <fieldset disabled={busy} className="reprint-fieldset">
             <legend className="reprint-legend">Cards in Batch {result.code} ({result.items.length})</legend>
+            <div className="operation-actions">
+              <button type="button" className="quiet" disabled={!result.items.some(canPrint)} onClick={() => setSelected(result.items.filter(canPrint).map(card => card.id))}>Select all printable</button>
+              <button type="button" className="quiet" disabled={!selected.length} onClick={() => setSelected([])}>Clear selection</button>
+            </div>
             <div className="reprint-grid">
               {result.items.map(card => {
                 const printable = canPrint(card);

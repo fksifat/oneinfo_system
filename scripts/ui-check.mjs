@@ -57,6 +57,7 @@ try {
   await api(`/api/v1/production/batches/${batch.id}/generate-qr`, {}, headers);
   await api(`/api/v1/production/batches/${batch.id}/confirm-print`, { confirmed: true }, headers);
   const [card] = await connection.db.select().from(schema.cards);
+  const pendingAdminBatch = await api('/api/v1/production/batches',{batchCode:'ADMIN-UNPRINTED-QA',productVariantId:'ONEINFO-NFC-CARD',quantity:1},headers);
   await connection.db.update(schema.cards).set({ qcStatus: 'PASSED', nfcStatus: 'WRITTEN', lifecycleStatus: 'QC_PASSED', inventoryStatus: 'SALEABLE' }).where(eq(schema.cards.id, card.id));
   await connection.db.update(schema.productionJobs).set({status:'COMPLETED',completedAt:new Date()}).where(eq(schema.productionJobs.cardId,card.id));
   const secret = await api(`/api/v1/customer/cards/${card.id}/activation-code`, {}, headers);
@@ -88,7 +89,7 @@ try {
   const targets = await fetch(`http://127.0.0.1:${port}/json/list`).then(r => r.json());
   socket = new WebSocket(targets.find(t => t.type === 'page').webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-  let seq = 0, requestedWidth = 390; const waiting = new Map(); const browserErrors = [];
+  let seq = 0, requestedWidth = 390; const waiting = new Map(); const browserErrors = []; const adminReads = [];
   let failProfileSave=false,failOverview=false,expirePairingSoon=false;
   let contactFailure='none';const contactAttempts=[];
   function command(method, params = {}) {
@@ -103,6 +104,7 @@ try {
       const paused = msg.params;
       try {
         const url = new URL(paused.request.url);
+        if(paused.request.method==='GET'&&url.pathname.startsWith('/api/v1/admin/'))adminReads.push(url.pathname);
         if(url.pathname==='/api/v1/company/public/127.0.0.1')url.pathname='/api/v1/company/public/team-ui.example';
         const contactShare=paused.request.method==='POST'&&url.pathname.endsWith('/contact-leads');
         if(contactShare)contactAttempts.push(JSON.parse(paused.request.postData));
@@ -159,6 +161,33 @@ try {
       assert.equal(found,true,'Missing Admin navigation: '+label);
       await delay(350);await inspect('admin-'+label.replace(/[^a-z]/gi,'-')+'-'+width);
       if(label==='NFC & QR operations')assert.equal(await evaluate(`!!document.querySelector('.production-frame')`),true);
+      if(width===1440&&label==='Cards & inventory'){
+        await until(`document.querySelector('table')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+        assert.equal(await evaluate(`document.querySelector('table').textContent.includes('Generate secret code')`),false);
+        await fill('Search cards','unmatched-card-filter');await until(`document.querySelectorAll('table tbody tr').length===0`);
+        await fill('Search cards',card.publicSlug);await until(`document.querySelectorAll('table tbody tr').length===1`);
+        await set('.production-controls select','SALEABLE');await until(`document.querySelectorAll('table tbody tr').length===0`);
+        await set('.production-controls select','RESERVED');await until(`document.querySelectorAll('table tbody tr').length===1`);
+        await set('.production-controls select','');await fill('Search cards','');
+        await evaluate(`document.querySelector('.production-lookup').open=true`);await fill('QR link or card code',card.canonicalUrl.replace(/\?source=nfc$/,'?source=qr'));await click('Find card');await until(`document.querySelector('.lookup-result-row')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+        adminReads.length=0;await evaluate(`document.querySelector('.header-tools button').click()`);await delay(600);
+        assert.ok(adminReads.includes('/api/v1/admin/cards'));assert.ok(!adminReads.includes('/api/v1/admin/batches')&&!adminReads.includes('/api/v1/admin/stations')&&!adminReads.includes('/api/v1/admin/audit-logs'));
+        console.log('Inventory search/status/QR lookup, order-code guidance and scoped refresh PASS');
+      }
+      if(width===1440&&label==='Production batches'){
+        await until(`document.querySelector('table')?.textContent.includes('ADMIN-UNPRINTED-QA')`);
+        await set('.production-controls select','pending');await until(`document.querySelectorAll('table tbody tr').length===1&&document.querySelector('table').textContent.includes('ADMIN-UNPRINTED-QA')`);
+        assert.equal(await evaluate(`document.querySelector('.button-reprint-pill').disabled`),true);
+        await set('.production-controls select','confirmed');await until(`document.querySelectorAll('table tbody tr').length===1&&document.querySelector('table').textContent.includes('BROWSER-QA')&&!document.querySelector('.button-reprint-pill').disabled`);
+        await click('Reprint');await until(`!!document.querySelector('.reprint-grid input')`);await click('Select all printable');assert.equal(await evaluate(`document.querySelectorAll('.reprint-grid input:checked').length`),1);await click('Clear selection');assert.equal(await evaluate(`document.querySelectorAll('.reprint-grid input:checked').length`),0);await click('Close reprint ×');
+        await set('.production-controls select','all');console.log('Unconfirmed/confirmed batch filters and bulk reprint selection PASS');
+      }
+      if(width===1440&&label==='Stations'){
+        await fill('Search stations','unmatched-station');await until(`document.querySelectorAll('.station-card-row').length===0`);await fill('Search stations','BROWSER-QA');await until(`document.querySelectorAll('.station-card-row').length===1`);
+        assert.equal(await evaluate(`document.querySelectorAll('.button-station-recover').length`),0);
+        await fill('Search stations','');console.log('Station search and safe idle-station controls PASS');
+      }
+
       if(label==='Client profiles'){
         await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);await inspect('admin-profile-editor-'+width);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.activeElement)`),true);
         if(width===1440){await uploadPhoto();await fill('Public slug','ui-created-profile');await fill('Display name','UI Created Profile');failProfileSave=true;await click('Save profile');await until(`!!document.querySelector('.profile-save-error')`);assert.equal(await evaluate(`document.querySelector('.editor-panel').contains(document.querySelector('[role=alert]'))`),true);failProfileSave=false;await click('Save profile');await until(`!document.querySelector('.editor-panel[open]')`);await evaluate(`document.querySelector('.list-toolbar button').focus();document.querySelector('.list-toolbar button').click()`);}

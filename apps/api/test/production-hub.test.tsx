@@ -13,6 +13,9 @@ it.each([
   const html = renderToStaticMarkup(<App />);
   expect(html.includes('class="production-frame"')).toBe(embedded);
   expect(html).toContain('href="http://127.0.0.1:5173" target="_blank" rel="noreferrer"');
-  expect(html.includes("Open production console on this PC")).toBe(!embedded);
+  expect(html).toContain("Open production console");
+  expect((html.match(/href="http:\/\/127\.0\.0\.1:5173"/g) ?? []).length).toBe(1);
+  expect(html.includes("Connect your production PC")).toBe(!embedded);
+  expect(html).not.toContain("workstation-steps-grid");
   expect(html).not.toContain("test-operator-token");
 });

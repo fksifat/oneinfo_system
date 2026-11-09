@@ -272,6 +272,30 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect((await client.db.select().from(schema.cards)).every(row => row.qrStatus === "PENDING")).toBe(true);
   });
 
+  it("lists pending batches explicitly while keeping unprinted cards out of Admin stock", async () => {
+    const pending = await batch(1, false), printed = await batch(1);
+    await confirm(printed.id);
+    expect((await request("/api/v1/admin/batches")).items.map((b: any) => b.id)).toEqual([printed.id]);
+    expect((await request("/api/v1/admin/batches?print=all")).items).toHaveLength(2);
+    const waiting = await request("/api/v1/admin/batches?print=pending");
+    expect(waiting.items).toMatchObject([{ id: pending.id, total: 1, qrGenerated: 0, printConfirmedAt: null }]);
+    expect((await request(`/api/v1/admin/batches?print=all&query=${pending.batchCode}`)).items.map((b: any) => b.id)).toEqual([pending.id]);
+    expect((await request("/api/v1/admin/cards")).items).toHaveLength(1);
+    expect((await app.inject({ url: `/api/v1/admin/batches/${pending.id}/reprint`, headers })).statusCode).toBe(404);
+    expect((await app.inject({ url: "/api/v1/admin/batches?print=invalid", headers })).statusCode).toBe(400);
+  });
+
+  it("reports queued station jobs for recovery and validates revocation targets", async () => {
+    const registered = await request("/api/v1/production/stations/register", { stationCode: randomUUID(), name: "Queued station" });
+    const created = await batch(1, false);
+    await client.db.update(schema.productionJobs).set({ assignedStationId: registered.station.id }).where(eq(schema.productionJobs.batchId, created.id));
+    const station = (await request("/api/v1/admin/stations")).items.find((item: any) => item.id === registered.station.id);
+    expect(station).toMatchObject({ unfinishedJobs: 3, currentJob: null });
+    expect((await app.inject({ method: "POST", url: "/api/v1/admin/stations/invalid/revoke", headers })).statusCode).toBe(400);
+    expect((await request(`/api/v1/admin/stations/${registered.station.id}/recover-jobs`, {})).recovered).toBe(3);
+    expect((await request("/api/v1/admin/stations")).items.find((item: any) => item.id === registered.station.id)).toMatchObject({ status: "REVOKED", unfinishedJobs: 0, currentJob: null });
+  });
+
   it("refreshes an older QR design without changing card links or discarding the previous artifact", async () => {
     const created = await batch(1);
     const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
@@ -505,6 +529,19 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(new Set([...first.items, ...second.items].map((row: any) => row.card.id)).size).toBe(101);
     expect((await request("/api/v1/admin/cards")).hasMore).toBe(true);
     expect((await app.inject({ url: "/api/v1/admin/cards?assignment=invalid", headers })).statusCode).toBe(400);
+    await client.db.update(schema.cards).set({ inventoryStatus: "SALEABLE" }).where(eq(schema.cards.id, available!.id));
+    for (const query of [available!.publicSlug.toUpperCase(), qrUrl(available!.canonicalUrl), created.batchCode]) {
+      const filtered = await request(`/api/v1/admin/cards?assignment=inventory&status=SALEABLE&query=${encodeURIComponent(query)}`);
+      expect(filtered.items.map((row: any) => row.card.id)).toEqual([available!.id]);expect(filtered.hasMore).toBe(false);
+    }
+    expect((await request("/api/v1/admin/cards?assignment=inventory&status=RESERVED")).items).toHaveLength(0);
+    const byOwner = await request("/api/v1/admin/cards?assignment=assigned&query=assigned%20owner");
+    expect(byOwner.items).toHaveLength(100);expect(byOwner.hasMore).toBe(true);
+    const byOwnerNext = await request(`/api/v1/admin/cards?assignment=assigned&query=assigned%20owner&beforeId=${byOwner.items.at(-1).card.id}`);
+    expect(byOwnerNext.items).toHaveLength(1);
+    expect((await app.inject({ url: "/api/v1/admin/cards?status=invalid", headers })).statusCode).toBe(400);
+    expect((await app.inject({ url: `/api/v1/admin/cards?query=${"x".repeat(121)}`, headers })).statusCode).toBe(400);
+
   }, 30000);
 
   it("hides disabled profiles consistently across handles, legacy URLs, vCards and card endpoints", async () => {
