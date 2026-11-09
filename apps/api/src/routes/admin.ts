@@ -1,6 +1,6 @@
 import { adminPage } from "../domain/admin-page.js";
 import type { FastifyPluginAsync } from "fastify";
-import { and, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, not, sql } from "drizzle-orm";
 import { z } from "zod";
 import { parseBody } from "../http.js";
 import { requireOperator } from "../auth.js";
@@ -26,6 +26,9 @@ import {
   storeOrders,
 } from "../db/schema.js";
 
+const assignedCard = sql<boolean>`(${cards.profileId} is not null or ${cards.customerAccountId} is not null
+  or ${cards.companyId} is not null or ${cards.claimedAt} is not null)`;
+
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", async (request) => {
     await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);
@@ -49,7 +52,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const statusRows = await db
       .select({ status: cards.inventoryStatus, value: count() })
       .from(cards)
-      .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(isNotNull(cardBatches.printConfirmedAt))
+      .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(and(isNotNull(cardBatches.printConfirmedAt), not(assignedCard)))
       .groupBy(cards.inventoryStatus);
     const [[printed], catalog] = await Promise.all([
       db.select({ value: count() }).from(cards).innerJoin(cardBatches, eq(cards.batchId, cardBatches.id)).where(printedStockAvailable()),
@@ -116,7 +119,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/cards", async (request) => {
-    const { beforeId } = parseBody(z.object({ beforeId: z.uuid().optional() }), request.query);
+    const { beforeId, assignment } = parseBody(z.object({ beforeId: z.uuid().optional(), assignment: z.enum(["inventory", "assigned"]).optional() }), request.query);
     const before = db.select({ createdAt: cards.createdAt, id: cards.id }).from(cards).where(eq(cards.id, beforeId ?? ""));
     const items = await db
       .select({ card: cards, profileName: customerProfiles.displayName, activationCodeIssuedAt: cardActivationSecrets.issuedAt,
@@ -125,7 +128,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .innerJoin(cardBatches, eq(cards.batchId, cardBatches.id))
       .leftJoin(customerProfiles, eq(customerProfiles.id, cards.profileId))
       .leftJoin(cardActivationSecrets, eq(cardActivationSecrets.cardId, cards.id))
-      .where(and(isNotNull(cardBatches.printConfirmedAt), beforeId ? sql`(${cards.createdAt}, ${cards.id}) < (${before})` : undefined))
+      .where(and(isNotNull(cardBatches.printConfirmedAt), assignment === "assigned" ? assignedCard : assignment === "inventory" ? not(assignedCard) : undefined,
+        beforeId ? sql`(${cards.createdAt}, ${cards.id}) < (${before})` : undefined))
       .orderBy(desc(cards.createdAt), desc(cards.id))
       .limit(101);
     return { items: items.slice(0, 100), count: Math.min(items.length, 100), hasMore: items.length > 100 };

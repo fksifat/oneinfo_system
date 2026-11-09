@@ -153,7 +153,7 @@ try {
   for(const width of [1440,768,390,320]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     await command('Page.navigate',{url:'http://127.0.0.1:5174/'});await until(`!!document.querySelector('.sidebar')`);await delay(250);
-    for(const label of ['Overview','Orders','Reviews','Products','Client profiles','Companies','Cards & inventory','Production batches','Stations','Audit history','NFC & QR operations']){
+    for(const label of ['Overview','Orders','Reviews','Products','Client profiles','Companies','Cards & inventory','Assigned cards','Production batches','Stations','Audit history','NFC & QR operations']){
       const found=await evaluate(`(()=>{const b=[...document.querySelectorAll('.sidebar nav button')].find(b=>b.textContent.trim().endsWith(${JSON.stringify(label)}));if(!b)return false;b.click();return true})()`);
       assert.equal(found,true,'Missing Admin navigation: '+label);
       await delay(350);await inspect('admin-'+label.replace(/[^a-z]/gi,'-')+'-'+width);
@@ -377,6 +377,14 @@ try {
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
   console.log('PASS: Admin/activation/owner photo upload, public image, replacement/removal; signup → owner edit → fresh scan; private email hidden.');
+  await command('Page.navigate',{url:'http://127.0.0.1:5174/#cards'});await until(`!!document.querySelector('table[aria-label="Unassigned printed QR stock"]')`);
+  await until(`!document.querySelector('table[aria-label="Unassigned printed QR stock"]').textContent.includes(${JSON.stringify(card.publicSlug)})`);
+  await evaluate(`location.hash='assigned'`);await until(`document.querySelector('table[aria-label="Assigned client cards"]')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+  assert.equal(await evaluate(`document.querySelector('table[aria-label="Assigned client cards"]').textContent.includes('Updated Browser Owner')`),true);
+  assert.equal(await evaluate(`document.querySelector('table[aria-label="Assigned client cards"]').textContent.includes('Generate secret code')`),false);
+  await inspect('admin-assigned-client-cards');
+  console.log('Activated client card moves from inventory to Assigned cards with owner and lifecycle status PASS');
+
   await command('Page.navigate',{url:'http://127.0.0.1:5173/?batch='+batch.id});
   await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
   await click('Delete QR & link');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
