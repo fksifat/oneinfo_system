@@ -7,6 +7,7 @@ import { readEmployeeCsv } from "./company-csv.js";
 
 type Company = { id: string; name: string; domain: string | null; logoUrl: string; headline: string; bio: string; theme: string; allowEmployeeEdits: boolean };
 type Workspace = { company: Company; employees: { id: string; name: string; email: string; profileId: string; publicSlug: string; active: boolean;
+  headline?: string; avatarUrl?: string; phone?: string;
   inviteEmailStatus?: "pending" | "sending" | "accepted" | "failed" | null }[];
   cards: { id: string; profileId: string | null; publicSlug: string; lifecycleStatus: string }[] };
 type PublicBrand = { company: Pick<Company, "name" | "logoUrl" | "theme">; employees: PublicProfileData["profile"][]; links: PublicProfileData["links"] };
@@ -147,12 +148,14 @@ function CompanyWorkspace() {
 
   function exportRosterCsv() {
     if (!workspace || workspace.employees.length === 0) return;
-    const headers = ["Name", "Email", "Status", "Public Slug", "Assigned Card"];
+    const headers = ["Name", "Email", "Phone", "Headline", "Status", "Public Slug", "Assigned Card"];
     const rows = workspace.employees.map(e => {
       const card = workspace.cards.find(c => c.profileId === e.profileId);
       return [
         `"${e.name.replace(/"/g, '""')}"`,
         `"${e.email.replace(/"/g, '""')}"`,
+        `"${(e.phone || "").replace(/"/g, '""')}"`,
+        `"${(e.headline || "").replace(/"/g, '""')}"`,
         `"${e.active ? "Active" : "Inactive"}"`,
         `"${e.publicSlug || ""}"`,
         `"${card?.publicSlug || "Unassigned"}"`
@@ -442,15 +445,34 @@ function CompanyWorkspace() {
               <ul className="team-list">
                 {filteredEmployees.map(employee => <li key={employee.id} className="team-employee-item">
                   <div className="employee-info-col">
-                    <div className="employee-avatar-circle">{employee.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"}</div>
+                    <div className="employee-avatar-circle">
+                      {employee.avatarUrl ? (
+                        <img src={employee.avatarUrl} alt="" className="employee-avatar-img" />
+                      ) : (
+                        employee.name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"
+                      )}
+                    </div>
                     <div className="employee-details">
                       <div className="employee-title-line">
-                        <strong>{employee.name}</strong> · <span className="employee-email-sub">{employee.email}</span> · <span className={`employee-status-tag ${employee.active ? "active" : "inactive"}`}>{employee.active ? "Active" : "Inactive"}</span>
+                        <strong>{employee.name}</strong>
+                        {employee.headline && <span className="employee-headline-tag"> · {employee.headline}</span>}
+                        · <span className="employee-email-sub">{employee.email}</span>
+                        · <span className={`employee-status-tag ${employee.active ? "active" : "inactive"}`}>{employee.active ? "Active" : "Inactive"}</span>
                       </div>
                       <div className="employee-secondary-line">
                         {employee.publicSlug && (
                           <a href={`/team?profile=${encodeURIComponent(employee.publicSlug)}`} target="_blank" rel="noreferrer" className="employee-view-link">
                             Public profile ↗
+                          </a>
+                        )}
+                        {employee.publicSlug && (
+                          <a href={`${API_URL}/api/v1/profiles/public/${encodeURIComponent(employee.publicSlug)}/qr.png`} target="_blank" rel="noreferrer" className="employee-qr-link" title="Download QR badge">
+                            QR Badge 🔲
+                          </a>
+                        )}
+                        {employee.phone && (
+                          <a href={`https://wa.me/${employee.phone.replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="employee-wa-badge" title="Direct WhatsApp">
+                            💬 WhatsApp
                           </a>
                         )}
                         {employee.inviteEmailStatus && <small className="employee-email-sub"> · {welcomeEmailLabels[employee.inviteEmailStatus]}</small>}
@@ -616,28 +638,235 @@ function CompanyWorkspace() {
 
 function EmployeeEditor({ secret }: { secret: string }) {
   const [profile, setProfile] = useState<PublicProfileData["profile"]>();
+  const [links, setLinks] = useState<{ id?: string; label: string; url: string }[]>([]);
+  const [avatar, setAvatar] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
   useEffect(() => {
     let current = true;
-    companyApi<{ profile: NonNullable<typeof profile> }>("/employee/profile", "POST", { token: secret }).then(result => { if (current) setProfile(result.profile); })
-      .catch(error => { if (current) setMessage(messageFor(error)); });
+    companyApi<{ profile: NonNullable<typeof profile>; links?: typeof links }>("/employee/profile", "POST", { token: secret }).then(result => {
+      if (current) {
+        setProfile(result.profile);
+        setAvatar(result.profile.avatarUrl ?? "");
+        if (result.links) setLinks(result.links);
+      }
+    }).catch(error => { if (current) setMessage(messageFor(error)); });
     return () => { current = false; };
   }, [secret]);
-  return <TeamPage title="Edit your company profile">{message && <p role="status">{message}</p>}{profile && <form onSubmit={event => {
-    event.preventDefault(); const input = values(event.currentTarget); setBusy(true); setMessage("");
-    void companyApi("/employee/profile", "POST", { token: secret, profile: input }).then(() => setMessage("Public profile saved."))
-      .catch(error => setMessage(messageFor(error))).finally(() => setBusy(false));
-  }}>
-    <label>Name<input name="displayName" required maxLength={120} defaultValue={profile.displayName} /></label>
-    <label>Headline<input name="headline" maxLength={160} defaultValue={profile.headline} /></label>
-    <label>Bio<textarea name="bio" maxLength={600} defaultValue={profile.bio} /></label>
-    <label>Public phone<input name="phone" type="tel" maxLength={40} defaultValue={profile.phone} /></label>
-    <label>Public email<input name="email" type="email" defaultValue={profile.email} /></label>
-    <label>Website<input name="website" type="url" defaultValue={profile.website} /></label>
-    <label>Photo URL<input name="avatarUrl" type="url" defaultValue={profile.avatarUrl} /></label>
-    <button disabled={busy}>Save public profile</button>
-  </form>}</TeamPage>;
+
+  async function uploadPhoto(file: File) {
+    if (uploading || busy) return;
+    setUploading(true); setMessage("");
+    try {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        throw new Error("Choose a JPEG, PNG or WebP photo.");
+      }
+      if (file.size > 5 * 1024 * 1024) throw new Error("Choose a photo under 5 MB.");
+      const extension = file.type === "image/webp" ? "webp" : file.type === "image/png" ? "png" : "jpg";
+      const response = await fetch(`${API_URL}/api/v1/product-media/profile-employee/${extension}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${secret}`, "content-type": "application/octet-stream" },
+        body: file,
+      });
+      const data = await response.json();
+      if (!response.ok || !data.url) throw new Error(data.message ?? "Photo upload failed.");
+      const fullUrl = new URL(data.url, API_URL || window.location.origin).href;
+      setAvatar(fullUrl);
+      setMessage("Profile photo uploaded. Click 'Save public profile' to publish.");
+    } catch (error) {
+      setMessage(messageFor(error));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function addQuickLink(preset: "linkedin" | "whatsapp" | "meeting" | "custom") {
+    if (links.length >= 10) return;
+    if (preset === "linkedin") setLinks(prev => [...prev, { label: "LinkedIn", url: "https://linkedin.com/in/" }]);
+    else if (preset === "whatsapp") setLinks(prev => [...prev, { label: "WhatsApp", url: "https://wa.me/" }]);
+    else if (preset === "meeting") setLinks(prev => [...prev, { label: "Book Meeting", url: "https://calendly.com/" }]);
+    else setLinks(prev => [...prev, { label: "Portfolio", url: "https://" }]);
+  }
+
+  return <main className="card-portal card-portal-studio"><section className="studio-container">
+    <header className="studio-header">
+      <div className="studio-header-main">
+        <div className="studio-badge-row">
+          <span className="studio-eyebrow">ONEINFO // EMPLOYEE PROFILE</span>
+          <span className="studio-status-pill">● SECURE ACCESS</span>
+        </div>
+        <h1>Edit your company profile</h1>
+        <p className="portal-privacy">Personalize your digital business card and company directory profile. All edits update your NFC card in real time.</p>
+      </div>
+      {profile && (
+        <div className="studio-header-actions">
+          <a href={`/team?profile=${encodeURIComponent(profile.publicSlug)}`} target="_blank" rel="noreferrer" className="studio-btn-back">
+            Preview public profile ↗
+          </a>
+        </div>
+      )}
+    </header>
+
+    {message && <p role="status" className="status-feedback-banner">{message}</p>}
+
+    {!profile ? (
+      <div className="studio-card"><p role="status">{message ? "This profile link is invalid or expired." : "Loading your profile…"}</p></div>
+    ) : (
+      <div className="studio-workspace-grid">
+        <div className="studio-editor-column">
+          <form className="studio-card" onSubmit={event => {
+            event.preventDefault();
+            const input = values(event.currentTarget);
+            setBusy(true); setMessage("");
+            const cleanLinks = links.filter(l => l.label.trim() && l.url.trim().startsWith("http"));
+            void companyApi("/employee/profile", "POST", {
+              token: secret,
+              profile: { ...input, avatarUrl: avatar, links: cleanLinks }
+            }).then(() => setMessage("Public profile saved."))
+              .catch(error => setMessage(messageFor(error)))
+              .finally(() => setBusy(false));
+          }}>
+            <div className="studio-card-top-row">
+              <h2>Profile information</h2>
+              <span className="studio-counter-pill">@{profile.publicSlug}</span>
+            </div>
+
+            <div className="studio-form-grid">
+              <label>Name<input name="displayName" required maxLength={120} defaultValue={profile.displayName} /></label>
+              <label>Headline<input name="headline" maxLength={160} defaultValue={profile.headline} placeholder="e.g. Senior Consultant · Enterprise Sales" /></label>
+              <label>Public phone<input name="phone" type="tel" maxLength={40} defaultValue={profile.phone} placeholder="+880 1..." /></label>
+              <label>Public email<input name="email" type="email" defaultValue={profile.email} placeholder="work@company.com" /></label>
+              <label className="studio-col-span-2">Website<input name="website" type="url" defaultValue={profile.website} placeholder="https://..." /></label>
+            </div>
+
+            <label className="studio-bio-label">Bio<textarea name="bio" maxLength={600} defaultValue={profile.bio} placeholder="Brief introduction for your digital card..." /></label>
+
+            {/* Photo Uploader */}
+            <div className="logo-field-wrapper" style={{ marginTop: 16 }}>
+              <label>Photo URL<input name="avatarUrl" type="url" value={avatar} onChange={e => setAvatar(e.target.value)} placeholder="https://..." /></label>
+              <div className="logo-upload-row">
+                <label className="logo-file-btn">
+                  <span>{uploading ? "Uploading photo…" : "📁 Upload profile photo"}</span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    disabled={uploading || busy}
+                    onChange={event => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadPhoto(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </label>
+                {avatar && (
+                  <button type="button" className="quiet logo-clear-btn" onClick={() => setAvatar("")}>
+                    Remove photo
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Social & Professional Links */}
+            <div className="employee-links-box">
+              <div className="links-header-row">
+                <strong>Social & Professional Links</strong>
+                <span className="links-sub-tip">Add your LinkedIn, WhatsApp, or Booking URL</span>
+              </div>
+              <div className="quick-add-pills-row">
+                <button type="button" className="studio-btn-pill-action" onClick={() => addQuickLink("linkedin")}>+ LinkedIn</button>
+                <button type="button" className="studio-btn-pill-action" onClick={() => addQuickLink("whatsapp")}>+ WhatsApp</button>
+                <button type="button" className="studio-btn-pill-action" onClick={() => addQuickLink("meeting")}>+ Meeting Link</button>
+                <button type="button" className="studio-btn-pill-action" onClick={() => addQuickLink("custom")}>+ Custom Link</button>
+              </div>
+
+              {links.map((link, index) => (
+                <div key={index} className="employee-link-input-row">
+                  <input
+                    type="text"
+                    value={link.label}
+                    placeholder="Label (e.g. LinkedIn)"
+                    onChange={e => {
+                      const updated = [...links];
+                      const item = updated[index];
+                      if (item) { item.label = e.target.value; setLinks(updated); }
+                    }}
+                    maxLength={40}
+                    className="link-title-input"
+                  />
+                  <input
+                    type="url"
+                    value={link.url}
+                    placeholder="https://..."
+                    onChange={e => {
+                      const updated = [...links];
+                      const item = updated[index];
+                      if (item) { item.url = e.target.value; setLinks(updated); }
+                    }}
+                    className="link-url-input"
+                  />
+                  <button
+                    type="button"
+                    className="quiet link-del-btn"
+                    onClick={() => setLinks(links.filter((_, i) => i !== index))}
+                    title="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="studio-save-action">
+              <button className="studio-save-button" disabled={busy || uploading}>Save public profile</button>
+            </div>
+          </form>
+        </div>
+
+        <aside className="studio-sidebar-column">
+          <div className="studio-card studio-preview-card">
+            <div className="studio-preview-header">
+              <span className="studio-card-tag">DIGITAL CARD PREVIEW</span>
+              <span className="studio-theme-indicator">{profile.theme}</span>
+            </div>
+            <div className={`company-profile-preview-card preview-theme-${profile.theme.toLowerCase()}`}>
+              <div className="mockup-nfc-chip" aria-hidden="true">
+                <span>⚡ NFC SMART BUSINESS ID</span>
+              </div>
+              {avatar ? (
+                <img className="team-logo company-mockup-logo" src={avatar} alt={profile.displayName} />
+              ) : (
+                <div className="company-mockup-monogram">
+                  {profile.displayName.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "OI"}
+                </div>
+              )}
+              <h3 className="company-preview-name">{profile.displayName}</h3>
+              {profile.headline && <p className="company-preview-headline">{profile.headline}</p>}
+              <div className="mockup-quick-contacts">
+                {profile.phone && <span className="contact-mini-badge">📞 {profile.phone}</span>}
+                {profile.email && <span className="contact-mini-badge">✉️ {profile.email}</span>}
+              </div>
+              {links.length > 0 && (
+                <div className="mockup-links-list">
+                  {links.filter(l => l.url.trim().startsWith("http")).slice(0, 4).map((l, i) => (
+                    <div key={i} className="mockup-link-pill">{l.label || "Link"} ↗</div>
+                  ))}
+                </div>
+              )}
+              <div className="mockup-footer-row">
+                <span className="mockup-tap-tag">🛜 Tap or scan to view</span>
+                <a href={`${API_URL}/api/v1/profiles/public/${encodeURIComponent(profile.publicSlug)}/contact.vcf`} download className="mockup-open-btn">
+                  Save Contact 📇
+                </a>
+              </div>
+            </div>
+          </div>
+          <small className="profile-footer">Powered by Arise Studio · Oneinfo Digital Card</small>
+        </aside>
+      </div>
+    )}
+  </section></main>;
 }
 
 export function TeamAdmin({ token }: { token: string }) {

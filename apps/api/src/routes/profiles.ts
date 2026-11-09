@@ -1,3 +1,4 @@
+import QRCode from "qrcode";
 import { publicProfileAvailable } from "../domain/profile-visibility.js";
 import { lockPrintedStock } from "../domain/printed-stock.js";
 import { adminPage } from "../domain/admin-page.js";
@@ -55,6 +56,17 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
     return reply.header("Cache-Control", "no-store").header("Content-Disposition", "inline; filename=contact.vcf")
       .type("text/vcard; charset=utf-8").send(contactVcard(profile));
+  });
+
+  app.get("/public/:slug/qr.png", async (request, reply) => {
+    const { slug } = request.params as { slug: string };
+    const [profile] = await db.select({ publicSlug: customerProfiles.publicSlug }).from(customerProfiles)
+      .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true))).limit(1);
+    if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
+    const origin = (request.headers.origin as string) || process.env.VITE_STOREFRONT_URL || "https://oneinfo.online";
+    const url = `${origin}/team?profile=${encodeURIComponent(slug)}`;
+    const png = await QRCode.toBuffer(url, { margin: 2, width: 360 });
+    return reply.type("image/png").send(png);
   });
 
   app.get("/public/:slug", async (request) => {
