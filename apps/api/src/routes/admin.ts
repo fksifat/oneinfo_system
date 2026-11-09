@@ -119,7 +119,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/cards", async (request) => {
-    const { beforeId, assignment } = parseBody(z.object({ beforeId: z.uuid().optional(), assignment: z.enum(["inventory", "assigned"]).optional() }), request.query);
+    const { beforeId, assignment, query, status } = parseBody(z.object({ beforeId: z.uuid().optional(), assignment: z.enum(["inventory", "assigned"]).optional(),
+      query: z.string().trim().max(120).default(""), status: z.enum(["NOT_READY", "SALEABLE", "RESERVED", "DISPATCHED"]).optional() }), request.query);
+    const search = nfcUrlFromQr(query);
     const before = db.select({ createdAt: cards.createdAt, id: cards.id }).from(cards).where(eq(cards.id, beforeId ?? ""));
     const items = await db
       .select({ card: cards, profileName: customerProfiles.displayName, activationCodeIssuedAt: cardActivationSecrets.issuedAt,
@@ -129,6 +131,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .leftJoin(customerProfiles, eq(customerProfiles.id, cards.profileId))
       .leftJoin(cardActivationSecrets, eq(cardActivationSecrets.cardId, cards.id))
       .where(and(isNotNull(cardBatches.printConfirmedAt), assignment === "assigned" ? assignedCard : assignment === "inventory" ? not(assignedCard) : undefined,
+        status ? eq(cards.inventoryStatus, status) : undefined,
+        sql`position(lower(${search}) in lower(${cards.publicSlug} || ' ' || ${cards.canonicalUrl} || ' ' || coalesce(${customerProfiles.displayName}, '') || ' ' || ${cardBatches.batchCode})) > 0`,
         beforeId ? sql`(${cards.createdAt}, ${cards.id}) < (${before})` : undefined))
       .orderBy(desc(cards.createdAt), desc(cards.id))
       .limit(101);
@@ -137,7 +141,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/batches", async request => {
     const { page, query } = adminPage(request.query);
-    const rows = await db.select().from(cardBatches).where(and(isNotNull(cardBatches.printConfirmedAt), sql`position(lower(${query}) in lower(${cardBatches.batchCode} || ' ' || ${cardBatches.productVariantId})) > 0`)).orderBy(desc(cardBatches.createdAt), desc(cardBatches.id)).limit(101).offset((page - 1) * 100);
+    const { print } = parseBody(z.object({ print: z.enum(["all", "confirmed", "pending"]).default("confirmed") }), request.query);
+    const rows = await db.select().from(cardBatches).where(and(print === "confirmed" ? isNotNull(cardBatches.printConfirmedAt) : print === "pending" ? sql`${cardBatches.printConfirmedAt} is null` : undefined,
+      sql`position(lower(${query}) in lower(${cardBatches.batchCode} || ' ' || ${cardBatches.productVariantId})) > 0`)).orderBy(desc(cardBatches.createdAt), desc(cardBatches.id)).limit(101).offset((page - 1) * 100);
     const items = rows.slice(0, 100);
     const batchCards = items.length ? await db.select({ batchId: cards.batchId, qrStatus: cards.qrStatus, nfcStatus: cards.nfcStatus, qcStatus: cards.qcStatus })
       .from(cards).where(inArray(cards.batchId, items.map((batch) => batch.id))) : [];
@@ -182,15 +188,19 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       .where(and(inArray(productionJobs.assignedStationId, stations.map(station => station.id)),
         inArray(productionJobs.status, ["CLAIMED", "RETRYABLE_FAILURE"])))
       .orderBy(sql`(${productionJobs.status} = 'CLAIMED') desc`, desc(productionJobs.updatedAt)) : [];
+    const unfinished = stations.length ? await db.select({ stationId: productionJobs.assignedStationId, value: count() }).from(productionJobs)
+      .where(and(inArray(productionJobs.assignedStationId, stations.map(station => station.id)), inArray(productionJobs.status, ["QUEUED", "CLAIMED", "RETRYABLE_FAILURE"])))
+      .groupBy(productionJobs.assignedStationId) : [];
     const items = stations.map(station => ({ ...station, online: station.status === "ACTIVE" &&
       Boolean(station.lastSeenAt && Date.now() - station.lastSeenAt.getTime() <= 30_000),
+      unfinishedJobs: unfinished.find(row => row.stationId === station.id)?.value ?? 0,
       currentJob: jobs.find(job => job.stationId === station.id) ?? null }));
     return { items, count: items.length };
   });
 
   app.post("/stations/:stationId/revoke", async (request) => {
     const operator = await requireOperator(request, ["SUPER_ADMIN"]);
-    const { stationId } = request.params as { stationId: string };
+    const { stationId } = parseBody(z.object({ stationId: z.uuid() }), request.params);
     const station = await db.transaction(async (tx) => {
       const [station] = await tx
         .update(productionStations)
