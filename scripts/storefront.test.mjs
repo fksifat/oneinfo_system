@@ -8,7 +8,9 @@ import {
   addCartVariant, reconcileCartItems,
   PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS,
   isColorLight, defaultCustomization, renderSurfaceMotifSvg,
+  renderBackMotifSvg, renderQrSvg,
 } from "../sites/storefront/catalog.js";
+import { ProductCustomizationSchema } from "@oneinfo/contracts";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
 
@@ -239,4 +241,53 @@ test("customizer presets and vector surface motifs cover all 10 premium designs"
   assert.equal(cart[1].customization.surfaceMotif, "contour");
   assert.equal(cart[0].customization.surfaceColor, "#0a0b0d");
   assert.equal(cart[1].customization.surfaceColor, "#0a121e");
+});
+
+test("two-sided card customization supports front/back vector motifs, QR styles, and contract validation", () => {
+  // Test back motifs for all 4 pattern styles
+  for (const motif of ["facets", "contour", "architectural", "inlay"]) {
+    const svg = renderBackMotifSvg(motif, "#c5a059");
+    assert.match(svg, /<svg class="card-surface-motif/);
+    assert.match(svg, /motif-\w+-back/);
+    assert.match(svg, /#c5a059/);
+  }
+  assert.equal(renderBackMotifSvg("minimal", "#c5a059"), "");
+
+  // Test vector QR svg rendering for all styles
+  const qrFramed = renderQrSvg("#d8b26e", "framed");
+  assert.match(qrFramed, /class="card-qr-svg qr-style-framed"/);
+  assert.match(qrFramed, /stroke="#d8b26e"/);
+
+  const qrBadge = renderQrSvg("#e2e8f0", "badge");
+  assert.match(qrBadge, /qr-style-badge/);
+  assert.match(qrBadge, /stroke-dasharray="4 2"/);
+
+  const qrMinimal = renderQrSvg("#c5a059", "minimal");
+  assert.match(qrMinimal, /qr-style-minimal/);
+
+  // Validate complete two-sided customization with ProductCustomizationSchema
+  const customTwoSided = {
+    name: "Avery Morgan",
+    title: "Managing Director",
+    presetId: "01",
+    layout: "left",
+    surfaceMotif: "facets",
+    surfaceColor: "#0a0b0d",
+    accentColor: "#d8b26e",
+    font: "sans",
+    finish: "matte",
+    backQrStyle: "framed",
+    backSubtitle: "oneinfo.me/avery",
+  };
+  const parsed = ProductCustomizationSchema.parse(customTwoSided);
+  assert.equal(parsed.name, "Avery Morgan");
+  assert.equal(parsed.backQrStyle, "framed");
+  assert.equal(parsed.backSubtitle, "oneinfo.me/avery");
+
+  // Reconcile two-sided customization in cart
+  const product = { id: "p1", name: "Oneinfo Signature", customizable: true };
+  const variant = { id: "v1", name: "Soft-Touch Black", colorHex: "#0a201f", available: true, priceMinor: 179000, salePriceMinor: null };
+  const cart = addCartVariant([], product, variant, 1, parsed);
+  assert.equal(cart[0].customization.backQrStyle, "framed");
+  assert.equal(cart[0].customization.backSubtitle, "oneinfo.me/avery");
 });

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api } from "./api.js";
 import { OrderTrackingPipeline } from "./OrderTrackingPipeline.js";
+import { downloadOrderEps } from "./eps-generator.js";
 
 const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
@@ -22,12 +23,17 @@ function getInitials(name: string) {
   }
   return name.trim().slice(0, 2).toUpperCase() || "CU";
 }
-export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void }) {
+export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: initialCustomOnly = false }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void; customOnly?: boolean }) {
   const params = new URLSearchParams(location.search);
   const requestedOrder = params.get("order");
   const requestedTask = params.get("task");
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [items, setItems] = useState<StoreOrder[]>([]);
+  const [showCustomOnly, setShowCustomOnly] = useState(initialCustomOnly);
+
+  useEffect(() => {
+    setShowCustomOnly(initialCustomOnly);
+  }, [initialCustomOnly]);
   const [hasMore, setHasMore] = useState(false);
   const [supportsSearch, setSupportsSearch] = useState(false);
   const [rates, setRates] = useState<Record<ShippingZone, string>>();
@@ -257,13 +263,54 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     finally { setDelivering(undefined); }
   }
 
+  const customOrdersCount = items.filter(o => o.items.some(i => Boolean(i.customization))).length;
+  const displayedItems = showCustomOnly ? items.filter(o => o.items.some(i => Boolean(i.customization))) : items;
+
   return <div className="store-orders">
     <section className="panel store-orders-list">
       <div className="panel-head orders-panel-head">
         <div>
-          <span className="eyebrow">ORDER FULFILLMENT</span>
-          <h2>Received orders</h2>
-          <p>Review customer orders, manage bKash verification, and track hardware dispatch.</p>
+          <span className="eyebrow">{showCustomOnly ? "BESPOKE CARD PRODUCTION" : "ORDER FULFILLMENT"}</span>
+          <h2>{showCustomOnly ? "Custom card orders" : "Received orders"}</h2>
+          <p>{showCustomOnly ? "Review custom card designs and export production vector EPS files." : "Review customer orders, manage bKash verification, and track hardware dispatch."}</p>
+          <div className="orders-scope-tabs" style={{ display: "inline-flex", gap: "6px", marginTop: "10px", background: "rgba(255,255,255,0.04)", padding: "4px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <button
+              type="button"
+              className={`button-tab ${!showCustomOnly ? "is-active" : ""}`}
+              onClick={() => setShowCustomOnly(false)}
+              style={{
+                padding: "6px 14px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                borderRadius: "6px",
+                border: "none",
+                cursor: "pointer",
+                background: !showCustomOnly ? "var(--accent, #c9933e)" : "transparent",
+                color: !showCustomOnly ? "#090d16" : "inherit",
+                transition: "all 0.15s ease",
+              }}
+            >
+              All orders ({items.length})
+            </button>
+            <button
+              type="button"
+              className={`button-tab ${showCustomOnly ? "is-active" : ""}`}
+              onClick={() => setShowCustomOnly(true)}
+              style={{
+                padding: "6px 14px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                borderRadius: "6px",
+                border: "none",
+                cursor: "pointer",
+                background: showCustomOnly ? "var(--accent, #c9933e)" : "transparent",
+                color: showCustomOnly ? "#090d16" : "inherit",
+                transition: "all 0.15s ease",
+              }}
+            >
+              ✦ Custom orders ({customOrdersCount})
+            </button>
+          </div>
         </div>
         <button type="button" className="quiet" disabled={loading} onClick={() => void loadOrders()}>
           {loading ? "Refreshing…" : "Refresh"}
@@ -314,9 +361,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       {orderError && <p className="store-order-notice is-error" role="alert">{orderError}</p>}
       {orderMessage && <p className="store-order-notice" role="status">{orderMessage}</p>}
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
+      {Boolean(items.length) && showCustomOnly && !displayedItems.length && (
+        <p className="empty">No bespoke custom card orders found. Regular standard orders appear under &ldquo;All orders&rdquo;.</p>
+      )}
 
       <div className="store-orders-stack">
-        {items.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
+        {displayedItems.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || showCustomOnly || undefined}>
           <summary>
             <div className="store-order-summary-left">
               <span className="store-order-avatar" aria-hidden="true">{getInitials(order.customer.name)}</span>
@@ -420,9 +470,51 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                       <strong className="order-item-title">{item.name}</strong>
                       <span className="order-item-variant">{item.variantName}</span>
                       {item.customization && (
-                        <span className="order-item-customization" style={{ display: "block", fontSize: "0.78rem", color: "var(--accent, #9e7938)", marginTop: "3px" }}>
-                          ✦ Custom: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""} · Layout: {String(item.customization.layout || item.customization.position || "left").replace("-", " ")}{item.customization.surfaceMotif ? ` · Motif: ${item.customization.surfaceMotif}` : ""}{item.customization.accentColor ? ` · Foil: ${item.customization.accentColor}` : ""} ({item.customization.font || "sans"})
-                        </span>
+                        <div className="order-item-custom-card-panel" style={{ marginTop: "8px", padding: "10px 14px", background: "rgba(201, 147, 62, 0.08)", border: "1px solid rgba(201, 147, 62, 0.28)", borderRadius: "8px" }}>
+                          <span className="order-item-customization" style={{ display: "block", fontSize: "0.82rem", color: "var(--accent, #c9933e)", lineHeight: 1.45 }}>
+                            ✦ <strong>Bespoke Edition</strong>: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""}
+                            <br />
+                            <small style={{ opacity: 0.9, color: "var(--text-secondary, #a1a1aa)" }}>
+                              Motif: <strong>{item.customization.surfaceMotif || "facets"}</strong> · Layout: <strong>{String(item.customization.layout || item.customization.position || "left").replace("-", " ")}</strong> · Foil: <strong>{item.customization.accentColor || "#d4af37"}</strong> · Font: <strong>{item.customization.font || "sans"}</strong>{item.customization.backSubtitle ? ` · Back: "${item.customization.backSubtitle}"` : ""}
+                            </small>
+                          </span>
+                          <button
+                            type="button"
+                            className="button-download-eps"
+                            title={`Download production vector EPS (${(order.transactionId || order.invoiceNumber || order.id || "card").trim().replace(/[^a-zA-Z0-9_-]/g, "_")}.eps)`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              downloadOrderEps(item.customization!, {
+                                id: order.id,
+                                transactionId: order.transactionId,
+                                invoiceNumber: order.invoiceNumber,
+                                customerName: order.customer.name,
+                              });
+                            }}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              marginTop: "8px",
+                              padding: "6px 12px",
+                              fontSize: "0.78rem",
+                              fontWeight: 600,
+                              background: "#090d16",
+                              color: "#f59e0b",
+                              border: "1px solid #d97706",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              transition: "all 0.15s ease",
+                            }}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                              <polyline points="7 10 12 15 17 10" />
+                              <line x1="12" y1="15" x2="12" y2="3" />
+                            </svg>
+                            <span>Download Vector EPS ({order.transactionId ? `${order.transactionId}.eps` : `${order.invoiceNumber || order.id}.eps`})</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                     <span className="order-item-amount">{bdt(item.unitPriceMinor * item.quantity)}</span>

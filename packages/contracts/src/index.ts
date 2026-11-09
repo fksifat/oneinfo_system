@@ -365,6 +365,8 @@ export const ProductCustomizationSchema = z.object({
   finish: z.enum(["matte", "brushed", "gloss"]).default("matte").optional(),
   position: z.string().optional(),
   presetId: z.string().max(30).optional(),
+  backQrStyle: z.enum(["framed", "minimal", "badge"]).default("framed").optional(),
+  backSubtitle: z.string().trim().max(80).default("").optional(),
 });
 export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
 

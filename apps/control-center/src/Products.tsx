@@ -121,10 +121,10 @@ export function Products({ token }: { token: string }) {
                 <div className="card-mini-chip" aria-hidden="true"></div>
                 <div className="card-mini-brand">Oneinfo</div>
                 <div className="card-mini-nfc" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8.5 16.5a5 5 0 0 1 0-7" />
-                    <path d="M12 19a8.5 8.5 0 0 1 0-14" />
-                    <path d="M15.5 21.5a12 12 0 0 1 0-19" />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9a5 5 0 0 1 0 6" />
+                    <path d="M10 6a9 9 0 0 1 0 12" />
+                    <path d="M14 3a13 13 0 0 1 0 18" />
                   </svg>
                 </div>
               </div>
