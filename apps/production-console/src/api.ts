@@ -26,6 +26,7 @@ export async function api<T>(
   headers.set("x-request-id", crypto.randomUUID());
 
   const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (response.ok && response.headers.get("content-type")?.startsWith("application/zip")) return await response.blob() as T;
   const body = (await response.json()) as T & { message?: string };
   if (response.status === 401 && body.message === "Invalid or expired operator token" && credentials?.accessToken && retry) {
     renewal ??= api<{ accessToken: string }>("/api/v1/dev/token", { method: "POST" }).then((result) => result.accessToken)
