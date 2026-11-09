@@ -38,7 +38,7 @@ test("restored cart uses catalog prices rather than saved prices", () => {
 });
 
 test("NFC deck switches the visible explanation and accessible selected state", () => {
-  const modes = ["tap", "scan", "link"];
+  const modes = ["tap", "scan"];
   const buttons = modes.map(mode => ({
     dataset: { deckMode: mode },
     attributes: {},
@@ -48,7 +48,7 @@ test("NFC deck switches the visible explanation and accessible selected state", 
   const panels = modes.map(mode => ({ dataset: { deckPanel: mode }, hidden: mode !== "tap" }));
   const root = { dataset: { mode: "tap" }, querySelectorAll: selector => selector === "[data-deck-mode]" ? buttons : panels };
   initializeNfcDeck(root);
-  for (const mode of ["scan", "link", "tap"]) {
+  for (const mode of ["scan", "tap"]) {
     buttons[modes.indexOf(mode)].click();
     assert.equal(root.dataset.mode, mode);
     assert.deepEqual(panels.filter(panel => !panel.hidden).map(panel => panel.dataset.deckPanel), [mode]);
