@@ -239,6 +239,39 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(rows).toHaveLength(allocations.length);
   });
 
+  it("exports every generated QR as SVG and EPS in a protected ZIP without changing stock", async () => {
+    const created = await batch(3, false);
+    const url = `/api/v1/production/batches/${created.id}/qr-export.zip`;
+    expect((await app.inject({ url })).statusCode).toBe(401);
+    expect((await app.inject({ url, headers })).statusCode).toBe(409);
+    await request(`/api/v1/production/batches/${created.id}/generate-qr`, {});
+    const before = await client.db.select().from(schema.cards);
+    const response = await app.inject({ url, headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/zip");
+    expect(response.headers["content-disposition"]).toContain("-qr-svg-eps.zip");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    const zip = response.rawPayload;
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.readUInt16LE(zip.length - 12)).toBe(6);
+    for (const card of before) for (const format of ["SVG", "EPS"]) {
+      expect(zip.includes(Buffer.from(`${format}/${card.publicSlug}.${format.toLowerCase()}`))).toBe(true);
+    }
+    expect(await client.db.select().from(schema.cards)).toEqual(before);
+    expect((await app.inject({ url: `/api/v1/production/batches/${randomUUID()}/qr-export.zip`, headers })).statusCode).toBe(404);
+  });
+
+  it("rejects an oversized batch link before generating any of the other QR images", async () => {
+    const created = await batch(2, false);
+    const [card] = await client.db.select().from(schema.cards);
+    await client.db.update(schema.cards).set({ canonicalUrl: `https://example.com/${"long-link/".repeat(20)}` }).where(eq(schema.cards.id, card!.id));
+    const result = await app.inject({ method: "POST", url: `/api/v1/production/batches/${created.id}/generate-qr`, headers, payload: {} });
+    expect(result.statusCode).toBe(400);
+    expect(result.json().message).toContain("shorter URL");
+    expect(await client.db.select().from(schema.qrArtifacts)).toHaveLength(0);
+    expect((await client.db.select().from(schema.cards)).every(row => row.qrStatus === "PENDING")).toBe(true);
+  });
+
   it("refreshes an older QR design without changing card links or discarding the previous artifact", async () => {
     const created = await batch(1);
     const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));
@@ -440,6 +473,39 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   const activate = (slug: string, secretCode: string) => request(`/api/v1/customer/cards/${slug}/activate`, { secretCode });
   const signup = (claimToken: string, email: string) => app.inject({ method: "POST", url: "/api/v1/customer/signup",
     payload: { claimToken, email, password: "a secure customer password", profile: publicDetails } });
+
+  it("moves a client-activated card from inventory to assigned cards while retaining unclaimed reserved stock", async () => {
+    const card = await readyForClaim(), other = await readyForClaim(), secret = await issue(card.id);
+    const stock = () => request("/api/v1/admin/cards?assignment=inventory");
+    const assigned = () => request("/api/v1/admin/cards?assignment=assigned");
+    expect((await stock()).items).toHaveLength(2);
+    expect((await assigned()).items).toHaveLength(0);
+    const grant = await activate(card.publicSlug, secret.secretCode);
+    expect((await signup(grant.claimToken, "assigned-stock@example.com")).statusCode).toBe(201);
+    expect((await stock()).items.map((row: any) => row.card.id)).toEqual([other.id]);
+    expect((await assigned()).items).toEqual([expect.objectContaining({ card: expect.objectContaining({ id: card.id }), profileName: "Card Owner" })]);
+    const overview = await request("/api/v1/admin/overview");
+    expect(overview.cards).toBe(2);
+    expect(overview.inventory.SALEABLE).toBe(1);
+    expect(overview.inventory.RESERVED ?? 0).toBe(0);
+  });
+
+  it("filters assigned stock before cursor pagination without hiding available cards", async () => {
+    const created = await batch(102);await confirm(created.id);
+    const [available] = await client.db.select().from(schema.cards);
+    const profile = await request("/api/v1/profiles", { publicSlug: "pagination-owner", displayName: "Assigned Owner" });
+    await client.db.update(schema.cards).set({ profileId: profile.id }).where(sql`${schema.cards.id} <> ${available!.id}`);
+    const stock = await request("/api/v1/admin/cards?assignment=inventory");
+    expect(stock.items.map((row: any) => row.card.id)).toEqual([available!.id]);
+    expect(stock.hasMore).toBe(false);
+    const first = await request("/api/v1/admin/cards?assignment=assigned");
+    expect(first.items).toHaveLength(100);expect(first.hasMore).toBe(true);
+    const second = await request(`/api/v1/admin/cards?assignment=assigned&beforeId=${first.items.at(-1).card.id}`);
+    expect(second.items).toHaveLength(1);expect(second.hasMore).toBe(false);
+    expect(new Set([...first.items, ...second.items].map((row: any) => row.card.id)).size).toBe(101);
+    expect((await request("/api/v1/admin/cards")).hasMore).toBe(true);
+    expect((await app.inject({ url: "/api/v1/admin/cards?assignment=invalid", headers })).statusCode).toBe(400);
+  }, 30000);
 
   it("hides disabled profiles consistently across handles, legacy URLs, vCards and card endpoints", async () => {
     const card = await readyForClaim(), secret = await issue(card.id);
@@ -769,6 +835,9 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(imported.json()).toEqual({ added: 2, skipped: 0, queued: 2 });
     const stock = await readyForClaim();
     await request(`/api/v1/company/admin/${id}/cards`, { cardSlug: stock.publicSlug });
+    expect((await request("/api/v1/admin/cards?assignment=inventory")).items.some((row: any) => row.card.id === stock.id)).toBe(false);
+    expect((await request("/api/v1/admin/cards?assignment=assigned")).items.some((row: any) => row.card.id === stock.id)).toBe(true);
+
     const workspace = (await send("GET", url)).json();
     const [employee, colleague] = workspace.employees;
     expect(employee.inviteEmailStatus).toBe("pending");

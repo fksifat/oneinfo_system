@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { inflateRawSync } from 'node:zlib';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -111,7 +112,7 @@ try {
         if(contactShare&&contactFailure==='after-save'){result.statusCode=503;result.body=JSON.stringify({message:'Saved response interrupted; retry your contact.'});result.headers['content-length']=String(Buffer.byteLength(result.body));}
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
-          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (String(result.headers['content-type']).startsWith('image/') ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
+          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (/^(image\/|application\/zip)/.test(String(result.headers['content-type'])) ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
       } catch (error) {
         if(closing||/Invalid InterceptionId/i.test(error.message))return;
         browserErrors.push(error.message);
@@ -153,7 +154,7 @@ try {
   for(const width of [1440,768,390,320]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     await command('Page.navigate',{url:'http://127.0.0.1:5174/'});await until(`!!document.querySelector('.sidebar')`);await delay(250);
-    for(const label of ['Overview','Orders','Reviews','Products','Client profiles','Companies','Cards & inventory','Production batches','Stations','Audit history','NFC & QR operations']){
+    for(const label of ['Overview','Orders','Reviews','Products','Client profiles','Companies','Cards & inventory','Assigned cards','Production batches','Stations','Audit history','NFC & QR operations']){
       const found=await evaluate(`(()=>{const b=[...document.querySelectorAll('.sidebar nav button')].find(b=>b.textContent.trim().endsWith(${JSON.stringify(label)}));if(!b)return false;b.click();return true})()`);
       assert.equal(found,true,'Missing Admin navigation: '+label);
       await delay(350);await inspect('admin-'+label.replace(/[^a-z]/gi,'-')+'-'+width);
@@ -224,7 +225,18 @@ try {
       if(label==='Production'&&width===1440){
         await fill('Batch code','UI-BULK');await fill('Number of cards','3');await click('Create batch');await until(`document.querySelector('.batch-toolbar select')?.selectedOptions[0]?.textContent.includes('UI-BULK')&&!!document.querySelector('.selected-production-card')`);
         const selectedBatch=await evaluate(`document.querySelector('.batch-toolbar select').value`);assert.equal(await evaluate(`new URL(location.href).searchParams.get('batch')`),selectedBatch);await reload();await until(`document.querySelector('.batch-toolbar select')?.value===${JSON.stringify(selectedBatch)}&&!!document.querySelector('.selected-production-card')`);
+        assert.equal(await evaluate(`[...document.querySelectorAll('button')].find(b=>b.textContent==='Download all SVG + EPS (ZIP)').disabled`),true);
         await click('Generate all QR codes');await until(`document.querySelectorAll('.production-card-list button').length===3&&[...document.querySelectorAll('.production-card-list small')].every(e=>e.textContent.includes('QR ready'))`);
+        await evaluate(`window.__qrArchive=null;window.__qrDownload='';const makeUrl=URL.createObjectURL.bind(URL);URL.createObjectURL=blob=>{window.__qrArchive=blob;return makeUrl(blob)};const nativeClick=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){window.__qrDownload=this.download;return nativeClick.call(this)}`);
+        await click('Download all SVG + EPS (ZIP)');await until(`!!window.__qrArchive&&window.__qrDownload==='UI-BULK-qr-svg-eps.zip'&&![...document.querySelectorAll('button')].find(b=>b.textContent==='Generate all QR codes').disabled`);
+        assert.deepEqual(await evaluate(`window.__qrArchive.arrayBuffer().then(buffer=>{const v=new DataView(buffer);return [v.getUint32(0,true),v.getUint16(buffer.byteLength-12,true)]})`),[0x04034b50,6]);
+        const vectorZip=(await app.inject({url:`/api/v1/production/batches/${selectedBatch}/qr-export.zip`,headers})).rawPayload;
+        const svgStart=30+vectorZip.readUInt16LE(26),svgBytes=inflateRawSync(vectorZip.subarray(svgStart,svgStart+vectorZip.readUInt32LE(18)));
+        const renderedSvg=await evaluate(`new Promise((resolve,reject)=>{const image=new Image();image.onload=()=>{const canvas=document.createElement('canvas');canvas.width=canvas.height=512;canvas.getContext('2d').drawImage(image,0,0);resolve(canvas.toDataURL('image/png').split(',')[1])};image.onerror=()=>reject(Error('SVG load failed'));image.src='data:image/svg+xml;base64,${svgBytes.toString('base64')}'})`);
+        const svgPng=require('pngjs').PNG.sync.read(Buffer.from(renderedSvg,'base64'));
+        const expectedSvg=(await app.inject({url:`/api/v1/production/batches/${selectedBatch}`,headers})).json().cards[0].canonicalUrl.replace(/\?source=nfc$/,'?source=qr');
+        assert.equal(require('jsqr')(new Uint8ClampedArray(svgPng.data),512,512)?.data,expectedSvg);
+        console.log('One-click full batch SVG/EPS ZIP download and browser-rendered SVG decoding PASS');
         await evaluate(`window.__printCalled=false;window.print=()=>{window.__printCalled=true}`);await click('Print selected QR');await until(`window.__printCalled`);assert.equal(await evaluate(`document.querySelectorAll('.print-label').length`),1);await click('Print full batch');await until(`document.querySelectorAll('.print-label').length===3`);
         await command('Emulation.setEmulatedMedia',{media:'print'});assert.equal(await evaluate(`getComputedStyle(document.querySelector('.production-print')).display`),'block');await screenshot('audit-print-qr');await command('Emulation.setEmulatedMedia',{media:''});
         await evaluate(`document.querySelector('.print-confirmation input').click()`);await click('Confirm printed batch');await until(`document.querySelector('.print-confirmation h2')?.textContent==='Printed stock confirmed'`);console.log('Bulk QR create/generate/single/full print/confirmation PASS');
@@ -377,6 +389,14 @@ try {
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
   console.log('PASS: Admin/activation/owner photo upload, public image, replacement/removal; signup → owner edit → fresh scan; private email hidden.');
+  await command('Page.navigate',{url:'http://127.0.0.1:5174/#cards'});await until(`!!document.querySelector('table[aria-label="Unassigned printed QR stock"]')`);
+  await until(`!document.querySelector('table[aria-label="Unassigned printed QR stock"]').textContent.includes(${JSON.stringify(card.publicSlug)})`);
+  await evaluate(`location.hash='assigned'`);await until(`document.querySelector('table[aria-label="Assigned client cards"]')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+  assert.equal(await evaluate(`document.querySelector('table[aria-label="Assigned client cards"]').textContent.includes('Updated Browser Owner')`),true);
+  assert.equal(await evaluate(`document.querySelector('table[aria-label="Assigned client cards"]').textContent.includes('Generate secret code')`),false);
+  await inspect('admin-assigned-client-cards');
+  console.log('Activated client card moves from inventory to Assigned cards with owner and lifecycle status PASS');
+
   await command('Page.navigate',{url:'http://127.0.0.1:5173/?batch='+batch.id});
   await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
   await click('Delete QR & link');await until(`!!document.querySelector('.stock-delete-dialog[open]')`);
