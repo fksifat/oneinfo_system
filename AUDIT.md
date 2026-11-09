@@ -1,3 +1,16 @@
+# Production management follow-up — 9 November 2026
+
+Reviewed Admin inventory/assigned cards, batch visibility and reprinting, workstation launch/connection guidance, station revocation/recovery, and list refresh/pagination. Changes preserve existing assignment, print-confirmation, deletion and activation guards; no business data migration is required.
+
+- Inventory/assigned search and stock filters run before cursor pagination, including managed QR-link normalization. Cards retain clear NFC/QC/order-slip next actions. Existing legacy code management is collapsed; fresh stock no longer offers a competing per-card code workflow.
+- Admin can list awaiting-print batches explicitly without exposing unconfirmed cards as available stock. Reprinting stays print-confirmation protected and adds bulk selection.
+- Stations show searchable connection states and unfinished-job counts, including queued work. Recovery says that it revokes access; idle stations do not offer a redundant recovery action. Malformed revoke IDs return validation errors.
+- Removed duplicated production metrics/setup cards and restricted polling to the current list plus the common summary. Existing local-console credential isolation is unchanged.
+
+Validation uses disposable database/API/browser fixtures. No live orders, card ownership, activation codes or NFC contents are changed by the audit. Physical printing and phone/tag hardware remain an operator check.
+
+---
+
 # Full project audit — 8 November 2026
 
 Scope: storefront, Admin/client/team interfaces, authentication, order/payment

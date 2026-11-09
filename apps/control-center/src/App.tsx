@@ -6,7 +6,7 @@ import { AdminTrackingHub } from "./AdminTrackingHub.js";
 import { Products } from "./Products.js";
 import { Reviews } from "./Reviews.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.js";
 import { ProfilePhoto } from "./ProfilePhoto.js";
 import { ProfileView } from "./ProfileView.js";
@@ -69,6 +69,7 @@ interface Profile {
 
 interface Card {
   id: string;
+  batchId: string;
   publicSlug: string;
   canonicalUrl: string;
   profileId: string | null;
@@ -84,8 +85,8 @@ interface Card {
 }
 
 interface CardRow { card: Card; profileName: string | null; imageData: string | null; activationCodeIssuedAt: string | null }
-interface Batch { id: string; batchCode: string; productVariantId: string; plannedQuantity: number; status: string; createdAt: string; total: number; qrGenerated: number; nfcWritten: number; qcPassed: number }
-interface Station { id: string; stationCode: string; name: string; status: string; lastSeenAt: string | null; createdAt: string; online: boolean; currentJob?: { type: string; status: string; publicSlug: string; cardId: string; batchId: string } | null }
+interface Batch { printConfirmedAt: string | null; id: string; batchCode: string; productVariantId: string; plannedQuantity: number; status: string; createdAt: string; total: number; qrGenerated: number; nfcWritten: number; qcPassed: number }
+interface Station { id: string; stationCode: string; name: string; status: string; lastSeenAt: string | null; createdAt: string; online: boolean; unfinishedJobs: number; currentJob?: { type: string; status: string; publicSlug: string; cardId: string; batchId: string } | null }
 interface Audit { id: string; action: string; targetType: string; targetId: string; createdAt: string }
 
 interface ProfileDraft {
@@ -194,6 +195,9 @@ export function App() {
   const [cards, setCards] = useState<CardRow[]>([]);
   const [cardPages, setCardPages] = useState(1);
   const [moreCards, setMoreCards] = useState(false);
+  const [inventoryFilter, setInventoryFilter] = useState("");
+  const [printFilter, setPrintFilter] = useState("all");
+  const [stationFilter, setStationFilter] = useState("all");
   const [draftProfiles, setDraftProfiles] = useState(false);
   const [reprintBatch, setReprintBatch] = useState("");
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -209,8 +213,8 @@ export function App() {
   const [listPage, setListPage] = useState(1);
   const [listQuery, setListQuery] = useState("");
   const [listMore, setListMore] = useState({ profiles: false, batches: false, audit: false });
-  useEffect(() => { setSearch(""); setListQuery(""); setListPage(1); setCardPages(1); }, [view]);
-  useEffect(() => { const timer = setTimeout(() => { setListQuery(search); setListPage(1); }, 300); return () => clearTimeout(timer); }, [search]);
+  useEffect(() => { setSearch(""); setListQuery(""); setListPage(1); setCardPages(1); setReprintBatch(""); }, [view]);
+  useEffect(() => { const timer = setTimeout(() => { setListQuery(search); setListPage(1); setCardPages(1); }, 300); return () => clearTimeout(timer); }, [search]);
   const listParams = (target: string) => `?page=${view === target ? listPage : 1}&query=${encodeURIComponent(view === target ? listQuery : "")}${target === "profiles" && view === target && draftProfiles ? "&visibility=draft" : ""}`;
   const [syncError, setSyncError] = useState("");
   const [lastSynced, setLastSynced] = useState("");
@@ -248,29 +252,28 @@ export function App() {
     try {
       const [summary, profileList, cardList, batchList, stationList, auditList] = await Promise.all([
         api<Overview>("/api/v1/admin/overview", token),
-        api<{ items: Profile[]; hasMore: boolean }>(`/api/v1/profiles${listParams("profiles")}`, token),
-        (async () => {
+        view === "profiles" ? api<{ items: Profile[]; hasMore: boolean }>(`/api/v1/profiles${listParams("profiles")}`, token) : undefined,
+        view === "cards" || view === "assigned" ? (async () => {
           const items: CardRow[] = [];
           let hasMore = true;
           for (let page = 0; page < cardPages && hasMore; page++) {
-            const response = await api<{ items: CardRow[]; hasMore: boolean }>(`/api/v1/admin/cards?assignment=${view === "assigned" ? "assigned" : "inventory"}${items.length ? `&beforeId=${items.at(-1)!.card.id}` : ""}`, token);
+            const response = await api<{ items: CardRow[]; hasMore: boolean }>(`/api/v1/admin/cards?assignment=${view === "assigned" ? "assigned" : "inventory"}&query=${encodeURIComponent(listQuery)}${view === "cards" && inventoryFilter ? `&status=${inventoryFilter}` : ""}${items.length ? `&beforeId=${items.at(-1)!.card.id}` : ""}`, token);
             items.push(...response.items); hasMore = response.hasMore;
           }
           return { items, hasMore };
-        })(),
-        api<{ items: Batch[]; hasMore: boolean }>(`/api/v1/admin/batches${listParams("batches")}`, token),
-        api<{ items: Station[] }>("/api/v1/admin/stations", token),
-        api<{ items: Audit[]; hasMore: boolean }>(`/api/v1/admin/audit-logs${listParams("audit")}`, token),
+        })() : undefined,
+        view === "batches" ? api<{ items: Batch[]; hasMore: boolean }>(`/api/v1/admin/batches${listParams("batches")}&print=${printFilter}`, token) : undefined,
+        view === "stations" ? api<{ items: Station[] }>("/api/v1/admin/stations", token) : undefined,
+        view === "audit" ? api<{ items: Audit[]; hasMore: boolean }>(`/api/v1/admin/audit-logs${listParams("audit")}`, token) : undefined,
       ]);
       if (refreshing.current !== refreshId) return;
       setOverview(summary);
-      setProfiles(profileList.items);
-      setListMore({ profiles: profileList.hasMore, batches: batchList.hasMore, audit: auditList.hasMore });
-      setCards(cardList.items);
-      setMoreCards(cardList.hasMore);
-      setBatches(batchList.items);
-      setStations(stationList.items);
-      setAudits(auditList.items);
+      if (profileList) setProfiles(profileList.items);
+      setListMore(current => ({ profiles: profileList?.hasMore ?? current.profiles, batches: batchList?.hasMore ?? current.batches, audit: auditList?.hasMore ?? current.audit }));
+      if (cardList) { setCards(cardList.items); setMoreCards(cardList.hasMore); }
+      if (batchList) setBatches(batchList.items);
+      if (stationList) setStations(stationList.items);
+      if (auditList) setAudits(auditList.items);
       setSyncError("");
       setLastSynced(new Date().toLocaleTimeString());
     } catch (error) {
@@ -278,7 +281,7 @@ export function App() {
       const message = error instanceof Error ? error.message : "Could not refresh data";
       setSyncError(message); setMessage(message);
     } finally { if (refreshing.current === refreshId) refreshing.current = undefined; }
-  }, [token, cardPages, listPage, listQuery, view, draftProfiles]);
+  }, [token, cardPages, listPage, listQuery, view, draftProfiles, inventoryFilter, printFilter]);
 
   useEffect(() => {
     void refresh();
@@ -337,8 +340,9 @@ export function App() {
     finally { setBusy(false); }
   };
 
-  const deferredSearch = useDeferredValue(search);
   const filteredProfiles = profiles;
+  const shownStations = stations.filter(station => `${station.stationCode} ${station.name}`.toLowerCase().includes(search.toLowerCase()) &&
+    (stationFilter === "all" || (stationFilter === "online" ? station.online : stationFilter === "revoked" ? station.status === "REVOKED" : station.status === "ACTIVE" && !station.online)));
   const currentGroupLabel = navGroups.find(g => g.pages.includes(view))?.label ?? "Workspace";
 
   if (!token) return (
@@ -517,10 +521,16 @@ export function App() {
 
         {view === "cards" || view === "assigned" ? (
           <>
-            <CardLookup token={token} />
+            <div className="production-controls">
+              <label>Search cards<input type="search" maxLength={120} value={search} placeholder="Card code, link, client or batch" onChange={e => setSearch(e.target.value)} /></label>
+              {view === "cards" && <label>Stock status<select value={inventoryFilter} onChange={e => { setInventoryFilter(e.target.value); setCardPages(1); }}><option value="">All stock</option><option value="NOT_READY">NFC / QC needed</option><option value="SALEABLE">Ready stock</option><option value="RESERVED">Reserved</option><option value="DISPATCHED">Dispatched</option></select></label>}
+              <a href={view === "cards" ? "#assigned" : "#cards"} className="action-pill-link">{view === "cards" ? "View assigned cards" : "View available inventory"}</a>
+            </div>
+            <details className="production-lookup"><summary>Find a card across all batches and orders</summary><CardLookup token={token} /></details>
             <DataPanel
               title={view === "assigned" ? "Assigned client cards" : "Unassigned printed QR stock"}
-              columns={["Card / QR", "Profile", "QR", "NFC", "QC", view === "assigned" ? "Card state" : "Inventory", view === "assigned" ? "Ownership" : "Private activation"]}
+              emptyText={search || (view === "cards" && inventoryFilter) ? "No cards match these filters." : view === "assigned" ? "No cards have been assigned to a client yet." : "No unassigned printed stock. Create and confirm a batch in the production console."}
+              columns={["Card / QR", "Profile", "QR", "NFC", "QC", view === "assigned" ? "Card state" : "Inventory", view === "assigned" ? "Ownership" : "Next step"]}
               rows={cards.filter(({ card }) => Boolean(card.profileId || card.customerAccountId || card.companyId || card.claimedAt) === (view === "assigned")).map(({ card, profileName, imageData, activationCodeIssuedAt }) => [
                 <div key={card.id} className="card-qr-cell">
                   <a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="qr-thumb-anchor" title={"Open " + card.publicSlug}>
@@ -553,14 +563,14 @@ export function App() {
                 ) : (
                   <span className="awaiting-signup-pill" key="awaiting">
                     <span className="status-dot"></span>
-                    {card.companyId ? "Company card" : "Awaiting signup"}
+                    {card.companyId ? "Company card" : view === "cards" ? "Unassigned stock" : "Awaiting signup"}
                   </span>
                 ),
                 <StatusBadge key="qr" value={card.qrStatus} />,
                 <StatusBadge key="nfc" value={card.nfcStatus} />,
                 <StatusBadge key="qc" value={card.qcStatus} />,
                 <StatusBadge key="inv" value={view === "assigned" ? card.lifecycleStatus : card.inventoryStatus} />,
-                view === "assigned" ? <span key="ownership" className="table-status-pill is-good">{card.companyId ? "Company assigned" : "Client assigned"}</span> : <ActivationCode key={card.id} cardId={card.id} slug={card.publicSlug} token={token} issued={Boolean(activationCodeIssuedAt)} claimed={Boolean(card.customerAccountId)} ready={card.qcStatus === "PASSED"} />
+                view === "assigned" ? <span key="ownership" className="table-status-pill is-good">{card.companyId ? "Company assigned" : "Client assigned"}</span> : activationCodeIssuedAt ? <details key="legacy"><summary>Existing card code</summary><ActivationCode cardId={card.id} slug={card.publicSlug} token={token} issued claimed={false} ready={card.qcStatus === "PASSED"} /></details> : card.qcStatus === "PASSED" ? <a key="next" href="#orders">Use order secret slip</a> : <a key="next" href={workstationLink(card.batchId, card.id)} target="_blank" rel="noreferrer">{card.nfcStatus === "WRITTEN" ? "Complete QC" : "Write NFC"} ↗</a>
               ])}
             />
             {moreCards && (
@@ -580,7 +590,8 @@ export function App() {
                   type="search"
                   value={search}
                   onChange={event => setSearch(event.target.value)}
-                  placeholder={view === "batches" ? "Search by batch code (e.g. BATCH-20261106) or status..." : "Search audit logs..."}
+                  maxLength={120}
+                  placeholder={view === "batches" ? "Search batch code or variant..." : "Search audit logs..."}
                 />
               </div>
             </label>
@@ -588,6 +599,10 @@ export function App() {
         )}
         {view === "batches" ? (
           <>
+            <div className="production-controls">
+              <label>Print confirmation<select value={printFilter} onChange={e => { setPrintFilter(e.target.value); setListPage(1); setReprintBatch(""); }}><option value="all">All batches</option><option value="pending">Awaiting print confirmation</option><option value="confirmed">Confirmed printed stock</option></select></label>
+              <a href={`${PRODUCTION_URL}/#production`} target="_blank" rel="noreferrer" className="action-pill-link">Create batch in console ↗</a>
+            </div>
             {reprintBatch && (
               <section className="panel operation-panel reprint-wrapper-panel" id="batch-reprint">
                 <BatchReprint key={reprintBatch} batchId={reprintBatch} token={token} onClose={() => setReprintBatch("")} />
@@ -595,7 +610,8 @@ export function App() {
             )}
             <DataPanel
               title="Production batches · live"
-              columns={["Batch", "QR ready", "NFC written", "QC approved", "Status", "Workspace"]}
+              emptyText={search || printFilter !== "all" ? "No batches match these filters." : "No batches yet. Create a batch in the production console."}
+              columns={["Batch", "QR ready", "NFC written", "QC approved", "Print", "Workspace"]}
               rows={batches.map(batch => [
                 <div key={batch.id} className="batch-identity-cell">
                   <div className="batch-icon-box" aria-hidden="true">
@@ -605,13 +621,13 @@ export function App() {
                     <span className="batch-code-link">
                       <code>{batch.batchCode}</code>
                     </span>
-                    <small className="batch-unit-caption">{batch.total} cards allocated</small>
+                    <small className="batch-unit-caption">{batch.total} cards</small>
                   </div>
                 </div>,
                 <BatchProgress key="qr" current={batch.qrGenerated} total={batch.total} label="QR ready" />,
                 <BatchProgress key="nfc" current={batch.nfcWritten} total={batch.total} label="NFC written" />,
                 <BatchProgress key="qc" current={batch.qcPassed} total={batch.total} label="QC approved" />,
-                <StatusBadge key="status" value={batch.status} />,
+                <span key="print" className={`table-status-pill ${batch.printConfirmedAt ? "is-good" : "is-warn"}`}>{batch.printConfirmedAt ? "Print confirmed" : "Awaiting print"}</span>,
                 <div key={batch.id} className="batch-workspace-actions">
                   <a href={workstationLink(batch.id)} target="_blank" rel="noreferrer" className="action-pill-link">
                     Open batch <span className="action-glyph">↗</span>
@@ -619,6 +635,8 @@ export function App() {
                   <button
                     type="button"
                     className="button-reprint-pill"
+                    disabled={!batch.printConfirmedAt}
+                    title={batch.printConfirmedAt ? "Reprint saved QR images" : "Confirm printing in the production console first"}
                     onClick={() => {
                       setReprintBatch(batch.id);
                       requestAnimationFrame(() => document.getElementById("batch-reprint")?.scrollIntoView({ block: "start" }));
@@ -638,7 +656,7 @@ export function App() {
                 <span className="eyebrow">HARDWARE FLEET</span>
                 <h2>Production stations</h2>
                 <p>
-                  {stations.filter(station => station.online).length} online · {stations.length} shown. Online means seen within the last 30 seconds.
+                  Online means seen within the last 30 seconds. Revoking a station disconnects its phones.
                 </p>
               </div>
               <span className="station-fleet-pill">
@@ -647,8 +665,14 @@ export function App() {
               </span>
             </div>
 
+            <div className="production-controls">
+              <label>Search stations<input type="search" maxLength={120} value={search} onChange={e => setSearch(e.target.value)} placeholder="Station code or name" /></label>
+              <label>Station status<select value={stationFilter} onChange={e => setStationFilter(e.target.value)}><option value="all">All stations</option><option value="online">Online</option><option value="offline">Offline</option><option value="revoked">Revoked</option></select></label>
+              <a className="action-pill-link" href="#production">Open connection help</a>
+            </div>
             <div className="stations-list">
-              {stations.map(station => (
+              {!shownStations.length && <p className="empty">{stations.length ? "No stations match these filters." : "No stations registered. Open the production console to register this PC and pair a phone."}</p>}
+              {shownStations.map(station => (
                 <div className={"station-card-row " + (station.online ? "is-online" : "is-offline")} key={station.id}>
                   <div className="station-card-main">
                     <div className="station-icon-avatar" aria-hidden="true">
@@ -704,9 +728,9 @@ export function App() {
                         Revoke
                       </button>
                     )}
-                    <button className="quiet button-station-recover" disabled={busy} onClick={() => void recoverStation(station)}>
-                      Recover unfinished jobs
-                    </button>
+                    {station.unfinishedJobs > 0 && <button className="quiet button-station-recover" disabled={busy} onClick={() => void recoverStation(station)}>
+                      Revoke & recover {station.unfinishedJobs} jobs
+                    </button>}
                   </div>
                 </div>
               ))}
@@ -731,32 +755,12 @@ export function App() {
           <section className="production-hub">
             <article className="panel connected-production-head">
               <div className="connected-head-content">
-                <div className="connected-eyebrow-row">
-                  <span className="eyebrow">CONNECTED PRODUCTION WORKSPACE</span>
-                  <span className="sync-pulse-badge">
-                    <span className="status-dot"></span>
-                    Live telemetry · 5s sync
-                  </span>
-                </div>
-                <h2>QR, NFC and final QC</h2>
-                <p>Your production workstation shares card encoding, batch printing, and quality control telemetry directly with this Admin panel through the cloud database.</p>
+                <span className="eyebrow">PRODUCTION CONSOLE</span>
+                <h2>Generate → print → NFC → QC</h2>
+                <p>Manage stock and batch progress here. Use the workstation console and paired phone to generate QR files, write NFC tags and verify printed cards.</p>
               </div>
-              {embedProduction ? (
-                <a href={PRODUCTION_URL} target="_blank" rel="noreferrer" className="action-pill-link production-launch-pill">
-                  Open full console <span className="action-glyph">↗</span>
-                </a>
-              ) : null}
+              <a href={PRODUCTION_URL} target="_blank" rel="noreferrer" className="action-pill-link">Open production console ↗</a>
             </article>
-
-            {overview ? (
-              <div className="metric-grid">
-                <Metric label="Production batches" value={overview.batches} detail="Synced with hardware hub" icon="📦" />
-                <Metric label="Physical cards" value={overview.cards} detail={`${overview.inventory.SALEABLE ?? 0} QC approved & saleable`} icon="💳" />
-                <Metric label="Pending jobs" value={overview.pendingJobs} detail="QR, NFC and optical QC" highlight icon="⚡" />
-                <Metric label="Active stations" value={overview.stations} detail="Registered terminals" icon="🖥️" />
-              </div>
-            ) : null}
-
             {embedProduction ? (
               <div className="embedded-console-wrap">
                 <iframe className="production-frame" src={PRODUCTION_URL} title="Connected Oneinfo production console" />
@@ -767,43 +771,13 @@ export function App() {
               </div>
             ) : (
               <article className="panel workstation-launch">
-                <div className="workstation-launch-header">
-                  <span className="eyebrow">PRODUCTION WORKSTATION SETUP</span>
-                  <h2>Open your workstation console</h2>
-                  <p>Generate and print QR batches, write NFC NTAG213 chips, and complete phone-assisted QC tests on your dedicated production PC.</p>
-                </div>
-                <div className="workstation-steps-grid">
-                  <div className="workstation-step-card">
-                    <div className="step-numeral-badge">01</div>
-                    <div className="step-card-body">
-                      <strong>Start local instance</strong>
-                      <p>Run Oneinfo on the PC where thermal card printers and NFC writers are connected.</p>
-                    </div>
-                  </div>
-                  <div className="workstation-step-card">
-                    <div className="step-numeral-badge">02</div>
-                    <div className="step-card-body">
-                      <strong>Open operator terminal</strong>
-                      <p>Launch the console in its dedicated browser window using this station's saved credentials.</p>
-                    </div>
-                  </div>
-                  <div className="workstation-step-card">
-                    <div className="step-numeral-badge">03</div>
-                    <div className="step-card-body">
-                      <strong>Pair operator phone</strong>
-                      <p>Open the Connection tab and scan the pairing QR with your phone for tactile tap-testing.</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="workstation-launch-action-bar">
-                  <a href={PRODUCTION_URL} target="_blank" rel="noreferrer" className="button-launch-primary">
-                    Open production console on this PC <span className="action-glyph">↗</span>
-                  </a>
-                  <p className="workstation-help">
-                    <span className="help-icon" aria-hidden="true">💡</span>
-                    If the tab cannot connect, start Oneinfo on this PC and try again. Production telemetry will appear here automatically.
-                  </p>
-                </div>
+                <h2>Connect your production PC</h2>
+                <ol className="production-setup-steps">
+                  <li>Start Oneinfo on this PC using its Oneinfo launcher.</li>
+                  <li>Open the production console and register the workstation if requested.</li>
+                  <li>In Connection, scan the Wi-Fi pairing QR with the Android app. Keep the PC and phone on the same network.</li>
+                </ol>
+                <p>The console runs on this PC. If it cannot open, start Oneinfo and try the link above. Live updates appear in Admin while both apps are connected.</p>
               </article>
             )}
           </section>
@@ -910,8 +884,8 @@ function Empty({ title, text, action, onAction }: { title: string; text: string;
   return <div className="empty-state"><span>◎</span><h2>{title}</h2><p>{text}</p><button onClick={onAction}>{action}</button></div>;
 }
 
-function DataPanel({ title, columns, rows }: { title: string; columns: string[]; rows: ReactNode[][] }) {
-  return <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">SYSTEM RECORDS</p><h2>{title}</h2></div><span>{rows.length} records</span></div><div className="data-table" role="region" aria-label={title} tabIndex={0}><table aria-label={title}><thead><tr>{columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>{rows.length === 0 ? <p className="empty">No records yet</p> : null}</section>;
+function DataPanel({ title, columns, rows, emptyText = "No records yet" }: { title: string; columns: string[]; rows: ReactNode[][]; emptyText?: string }) {
+  return <section className="panel table-panel"><div className="panel-head"><div><p className="eyebrow">SYSTEM RECORDS</p><h2>{title}</h2></div><span>{rows.length} record{rows.length === 1 ? "" : "s"}</span></div><div className="data-table" role="region" aria-label={title} tabIndex={0}><table aria-label={title}><thead><tr>{columns.map(column => <th scope="col" key={column}>{column}</th>)}</tr></thead><tbody>{rows.map((row, index) => <tr key={index}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}</tr>)}</tbody></table></div>{rows.length === 0 ? <p className="empty">{emptyText}</p> : null}</section>;
 }
 
 function ProfileEditor({ token, value, setValue, onClose, onSave, busy, error }: { token: string; value: ProfileDraft & { id?: string }; setValue: (value: ProfileDraft & { id?: string }) => void; onClose: () => void; onSave: () => void; busy: boolean; error: string }) {
