@@ -186,12 +186,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       status: productionJobs.status, batchId: productionJobs.batchId, cardId: cards.id, publicSlug: cards.publicSlug })
       .from(productionJobs).innerJoin(cards, eq(cards.id, productionJobs.cardId))
       .where(and(inArray(productionJobs.assignedStationId, stations.map(station => station.id)),
-        inArray(productionJobs.status, ["QUEUED", "CLAIMED", "RETRYABLE_FAILURE"])))
+        inArray(productionJobs.status, ["CLAIMED", "RETRYABLE_FAILURE"])))
       .orderBy(sql`(${productionJobs.status} = 'CLAIMED') desc`, desc(productionJobs.updatedAt)) : [];
+    const unfinished = stations.length ? await db.select({ stationId: productionJobs.assignedStationId, value: count() }).from(productionJobs)
+      .where(and(inArray(productionJobs.assignedStationId, stations.map(station => station.id)), inArray(productionJobs.status, ["QUEUED", "CLAIMED", "RETRYABLE_FAILURE"])))
+      .groupBy(productionJobs.assignedStationId) : [];
     const items = stations.map(station => ({ ...station, online: station.status === "ACTIVE" &&
       Boolean(station.lastSeenAt && Date.now() - station.lastSeenAt.getTime() <= 30_000),
-      unfinishedJobs: jobs.filter(job => job.stationId === station.id).length,
-      currentJob: jobs.find(job => job.stationId === station.id && job.status !== "QUEUED") ?? null }));
+      unfinishedJobs: unfinished.find(row => row.stationId === station.id)?.value ?? 0,
+      currentJob: jobs.find(job => job.stationId === station.id) ?? null }));
     return { items, count: items.length };
   });
 
