@@ -421,7 +421,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                       <span className="order-item-variant">{item.variantName}</span>
                       {item.customization && (
                         <span className="order-item-customization" style={{ display: "block", fontSize: "0.78rem", color: "var(--accent, #9e7938)", marginTop: "3px" }}>
-                          ✦ Custom: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""} · {item.customization.position.replace("-", " ")} ({item.customization.font})
+                          ✦ Custom: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""} · Layout: {String(item.customization.layout || item.customization.position || "left").replace("-", " ")}{item.customization.surfaceMotif ? ` · Motif: ${item.customization.surfaceMotif}` : ""}{item.customization.accentColor ? ` · Foil: ${item.customization.accentColor}` : ""} ({item.customization.font || "sans"})
                         </span>
                       )}
                     </div>
