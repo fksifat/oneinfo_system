@@ -239,6 +239,39 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(rows).toHaveLength(allocations.length);
   });
 
+  it("exports every generated QR as SVG and EPS in a protected ZIP without changing stock", async () => {
+    const created = await batch(3, false);
+    const url = `/api/v1/production/batches/${created.id}/qr-export.zip`;
+    expect((await app.inject({ url })).statusCode).toBe(401);
+    expect((await app.inject({ url, headers })).statusCode).toBe(409);
+    await request(`/api/v1/production/batches/${created.id}/generate-qr`, {});
+    const before = await client.db.select().from(schema.cards);
+    const response = await app.inject({ url, headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/zip");
+    expect(response.headers["content-disposition"]).toContain("-qr-svg-eps.zip");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    const zip = response.rawPayload;
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50);
+    expect(zip.readUInt16LE(zip.length - 12)).toBe(6);
+    for (const card of before) for (const format of ["SVG", "EPS"]) {
+      expect(zip.includes(Buffer.from(`${format}/${card.publicSlug}.${format.toLowerCase()}`))).toBe(true);
+    }
+    expect(await client.db.select().from(schema.cards)).toEqual(before);
+    expect((await app.inject({ url: `/api/v1/production/batches/${randomUUID()}/qr-export.zip`, headers })).statusCode).toBe(404);
+  });
+
+  it("rejects an oversized batch link before generating any of the other QR images", async () => {
+    const created = await batch(2, false);
+    const [card] = await client.db.select().from(schema.cards);
+    await client.db.update(schema.cards).set({ canonicalUrl: `https://example.com/${"long-link/".repeat(20)}` }).where(eq(schema.cards.id, card!.id));
+    const result = await app.inject({ method: "POST", url: `/api/v1/production/batches/${created.id}/generate-qr`, headers, payload: {} });
+    expect(result.statusCode).toBe(400);
+    expect(result.json().message).toContain("shorter URL");
+    expect(await client.db.select().from(schema.qrArtifacts)).toHaveLength(0);
+    expect((await client.db.select().from(schema.cards)).every(row => row.qrStatus === "PENDING")).toBe(true);
+  });
+
   it("refreshes an older QR design without changing card links or discarding the previous artifact", async () => {
     const created = await batch(1);
     const [card] = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));

@@ -10,6 +10,9 @@ import { parseBody, sendCreated } from "../http.js";
 import { allocatePendingOrders, lockPrintedStock } from "../domain/printed-stock.js";
 import { z } from "zod";
 import { deleteProductionStock } from "../domain/delete-production-stock.js";
+import { qrMatrix, productionQrSvg, productionQrEps } from "../domain/qr-image.js";
+import { qrUrl } from "../domain/card-urls.js";
+import { zipFiles } from "../domain/zip.js";
 import { forgetProductionCards } from "./local-nfc.js";
 
 async function latestWrites(batchId: string) {
@@ -59,12 +62,36 @@ export const batchRoutes: FastifyPluginAsync = async (app) => {
     const input = parseBody(GenerateBatchQrSchema, request.body ?? {});
     const batchCards = await db.select().from(cards).where(and(eq(cards.batchId, batchId), input.cardId ? eq(cards.id, input.cardId) : undefined));
     if (!batchCards.length) throw Object.assign(new Error("Batch or card not found"), { statusCode: 404 });
+    // Validate the whole batch before writing any new artifacts.
+    for (const card of batchCards) qrMatrix(qrUrl(card.canonicalUrl));
     let generated = 0;
     for (const card of batchCards) {
       const result = await db.transaction(tx => generateCardQr(tx, card, operator.operatorId, station.stationId));
       if (result.generated) generated++;
     }
     return { generated, total: batchCards.length };
+  });
+
+  app.get("/:batchId/qr-export.zip", async (request, reply) => {
+    await requireOperator(request);
+    const { batchId } = parseBody(z.object({ batchId: z.uuid() }), request.params);
+    const [batch] = await db.select().from(cardBatches).where(eq(cardBatches.id, batchId)).limit(1);
+    if (!batch) throw Object.assign(new Error("Batch not found"), { statusCode: 404 });
+    const batchCards = await db.select().from(cards).where(eq(cards.batchId, batchId)).orderBy(asc(cards.createdAt), asc(cards.publicSlug));
+    if (!batchCards.length || batchCards.some(card => card.qrStatus !== "GENERATED")) {
+      throw Object.assign(new Error("Generate all QR codes in this batch before downloading"), { statusCode: 409 });
+    }
+    for (const card of batchCards) qrMatrix(qrUrl(card.canonicalUrl));
+    function* files() {
+      for (const card of batchCards) {
+        const value = qrUrl(card.canonicalUrl);
+        yield { name: `SVG/${card.publicSlug}.svg`, data: productionQrSvg(value) };
+        yield { name: `EPS/${card.publicSlug}.eps`, data: productionQrEps(value) };
+      }
+    }
+    const filename = batch.batchCode.replace(/[^a-zA-Z0-9_-]/g, "_") || "batch";
+    return reply.header("cache-control", "no-store").header("content-disposition", `attachment; filename="${filename}-qr-svg-eps.zip"`)
+      .type("application/zip").send(zipFiles(files()));
   });
 
   app.post("/:batchId/confirm-print", async (request) => {
