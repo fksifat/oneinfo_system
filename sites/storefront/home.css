@@ -771,20 +771,39 @@
   width: 22px;
   height: 22px;
   color: inherit;
-  opacity: 0.85;
+  opacity: 0.9;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 .mini-product-card .card-nfc-wave svg {
   width: 100%;
   height: 100%;
+  display: block;
+  fill: none;
+  stroke: currentColor;
 }
 
 .mini-product-card.customizable-card {
   position: relative;
   overflow: hidden;
-  transition: background 0.3s ease;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 1.585;
+  border-radius: 14px;
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 14px 34px rgba(18, 19, 22, 0.22), 0 2px 8px rgba(18, 19, 22, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  transform: none !important;
+  transition: transform 0.2s ease, background 0.3s ease, border-color 0.3s ease, box-shadow 0.2s ease;
+}
+.product:hover .mini-product-card.customizable-card,
+.product-art:hover .mini-product-card.customizable-card {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 18px 40px rgba(18, 19, 22, 0.28), 0 4px 12px rgba(18, 19, 22, 0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.18);
 }
 .card-surface-motif {
   position: absolute;
@@ -1366,4 +1385,142 @@
   border: 1px solid #ebdcc5;
   width: fit-content;
   line-height: 1.35;
+}
+
+/* Back Face Elements */
+.card-back-center-qr {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  z-index: 2;
+}
+.card-qr-wrap {
+  display: inline-flex;
+  padding: 0;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+.card-qr-wrap .card-qr-svg {
+  width: 74px;
+  height: 74px;
+  display: block;
+}
+.card-qr-wrap.framed {
+  border: 1.5px solid var(--card-accent, #d8b26e);
+}
+.card-qr-wrap.badge {
+  border: 1.5px dashed var(--card-accent, #d8b26e);
+}
+.card-qr-wrap.minimal {
+  border: none;
+}
+.card-back-subtitle {
+  display: none !important;
+}
+.card-back-footer {
+  position: absolute;
+  bottom: 16px;
+  left: 20px;
+  right: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 2;
+}
+.mini-product-card .card-back-oneinfo-logo {
+  width: 72px;
+  height: auto;
+  opacity: 0.95;
+  display: block;
+}
+.mini-product-card .card-back-arise-svg {
+  height: 11.2px;
+  width: auto;
+  display: block;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.92);
+  transition: color 0.2s ease;
+}
+.mini-product-card.is-light-surface .card-back-arise-svg {
+  color: rgba(18, 19, 22, 0.88);
+}
+
+/* Customizable Card Unified Showcase (Front & Back together in one matching stage) */
+.product-art.custom-stage-unified {
+  position: relative;
+  min-height: auto !important;
+  aspect-ratio: auto !important;
+  padding: 30px 24px 28px !important;
+  background: #f4efe6 !important;
+  border: 1px solid #e5ded2 !important;
+  border-radius: var(--purchase-radius, 16px) !important;
+  box-shadow: 0 4px 20px rgba(18, 19, 22, 0.04);
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  overflow: hidden;
+}
+
+.product-art.custom-stage-unified.has-badge {
+  padding-top: 56px !important;
+}
+
+.custom-stage-unified .product-badges {
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  justify-content: flex-start;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.custom-card-face-block {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-face-label-row {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.custom-face-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #635d52;
+  background: rgba(18, 19, 22, 0.05);
+  border: 1px solid rgba(18, 19, 22, 0.10);
+  border-radius: 999px;
+}
+
+.custom-card-face-divider {
+  width: 100%;
+  max-width: 380px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(18, 19, 22, 0.14) 20%, rgba(18, 19, 22, 0.14) 80%, transparent 100%);
+  margin: 4px 0;
 }
