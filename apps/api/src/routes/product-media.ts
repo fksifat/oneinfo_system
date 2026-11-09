@@ -3,7 +3,7 @@ import { orderProfileClaimable } from "../domain/order-activation.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
@@ -11,8 +11,8 @@ import { put } from "@vercel/blob";
 import { requireCustomer, readClaimToken } from "../domain/customer-auth.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import { db } from "../db/client.js";
-import { cardActivationSecrets, cards, storeOrders } from "../db/schema.js";
-import { and, eq } from "drizzle-orm";
+import { cardActivationSecrets, cards, storeOrders, companyEmployees } from "../db/schema.js";
+import { and, eq, gt } from "drizzle-orm";
 import { invoiceActivationTarget } from "../domain/order-invoice.js";
 
 const directory = resolve(process.env.PRODUCT_MEDIA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.product-media"));
@@ -96,11 +96,18 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     }
   });
 
-  for (const kind of ["upload", "profile", "profile-claim"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: kind === "upload" ? maxMediaBytes : 2 * 1024 * 1024 }, async (request, reply) => {
+  for (const kind of ["upload", "profile", "profile-claim", "profile-employee"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: kind === "upload" ? maxMediaBytes : 2 * 1024 * 1024 }, async (request, reply) => {
     if (kind === "upload") await requireOperator(request, ["SUPER_ADMIN"]);
     else {
       let subject: string;
-      if (kind === "profile-claim") {
+      if (kind === "profile-employee") {
+        const rawToken = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
+        const digest = createHash("sha256").update(rawToken).digest("hex");
+        const [employee] = await db.select({ profileId: companyEmployees.profileId }).from(companyEmployees)
+          .where(and(eq(companyEmployees.editTokenHash, digest), gt(companyEmployees.editTokenExpiresAt, new Date()), eq(companyEmployees.active, true))).limit(1);
+        if (!employee) return reply.code(401).send({ message: "Employee edit link invalid or expired." });
+        subject = `employee:${employee.profileId}`;
+      } else if (kind === "profile-claim") {
         const claim = await readClaimToken(request.headers.authorization?.replace(/^Bearer /, "") ?? "");
         if (claim.orderProfileId) {
           await db.transaction(async tx => { await lockPrintedStock(tx); await orderProfileClaimable(tx, claim.cardId, claim.orderProfileId!); });
