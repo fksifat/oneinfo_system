@@ -34,6 +34,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
   const selectedVariants = new Map();
   const selectedMedia = new Map();
   const selectedModels = new Map();
+  const productCustomizations = new Map();
   const quantities = new Map();
   let addingToCart = false;
   let catalogReady = false;
@@ -132,7 +133,9 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       button.addEventListener("click", () => {
         const itemElement = button.closest(".cart-item");
         const id = itemElement?.dataset.id;
-        cart = cart.filter((item) => item.id !== id || item.variantId !== itemElement.dataset.variantId);
+        const variantId = itemElement?.dataset.variantId;
+        const customKey = itemElement?.dataset.customKey || "";
+        cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && (item.customization ? JSON.stringify(item.customization) : "") === customKey));
         save(storageKey, cart);
         renderCart();
         toast("Removed from cart");
@@ -144,8 +147,9 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     items.innerHTML = cart.map(item => {
       const variant = products.find(p => p.id === item.id)?.variants.find(v => v.id === item.variantId);
       const cover = variant && variantCover(variant);
+      const customKey = item.customization ? JSON.stringify(item.customization) : "";
       return `
-          <div class="cart-item" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}">
+          <div class="cart-item" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}" data-custom-key="${escapeHtml(customKey)}">
             <div class="cart-item-art" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/></svg>
               ${cover ? `<img src="${escapeHtml(imageSource(cover))}" alt="" referrerpolicy="no-referrer">` : ""}
@@ -153,6 +157,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
             <div class="cart-item-info">
               <strong>${escapeHtml(item.name)}</strong>
               <span>${escapeHtml(item.variantName)}</span>
+              ${item.customization ? `<span class="cart-custom-badge">✦ Custom: ${escapeHtml(item.customization.name)}${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""} (${escapeHtml(item.customization.position.replace("-", " "))})</span>` : ""}
               <span>Qty ${item.quantity}</span>
             </div>
             <div class="cart-item-actions">
@@ -242,7 +247,22 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       const percent = discountPercent(v);
       const sale = v.salePriceMinor !== null;
       const quantity = quantities.get(p.id) ?? 1;
-      const illustration = `<div class="mini-product-card ${v.appearance}-card" style="background:${escapeHtml(v.colorHex)}"><img class="mini-product-logo" src="${logoUrl}" alt="" /><strong>${escapeHtml(p.name)}</strong></div>`;
+      const custom = productCustomizations.get(p.id) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+      const isCustomizable = detail && p.customizable;
+      const illustration = `<div class="mini-product-card ${v.appearance}-card ${isCustomizable ? "customizable-card" : ""}" style="background:${escapeHtml(v.colorHex)}">
+        <div class="card-header-row">
+          <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
+          <span class="card-nfc-wave" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8.5 16.5a5 5 0 0 1 0-7"/><path d="M12 19a8.5 8.5 0 0 1 0-14"/><path d="M15.5 21.5a12 12 0 0 1 0-19"/></svg>
+          </span>
+        </div>
+        ${isCustomizable ? `
+          <div class="card-custom-text pos-${escapeHtml(custom.position)} font-${escapeHtml(custom.font)}">
+            <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}">${escapeHtml(custom.name || "Your Name")}</strong>
+            <span class="card-custom-title ${!custom.title ? "is-placeholder" : ""}">${escapeHtml(custom.title || "Your Title / Role")}</span>
+          </div>
+        ` : `<strong>${escapeHtml(p.name)}</strong>`}
+      </div>`;
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}<div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
           <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
@@ -264,6 +284,44 @@ import logoUrl from "./assets/oneinfo-logo.svg";
         ${detail ? `</div><div class="product-details-copy">` : ""}
         <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((v.priceMinor - variantPrice(v)) / 100)}</span>` : ''}</div></div>
         <div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>
+        ${detail && p.customizable ? `
+        <section class="card-customizer-studio" data-product-id="${escapeHtml(p.id)}" aria-label="Card personalization">
+          <div class="customizer-header">
+            <div>
+              <span class="customizer-kicker">✦ BESPOKE CARD STUDIO</span>
+              <h3>Personalise your card</h3>
+            </div>
+            <span class="customizer-badge-free">Included free</span>
+          </div>
+          <p class="customizer-desc">Your custom name and title will be laser-engraved onto the card.</p>
+          <div class="customizer-form">
+            <div class="custom-field">
+              <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span><small class="char-count" id="name-count-${escapeHtml(p.id)}">${(custom.name || "").length}/50</small></label>
+              <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="50" placeholder="e.g. Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
+            </div>
+            <div class="custom-field">
+              <label for="custom-title-${escapeHtml(p.id)}"><span>Title or Subline <small>(optional)</small></span><small class="char-count" id="title-count-${escapeHtml(p.id)}">${(custom.title || "").length}/60</small></label>
+              <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="60" placeholder="e.g. Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
+            </div>
+            <div class="custom-field">
+              <label>Name Placement</label>
+              <div class="customizer-pills" role="radiogroup" aria-label="Name placement">
+                <button type="button" class="customizer-pill ${custom.position === 'bottom-left' ? 'is-selected' : ''}" data-custom-set="position" data-value="bottom-left" aria-checked="${custom.position === 'bottom-left'}" role="radio"><span class="pill-dot"></span> Bottom Left</button>
+                <button type="button" class="customizer-pill ${custom.position === 'bottom-center' ? 'is-selected' : ''}" data-custom-set="position" data-value="bottom-center" aria-checked="${custom.position === 'bottom-center'}" role="radio"><span class="pill-dot"></span> Bottom Center</button>
+                <button type="button" class="customizer-pill ${custom.position === 'center' ? 'is-selected' : ''}" data-custom-set="position" data-value="center" aria-checked="${custom.position === 'center'}" role="radio"><span class="pill-dot"></span> Center</button>
+                <button type="button" class="customizer-pill ${custom.position === 'bottom-right' ? 'is-selected' : ''}" data-custom-set="position" data-value="bottom-right" aria-checked="${custom.position === 'bottom-right'}" role="radio"><span class="pill-dot"></span> Bottom Right</button>
+              </div>
+            </div>
+            <div class="custom-field">
+              <label>Typography Style</label>
+              <div class="customizer-pills" role="radiogroup" aria-label="Typography style">
+                <button type="button" class="customizer-pill ${custom.font === 'sans' ? 'is-selected' : ''}" data-custom-set="font" data-value="sans" aria-checked="${custom.font === 'sans'}" role="radio"><span class="font-sample" style="font-family: inherit; font-weight: 700;">Aa</span> Modern Sans</button>
+                <button type="button" class="customizer-pill ${custom.font === 'serif' ? 'is-selected' : ''}" data-custom-set="font" data-value="serif" aria-checked="${custom.font === 'serif'}" role="radio"><span class="font-sample" style="font-family: Georgia, serif; font-style: italic; font-weight: 700;">Aa</span> Luxury Serif</button>
+                <button type="button" class="customizer-pill ${custom.font === 'mono' ? 'is-selected' : ''}" data-custom-set="font" data-value="mono" aria-checked="${custom.font === 'mono'}" role="radio"><span class="font-sample" style="font-family: monospace; font-weight: 700;">Aa</span> Minimal Mono</button>
+              </div>
+            </div>
+          </div>
+        </section>` : ""}
         ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(variantPrice(v) * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
         <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
@@ -542,6 +600,33 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       selectedMedia.set(variantId, Number(mediaButton.dataset.media));
       renderRoute(); return;
     }
+    const pill = event.target.closest("[data-custom-set]");
+    if (pill) {
+      const studio = pill.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const prop = pill.dataset.customSet;
+      const val = pill.dataset.value;
+      const current = productCustomizations.get(productId) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+      current[prop] = val;
+      productCustomizations.set(productId, current);
+
+      pill.closest(".customizer-pills")?.querySelectorAll(".customizer-pill").forEach(p => {
+        const isMatch = p === pill;
+        p.classList.toggle("is-selected", isMatch);
+        p.setAttribute("aria-checked", String(isMatch));
+      });
+
+      const textEl = $("#product-detail .card-custom-text");
+      if (textEl) {
+        if (prop === "position") {
+          textEl.className = textEl.className.replace(/\bpos-\S+/g, "").trim() + ` pos-${val}`;
+        } else if (prop === "font") {
+          textEl.className = textEl.className.replace(/\bfont-\S+/g, "").trim() + ` font-${val}`;
+        }
+      }
+      return;
+    }
     const swatch = event.target.closest(".colour-swatch");
     if (swatch && catalogReady) {
       const id = swatch.closest(".product").dataset.id;
@@ -568,14 +653,64 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       const variant = product?.variants.find(v => v.id === variantId);
       if (!variant?.available) { toast("This colour is no longer available."); return; }
       if (!before || variantPrice(before) !== variantPrice(variant)) { toast("The price changed. Please review it before adding to cart."); return; }
-      const nextCart = addCartVariant(cart, product, variant, quantity);
+
+      let customization = null;
+      if (product.customizable) {
+        const draft = productCustomizations.get(productId) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+        if (!draft.name || !draft.name.trim()) {
+          toast("Please enter your cardholder name to personalize your card.");
+          $(`#custom-name-${productId}`)?.focus();
+          addingToCart = false;
+          button.disabled = false;
+          button.removeAttribute("aria-busy");
+          button.textContent = "Add to cart";
+          return;
+        }
+        customization = {
+          name: draft.name.trim(),
+          title: (draft.title || "").trim(),
+          position: draft.position || "bottom-left",
+          font: draft.font || "sans",
+        };
+      }
+
+      const nextCart = addCartVariant(cart, product, variant, quantity, customization);
       save(storageKey, nextCart); cart = nextCart; renderCart();
-      toast(`${quantity} x ${product.name} · ${variant.name} added to cart`);
+      toast(`${quantity} x ${product.name} · ${variant.name}${customization ? ` (${customization.name})` : ""} added to cart`);
     } catch (error) { toast(error instanceof RangeError ? error.message : "Could not save the cart. Please try again."); }
     finally { addingToCart = false; renderRoute(); }
   }
   $(".product-grid").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("click", event => void handleProductClick(event));
+  $("#product-detail").addEventListener("input", event => {
+    const input = event.target.closest("[data-custom-input]");
+    if (!input) return;
+    const studio = input.closest(".card-customizer-studio");
+    const productId = studio?.dataset.productId;
+    if (!productId) return;
+    const field = input.dataset.customInput;
+    const current = productCustomizations.get(productId) ?? { name: "", title: "", position: "bottom-left", font: "sans" };
+    current[field] = input.value;
+    productCustomizations.set(productId, current);
+
+    if (field === "name") {
+      const nameEl = $("#product-detail .card-custom-name");
+      const countEl = $(`#name-count-${productId}`);
+      if (nameEl) {
+        nameEl.textContent = input.value.trim() || "Your Name";
+        nameEl.classList.toggle("is-placeholder", !input.value.trim());
+      }
+      if (countEl) countEl.textContent = `${input.value.length}/50`;
+    } else if (field === "title") {
+      const titleEl = $("#product-detail .card-custom-title");
+      const countEl = $(`#title-count-${productId}`);
+      if (titleEl) {
+        titleEl.textContent = input.value.trim() || "Your Title / Role";
+        titleEl.classList.toggle("is-placeholder", !input.value.trim());
+      }
+      if (countEl) countEl.textContent = `${input.value.length}/60`;
+    }
+  });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) void loadProducts(); });
   window.setInterval(() => { if (!document.hidden && !$(".modal.open")) void loadProducts(); }, 30000);
 
@@ -790,6 +925,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
   function checkoutItems(items) {
     return items.map(item => ({
       productId: item.id, variantId: item.variantId, quantity: item.quantity, unitPriceMinor: item.priceMinor,
+      ...(item.customization ? { customization: item.customization } : {}),
     }));
   }
 

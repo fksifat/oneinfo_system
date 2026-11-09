@@ -4,6 +4,7 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 import { initializeNfcDeck } from "../sites/storefront/nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "../sites/storefront/hero-3d.mjs";
+import { addCartVariant, reconcileCartItems } from "../sites/storefront/catalog.js";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
 
@@ -143,4 +144,35 @@ test("storefront copy omits chip specifications and production details", () => {
     const text = readFileSync(new URL(`../sites/storefront/${name}`, import.meta.url), "utf8");
     assert.doesNotMatch(text, /NTAG\d+|13\.56|MHz|contactless chip|optical QR|Hardware verified|Identity allocated|Workstation prep|Free lifetime/i);
   }
+});
+
+test("customized card variations are stored, differentiated, and reconciled in cart", () => {
+  const product = { id: "p1", name: "Oneinfo Signature", customizable: true };
+  const variant = { id: "v1", name: "Soft-Touch Black", colorHex: "#0a201f", available: true, priceMinor: 179000, salePriceMinor: null };
+  const custom1 = { name: "Avery Morgan", title: "Managing Director", position: "bottom-left", font: "sans" };
+  const custom2 = { name: "Farhan Karim", title: "Design Lead", position: "bottom-center", font: "serif" };
+
+  let cart = [];
+  cart = addCartVariant(cart, product, variant, 1, custom1);
+  assert.equal(cart.length, 1);
+  assert.deepEqual(cart[0].customization, custom1);
+
+  // Adding same product and variant with a DIFFERENT customization adds a separate cart item
+  cart = addCartVariant(cart, product, variant, 2, custom2);
+  assert.equal(cart.length, 2);
+  assert.equal(cart[0].quantity, 1);
+  assert.equal(cart[1].quantity, 2);
+  assert.deepEqual(cart[1].customization, custom2);
+
+  // Adding with the same customization increments existing item quantity
+  cart = addCartVariant(cart, product, variant, 1, custom1);
+  assert.equal(cart.length, 2);
+  assert.equal(cart[0].quantity, 2);
+
+  // Reconciling cart maintains customization metadata
+  const catalog = [{ ...product, variants: [variant] }];
+  const reconciled = reconcileCartItems(cart, catalog);
+  assert.equal(reconciled.length, 2);
+  assert.deepEqual(reconciled[0].customization, custom1);
+  assert.deepEqual(reconciled[1].customization, custom2);
 });

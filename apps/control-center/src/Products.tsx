@@ -47,7 +47,7 @@ export function Products({ token }: { token: string }) {
   function edit(product?: Product) {
     setSection("details");
     const variants = product ? product.variants.map(({priceMinor, salePriceMinor, ...v}) => ({...v, regular: String(priceMinor / 100), sale: salePriceMinor === null ? "" : String(salePriceMinor / 100), backImageUrl: v.backImageUrl ?? "", showAllColourMedia:true, defaultMediaIndex:v.defaultMediaIndex ?? 0, media:productMedia(v).map(m=>({...m,id: m.id.startsWith("legacy-") ? crypto.randomUUID() : m.id}))})) : [newVariant()];
-    setEditing(product ? {...product, warranty:product.warrantyIsDemo ? "" : product.warranty ?? "", warrantyIsDemo:false, variants} : {name:"", slug:"", subtitle:"", description:"", warranty:"", warrantyIsDemo:false, features:[], status:"DRAFT", featured:false, badge:"", sortOrder:0, variants});
+    setEditing(product ? {...product, customizable: product.customizable ?? false, warranty:product.warrantyIsDemo ? "" : product.warranty ?? "", warrantyIsDemo:false, variants} : {name:"", slug:"", subtitle:"", description:"", customizable:false, warranty:"", warrantyIsDemo:false, features:[], status:"DRAFT", featured:false, badge:"", sortOrder:0, variants});
     setActiveVariant(variants[0]!.id); setFeatures(product?.features.join("\n") ?? ""); setError(""); setNotice("");
   }
   function changeVariant(id: string, changes: Partial<VariantDraft>) {
@@ -133,6 +133,7 @@ export function Products({ token }: { token: string }) {
             <div className="product-admin-card-body">
               <div className="catalog-card-top">
                 <span className={`pill ${p.status === "PUBLISHED" ? "success" : ""}`}>{p.status.toLowerCase()}</span>
+                {p.customizable && <span className="pill info">✦ Customizable</span>}
                 {p.featured && <span className="catalog-highlight">★ Homepage highlight</span>}
               </div>
 
@@ -188,6 +189,7 @@ export function Products({ token }: { token: string }) {
             <label className="full">Subtitle<input maxLength={100} value={editing.subtitle} onChange={e => setEditing({...editing,subtitle:e.target.value})} /></label>
             <label className="full">Description<textarea rows={2} maxLength={1000} value={editing.description} onChange={e => setEditing({...editing,description:e.target.value})} /></label>
             <label className="full">Features<textarea rows={3} placeholder="One feature per line" value={features} onChange={e => setFeatures(e.target.value)} /><small>One per line, up to 12.</small></label>
+            <label className="catalog-check full"><input type="checkbox" checked={editing.customizable} onChange={e => setEditing({...editing,customizable:e.target.checked})} />Allow cardholder name & text customization on storefront</label>
           </div></section>
           <section className="catalog-section" hidden={section !== "warranty"}><h3>Warranty</h3><div className="catalog-form-grid">
             <label className="full">Warranty terms<textarea rows={5} maxLength={2000} placeholder="Duration, what is covered, exclusions, and how to claim…" value={editing.warranty} onChange={e=>setEditing({...editing,warranty:e.target.value})} /><small>Shown in the product’s Warranty section. Leave empty to hide it.</small></label>

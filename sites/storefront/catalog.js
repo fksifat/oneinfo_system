@@ -1,11 +1,21 @@
 import { variantPrice } from '@oneinfo/contracts';
 
-export function addCartVariant(cart, product, variant, quantity) {
+export function addCartVariant(cart, product, variant, quantity, customization = null) {
   if (!variant.available || !Number.isInteger(quantity) || quantity < 1 || quantity > 99)
     throw new RangeError('Choose an available colour and a quantity from 1 to 99.');
-  const existing = cart.find(item => item.id === product.id && item.variantId === variant.id);
+  const customKey = customization ? JSON.stringify(customization) : '';
+  const existing = cart.find(item => item.id === product.id && item.variantId === variant.id && (item.customization ? JSON.stringify(item.customization) : '') === customKey);
   if ((existing?.quantity ?? 0) + quantity > 99) throw new RangeError('You can add up to 99 cards of each colour.');
-  const item = { id:product.id, variantId:variant.id, name:product.name, variantName:variant.name, colorHex:variant.colorHex, priceMinor:variantPrice(variant), quantity:(existing?.quantity ?? 0) + quantity };
+  const item = {
+    id: product.id,
+    variantId: variant.id,
+    name: product.name,
+    variantName: variant.name,
+    colorHex: variant.colorHex,
+    priceMinor: variantPrice(variant),
+    quantity: (existing?.quantity ?? 0) + quantity,
+    ...(customization ? { customization } : {})
+  };
   return existing ? cart.map(previous => previous === existing ? item : previous) : [...cart, item];
 }
 
@@ -18,9 +28,19 @@ export function reconcileCartItems(cart, products) {
     // Legacy carts predate colour selection; new carts never switch a missing colour.
     const variant = item.variantId ? product.variants.find(v => v.id === item.variantId) : product.variants[0];
     if (!variant?.available) continue;
-    const key = `${product.id}:${variant.id}`;
+    const customKey = item.customization ? JSON.stringify(item.customization) : '';
+    const key = `${product.id}:${variant.id}:${customKey}`;
     const quantity = Math.min(99, (merged.get(key)?.quantity ?? 0) + item.quantity);
-    merged.set(key, { id: product.id, variantId: variant.id, name: product.name, variantName: variant.name, colorHex: variant.colorHex, priceMinor: variantPrice(variant), quantity });
+    merged.set(key, {
+      id: product.id,
+      variantId: variant.id,
+      name: product.name,
+      variantName: variant.name,
+      colorHex: variant.colorHex,
+      priceMinor: variantPrice(variant),
+      quantity,
+      ...(item.customization ? { customization: item.customization } : {})
+    });
   }
   return [...merged.values()];
 }
