@@ -142,7 +142,6 @@
 .deck-card img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.12, 1.3); }
 .deck-card-back { left: 1%; top: 19%; transform: rotate(-18deg); }
 .deck-card-front { left: 3%; top: 32%; transform: rotate(-10deg); z-index: 1; }
-.deck-card-link { position: absolute; left: 0; right: 0; bottom: 15%; color: #f7f1e1; text-align: center; font-size: .65rem; opacity: 0; transition: opacity var(--dur-normal) var(--ease-standard); }
 .deck-phone { position: absolute; width: 226px; min-height: 443px; right: 2%; top: 3%; z-index: 2; display: flex; flex-direction: column; align-items: center; background: #fff; padding: 42px 18px 23px; border: 6px solid #181a20; border-radius: 37px; box-shadow: 0 32px 50px rgba(18, 19, 22, 0.14); transform: rotate(4deg); }
 .deck-phone-island { position: absolute; width: 66px; height: 17px; top: 9px; border-radius: 12px; background: #181a20; }
 .deck-phone-domain { font-size: .56rem; color: var(--muted); margin-bottom: 21px; }
@@ -165,10 +164,6 @@
 .deck-connection small { font-size: .6rem; color: var(--muted); margin-top: 3px; }
 .nfc-deck[data-mode=scan] .deck-card-front { transform: translateY(-16px) rotate(4deg); }
 .nfc-deck[data-mode=scan] .deck-card-front img { content: url('/assets/cards-final/black-back.webp'); }
-.nfc-deck[data-mode=link] .deck-card-front { transform: translate(-14px, -10px) rotate(-17deg); }
-.nfc-deck[data-mode=link] .deck-card-front img { opacity: .3; }
-.nfc-deck[data-mode=link] .deck-card-front { background: var(--ink); }
-.nfc-deck[data-mode=link] .deck-card-link { opacity: 1; }
 .setup-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 42px; }
 .setup-steps article { border-top: 1px solid var(--line); padding-top: 24px; }
 .setup-number { display: block; color: var(--accent); font-size: .83rem; margin-bottom: 26px; }
@@ -646,7 +641,7 @@
   .team-identity img { width: 88px; }
   .team-identity strong { font-size: .95rem; }
 }
-@media (prefers-reduced-motion: reduce) { .deck-card, .deck-card-link { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .deck-card { transition: none; } }
 @media (prefers-reduced-transparency: reduce) {
   .site-header, .mobile-menu, .cart-trigger, .menu-trigger { background: var(--paper); }
   .site-header::before, .site-header::after, .mobile-menu::before, .mobile-menu::after { display: none; }
