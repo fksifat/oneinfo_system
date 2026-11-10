@@ -509,3 +509,24 @@ test("customizable product in catalog grid shows Limitless color, infinity optio
   const iconsSrc = readFileSync("sites/storefront/public/assets/icons.svg", "utf8");
   assert.match(iconsSrc, /id="infinity"/);
 });
+
+test("admin card preview and storefront accurately reflect exact design, custom element positions, and media URLs", () => {
+  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
+  assert.match(adminSrc, /hasLogoPos = epLogo\?\.x != null && epLogo\?\.y != null/);
+  assert.match(adminSrc, /hasSignPos = epSign\?\.x != null && epSign\?\.y != null/);
+  assert.match(adminSrc, /hasNamePos = epName\?\.x != null && epName\?\.y != null/);
+  assert.match(adminSrc, /hasTitlePos = epTitle\?\.x != null && epTitle\?\.y != null/);
+  assert.match(adminSrc, /hasQrPos = epQr\?\.x != null && epQr\?\.y != null/);
+  assert.match(adminSrc, /productMediaUrl\(custom\.logoUrl\)/);
+
+  const ordersSrc = readFileSync("apps/control-center/src/Orders.tsx", "utf8");
+  assert.match(ordersSrc, /productMediaUrl\(item\.customization\.logoUrl\)/);
+
+  const apiSrc = readFileSync("apps/control-center/src/api.ts", "utf8");
+  assert.match(apiSrc, /export function productMediaUrl/);
+
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.doesNotMatch(appSrc, /\{ x: 50, y: 50/);
+  assert.match(appSrc, /logoPos = \(ep\.logo && ep\.logo\.x != null/);
+  assert.match(appSrc, /namePos = \(ep\.name && ep\.name\.x != null/);
+});

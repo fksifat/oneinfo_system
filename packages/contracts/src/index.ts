@@ -410,7 +410,7 @@ export const ProductCustomizationSchema = z.object({
   logoStyle: z.enum(["original", "monochrome"]).default("original").optional(),
   companyName: z.string().trim().max(60).optional(),
   extraLines: z.array(z.string().trim().max(35)).max(5).default([]).optional(),
-  textSize: z.number().int().min(8).max(26).default(14).optional(),
+  textSize: z.number().int().min(6).max(36).default(14).optional(),
   logoSize: z.number().int().min(30).max(250).default(100).optional(),
   iconSize: z.number().int().min(30).max(250).default(100).optional(),
   qrSize: z.number().int().min(30).max(250).default(100).optional(),

@@ -2,7 +2,7 @@ import { OrderPrint } from "./OrderPrint.js";
 import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
-import { api } from "./api.js";
+import { api, productMediaUrl } from "./api.js";
 import { OrderTrackingPipeline } from "./OrderTrackingPipeline.js";
 import { downloadOrderEps } from "./eps-generator.js";
 import { AdminCardPreview } from "./AdminCardPreview.js";
@@ -492,12 +492,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                               <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
                                 <span style={{ fontSize: "0.78rem", color: "var(--text-secondary, #a1a1aa)" }}>Custom Logo:</span>
                                 <img
-                                  src={item.customization.logoUrl}
+                                  src={productMediaUrl(item.customization.logoUrl)}
                                   alt="Customer logo"
                                   style={{ maxHeight: "24px", maxWidth: "64px", objectFit: "contain", background: "rgba(255,255,255,0.08)", borderRadius: "4px", padding: "2px" }}
                                 />
                                 <a
-                                  href={item.customization.logoUrl}
+                                  href={productMediaUrl(item.customization.logoUrl)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{ fontSize: "0.76rem", color: "var(--accent, #c9933e)", textDecoration: "underline" }}
