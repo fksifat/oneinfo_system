@@ -331,3 +331,62 @@ test("customization supports resizing logo, icon, qr and adding divider lines (h
   assert.equal(cart[0].customization.qrSize, 110);
   assert.equal(cart[0].customization.dividerLines.length, 2);
 });
+
+test("customization supports With Oneinfo Logo vs Without Oneinfo Logo with admin pricing control", () => {
+  const withLogoCustom = {
+    name: "Nazmul Hossain",
+    brandingMode: "with-logo",
+    hasOneinfoLogo: true,
+  };
+  const withoutLogoCustom = {
+    name: "Nazmul Hossain",
+    brandingMode: "without-logo",
+    hasOneinfoLogo: false,
+  };
+
+  const parsedWith = ProductCustomizationSchema.parse(withLogoCustom);
+  assert.equal(parsedWith.brandingMode, "with-logo");
+  assert.equal(parsedWith.hasOneinfoLogo, true);
+
+  const parsedWithout = ProductCustomizationSchema.parse(withoutLogoCustom);
+  assert.equal(parsedWithout.brandingMode, "without-logo");
+  assert.equal(parsedWithout.hasOneinfoLogo, false);
+
+  const product = { id: "p1", name: "Oneinfo Card", customizable: true };
+  const variant = {
+    id: "v1",
+    name: "Obsidian",
+    colorHex: "#0a0b0d",
+    available: true,
+    priceMinor: 149900,
+    salePriceMinor: null,
+    withoutLogoPriceMinor: 199900,
+    withoutLogoSalePriceMinor: 189900,
+  };
+
+  // With logo: regular/sale price
+  const cartWith = addCartVariant([], product, variant, 1, parsedWith);
+  assert.equal(cartWith[0].priceMinor, 149900);
+
+  // Without logo: admin controlled withoutLogoSalePriceMinor
+  const cartWithout = addCartVariant([], product, variant, 1, parsedWithout);
+  assert.equal(cartWithout[0].priceMinor, 189900);
+
+  // Reconcile cart keeps branding pricing
+  const reconciled = reconcileCartItems([...cartWith, ...cartWithout], [{ ...product, variants: [variant] }]);
+  assert.equal(reconciled.length, 2);
+  assert.equal(reconciled[0].priceMinor, 149900);
+  assert.equal(reconciled[1].priceMinor, 189900);
+
+  // Storefront markup & brand labeling contract:
+  // 1. Front card displays "YOUR LOGO" text placeholder when customer hasn't uploaded logo
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /card-logo-placeholder.*YOUR LOGO/s);
+  // 2. Back footer brand labeling is hidden when hasOneinfoLogo is false
+  assert.match(appSrc, /card-back-footer.*custom\.hasOneinfoLogo !== false/s);
+
+  // 3. EPS print generator contract
+  const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
+  assert.match(epsSrc, /\(YOUR LOGO\) show/);
+  assert.match(epsSrc, /custom\.hasOneinfoLogo !== false[\s\S]*\(ONEINFO\) show[\s\S]*\(By AriseStudio\) show/);
+});

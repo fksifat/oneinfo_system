@@ -1,4 +1,4 @@
-import { variantPrice } from '@oneinfo/contracts';
+import { variantPrice, variantPriceForBranding } from '@oneinfo/contracts';
 
 export function addCartVariant(cart, product, variant, quantity, customization = null) {
   if (!variant.available || !Number.isInteger(quantity) || quantity < 1 || quantity > 99)
@@ -6,13 +6,14 @@ export function addCartVariant(cart, product, variant, quantity, customization =
   const customKey = customization ? JSON.stringify(customization) : '';
   const existing = cart.find(item => item.id === product.id && item.variantId === variant.id && (item.customization ? JSON.stringify(item.customization) : '') === customKey);
   if ((existing?.quantity ?? 0) + quantity > 99) throw new RangeError('You can add up to 99 cards of each colour.');
+  const hasLogo = customization ? (customization.hasOneinfoLogo !== false && customization.brandingMode !== "without-logo") : true;
   const item = {
     id: product.id,
     variantId: variant.id,
     name: product.name,
     variantName: variant.name,
     colorHex: variant.colorHex,
-    priceMinor: variantPrice(variant),
+    priceMinor: variantPriceForBranding(variant, hasLogo),
     quantity: (existing?.quantity ?? 0) + quantity,
     ...(customization ? { customization } : {})
   };
@@ -31,13 +32,14 @@ export function reconcileCartItems(cart, products) {
     const customKey = item.customization ? JSON.stringify(item.customization) : '';
     const key = `${product.id}:${variant.id}:${customKey}`;
     const quantity = Math.min(99, (merged.get(key)?.quantity ?? 0) + item.quantity);
+    const hasLogo = item.customization ? (item.customization.hasOneinfoLogo !== false && item.customization.brandingMode !== "without-logo") : true;
     merged.set(key, {
       id: product.id,
       variantId: variant.id,
       name: product.name,
       variantName: variant.name,
       colorHex: variant.colorHex,
-      priceMinor: variantPrice(variant),
+      priceMinor: variantPriceForBranding(variant, hasLogo),
       quantity,
       ...(item.customization ? { customization: item.customization } : {})
     });
@@ -112,6 +114,8 @@ export function defaultCustomization(presetId = "01") {
     position: preset.layout,
     backQrStyle: "minimal",
     backSubtitle: "",
+    brandingMode: "with-logo",
+    hasOneinfoLogo: true,
     logoUrl: "",
     logoPreviewUrl: "",
     logoFileName: "",

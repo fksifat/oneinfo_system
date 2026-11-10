@@ -327,6 +327,35 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
           >
             Motif: {motif} · Foil: {accentColor}
           </span>
+          {custom.hasOneinfoLogo === false ? (
+            <span
+              style={{
+                fontSize: "0.72rem",
+                padding: "2px 8px",
+                borderRadius: "4px",
+                background: "#7c2d12",
+                color: "#fed7aa",
+                fontWeight: 700,
+                border: "1px solid #ea580c",
+              }}
+            >
+              WITHOUT ONEINFO LOGO
+            </span>
+          ) : (
+            <span
+              style={{
+                fontSize: "0.72rem",
+                padding: "2px 8px",
+                borderRadius: "4px",
+                background: "#1e293b",
+                color: "#93c5fd",
+                fontWeight: 600,
+                border: "1px solid #3b82f6",
+              }}
+            >
+              WITH ONEINFO LOGO
+            </span>
+          )}
         </div>
 
         {/* View Toggle Buttons */}
@@ -484,7 +513,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                 />
               )}
 
-              {/* Logo Element */}
+              {/* Logo Element (Customer Logo or "YOUR LOGO" placeholder text) */}
               <div style={logoStyle}>
                 {custom.logoUrl ? (
                   <img
@@ -499,16 +528,21 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                     }}
                   />
                 ) : (
-                  <img
-                    src={oneinfoLogo}
-                    alt="Oneinfo logo"
+                  <span
                     style={{
-                      height: "18px",
-                      width: "auto",
-                      display: "block",
-                      filter: isLight ? "invert(1) brightness(0.2)" : "none",
+                      fontSize: `calc(0.88rem * ${logoScale})`,
+                      fontWeight: 800,
+                      letterSpacing: "0.12em",
+                      textTransform: "uppercase",
+                      color: accentColor,
+                      whiteSpace: "nowrap",
+                      userSelect: "none",
+                      display: "inline-block",
+                      lineHeight: 1.2,
                     }}
-                  />
+                  >
+                    YOUR LOGO
+                  </span>
                 )}
               </div>
 
@@ -679,41 +713,43 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                 )}
               </div>
 
-              {/* Back Footer: Oneinfo Logo & AriseStudio Branding */}
-              <div
-                style={{
-                  position: "absolute",
-                  bottom: "14px",
-                  left: "18px",
-                  right: "18px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  zIndex: 2,
-                }}
-              >
-                <img
-                  src={oneinfoLogo}
-                  alt="Oneinfo logo"
+              {/* Back Footer: Oneinfo Logo & AriseStudio Branding (Omitted in Without Logo edition) */}
+              {custom.hasOneinfoLogo !== false && (
+                <div
                   style={{
-                    height: "14px",
-                    width: "auto",
-                    display: "block",
-                    filter: isLight ? "invert(1) brightness(0.2)" : "none",
-                  }}
-                />
-                <span
-                  style={{
-                    fontSize: "0.58rem",
-                    fontWeight: 600,
-                    letterSpacing: "0.1em",
-                    color: isLight ? "rgba(18,19,22,0.7)" : "rgba(255,255,255,0.7)",
-                    textTransform: "uppercase",
+                    position: "absolute",
+                    bottom: "14px",
+                    left: "18px",
+                    right: "18px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    zIndex: 2,
                   }}
                 >
-                  By AriseStudio
-                </span>
-              </div>
+                  <img
+                    src={oneinfoLogo}
+                    alt="Oneinfo logo"
+                    style={{
+                      height: "14px",
+                      width: "auto",
+                      display: "block",
+                      filter: isLight ? "invert(1) brightness(0.2)" : "none",
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontSize: "0.58rem",
+                      fontWeight: 600,
+                      letterSpacing: "0.1em",
+                      color: isLight ? "rgba(18,19,22,0.7)" : "rgba(255,255,255,0.7)",
+                      textTransform: "uppercase",
+                    }}
+                  >
+                    By AriseStudio
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}

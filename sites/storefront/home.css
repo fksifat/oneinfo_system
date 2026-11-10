@@ -1142,6 +1142,24 @@
   filter: none !important;
 }
 
+/* Card Logo Placeholder (Shown when customer hasn't uploaded custom logo) */
+.mini-product-card .card-logo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--card-accent, #d8b26e);
+  white-space: nowrap;
+  user-select: none;
+  line-height: 1.2;
+  transition: color 0.15s ease;
+}
+.mini-product-card.is-light-surface .card-logo-placeholder {
+  color: #121316;
+}
+
 /* Fonts */
 .card-custom-text.font-sans {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -1213,8 +1231,8 @@
 .customizer-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 6px;
+  align-items: center;
+  margin-bottom: 16px;
 }
 .customizer-kicker {
   display: inline-block;
@@ -2037,4 +2055,142 @@
   background: var(--ink, #121316);
   color: #ffffff;
   border-color: var(--ink, #121316);
+}
+
+/* ======================================================== */
+/* Clean Studio: Branding Selector & Segmented Tabs         */
+/* ======================================================== */
+/* Branding Selection (Minimal & Clean) */
+.branding-selector {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+@media (max-width: 480px) {
+  .branding-selector {
+    grid-template-columns: 1fr;
+  }
+}
+.branding-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1.5px solid #dfd7ca;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+  box-sizing: border-box;
+}
+.branding-btn:hover {
+  border-color: #baa88c;
+  background: #fdfcf9;
+}
+.branding-btn.is-selected {
+  border-color: var(--accent, #9e7938);
+  background: #fdfaf3;
+  box-shadow: 0 3px 12px rgba(158, 121, 56, 0.12), inset 0 0 0 1px var(--accent, #9e7938);
+}
+.branding-btn-radio {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 2px solid #c2b9a8;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+.branding-btn.is-selected .branding-btn-radio {
+  border-color: var(--accent, #9e7938);
+  background: var(--accent, #9e7938);
+}
+.branding-btn.is-selected .branding-btn-radio::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+.branding-btn-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+.branding-btn-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink, #121316);
+  line-height: 1.3;
+}
+.branding-btn-price {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--ink, #121316);
+  line-height: 1.2;
+}
+.branding-btn-price del {
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--muted, #8c8577);
+  margin-right: 4px;
+}
+
+/* Studio Tabs Nav */
+.studio-tabs-nav {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: #f1ebd9;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.studio-tab-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted, #68645c);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+.studio-tab-btn svg {
+  flex-shrink: 0;
+}
+.studio-tab-btn:hover {
+  color: var(--ink, #121316);
+}
+.studio-tab-btn.is-active {
+  background: #ffffff;
+  color: var(--ink, #121316);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(18, 19, 22, 0.08);
+}
+.studio-tab-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.studio-tab-pane[hidden] {
+  display: none !important;
 }
