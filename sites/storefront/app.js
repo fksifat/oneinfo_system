@@ -158,7 +158,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
             <div class="cart-item-info">
               <strong>${escapeHtml(item.name)}</strong>
               <span>${escapeHtml(item.variantName)}</span>
-              ${item.customization ? `<span class="cart-custom-badge">✦ Custom: <strong>${escapeHtml(item.customization.name)}</strong>${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""}<small style="display:block; opacity:0.85; margin-top:2px; font-weight:500;">${escapeHtml(String(item.customization.layout || item.customization.position || "left").replace("-", " "))} · ${escapeHtml(item.customization.surfaceMotif || "facets")} · ${escapeHtml(item.customization.font || "sans")}<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.surfaceColor || '#0a0b0d')}; vertical-align:middle; margin:0 2px 0 4px; border:1px solid #777;"></span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.accentColor || '#d8b26e')}; vertical-align:middle; border:1px solid #777;"></span></small></span>` : ""}
+              ${item.customization ? `<span class="cart-custom-badge">Custom: <strong>${escapeHtml(item.customization.name)}</strong>${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""}${item.customization.extraLines && item.customization.extraLines.length ? ` · ${item.customization.extraLines.map(l => escapeHtml(l)).join(" · ")}` : ""}${item.customization.textSize && item.customization.textSize !== 14 ? ` (${item.customization.textSize}pt)` : ""}${item.customization.logoUrl ? ` · <span class="cart-custom-logo-tag">Logo attached</span>` : ""}<small style="display:block; opacity:0.85; margin-top:2px; font-weight:500;">${escapeHtml(String(item.customization.layout || item.customization.position || "left").replace("-", " "))} · ${escapeHtml(item.customization.surfaceMotif || "facets")} · ${escapeHtml(item.customization.font || "sans")}${item.customization.companyName ? ` · ${escapeHtml(item.customization.companyName)}` : ""}<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.surfaceColor || '#0a0b0d')}; vertical-align:middle; margin:0 2px 0 4px; border:1px solid #777;"></span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.accentColor || '#d8b26e')}; vertical-align:middle; border:1px solid #777;"></span></small></span>` : ""}
               <span>Qty ${item.quantity}</span>
             </div>
             <div class="cart-item-actions">
@@ -257,28 +257,117 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const motifClass = isCustomizable ? `motif-${escapeHtml(custom.surfaceMotif || 'facets')}` : "";
       const luminanceClass = isLight ? "is-light-surface light-card" : "dark-card";
 
-      const frontIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${layoutClass} ${motifClass} ${luminanceClass} card-view-front" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="front">
+      const textScale = ((custom.textSize || 14) / 14).toFixed(3);
+      const nameFontSize = `${(1.125 * (custom.textSize || 14) / 14).toFixed(3)}rem`;
+      const subFontSize = `${(0.65 * (custom.textSize || 14) / 14).toFixed(3)}rem`;
+      const logoScale = ((custom.logoSize || 100) / 100).toFixed(2);
+      const iconScale = ((custom.iconSize || 100) / 100).toFixed(2);
+      const qrScale = ((custom.qrSize || 100) / 100).toFixed(2);
+
+      const ep = custom.elementPositions || {};
+      const activeExtras = (custom.extraLines || []).filter(l => l && l.trim());
+      const numExtras = activeExtras.length;
+
+      const logoStyle = ep.logo ? `left:${ep.logo.x}%; top:${ep.logo.y}%; --scale:${logoScale};` : `--scale:${logoScale};`;
+      const signStyle = ep.sign ? `left:${ep.sign.x}%; top:${ep.sign.y}%; --scale:${iconScale};` : `--scale:${iconScale};`;
+
+      const namePos = ep.name || custom.customPos;
+      let nameStyle = namePos ? `left:${namePos.x}%; top:${namePos.y}%;` : "";
+      if (!namePos) {
+        if (custom.layout === "reverse") {
+          nameStyle = "top:20px; bottom:auto;";
+        } else {
+          nameStyle = `bottom:${42 + numExtras * 16}px;`;
+        }
+      }
+
+      const titlePos = ep.title;
+      let titleStyle = titlePos ? `left:${titlePos.x}%; top:${titlePos.y}%;` : "";
+      if (!titlePos) {
+        if (custom.layout === "reverse") {
+          titleStyle = "top:44px; bottom:auto;";
+        } else {
+          titleStyle = `bottom:${22 + numExtras * 16}px;`;
+        }
+      }
+
+      const logoPosClass = ep.logo ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
+      const signPosClass = ep.sign ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
+      const namePosClass = namePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
+      const titlePosClass = titlePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
+
+      const frontIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${layoutClass} ${motifClass} ${luminanceClass} card-view-front" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="front" data-interactive-card="${escapeHtml(p.id)}">
         ${renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor)}
         ${custom.layout === "column" ? `<div class="card-side-column-bar" aria-hidden="true"></div>` : ""}
         ${custom.layout === "header" ? `<div class="card-header-banner" aria-hidden="true"></div>` : ""}
-        <div class="card-header-row">
-          <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
-          <span class="card-nfc-wave" aria-hidden="true" style="color:${escapeHtml(custom.accentColor)};">
+
+        <div class="card-drag-item card-element-logo ${logoPosClass}" style="${logoStyle}" data-drag-element="logo" data-product-id="${escapeHtml(p.id)}">
+          ${(custom.logoPreviewUrl || custom.logoUrl) ? `
+            <img class="mini-product-logo custom-user-logo" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Custom logo" />
+          ` : `
+            <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
+          `}
+        </div>
+
+        <div class="card-drag-item card-element-nfc ${signPosClass}" style="color:${escapeHtml(custom.accentColor)}; ${signStyle}" data-drag-element="sign" data-product-id="${escapeHtml(p.id)}">
+          <span class="card-nfc-wave" aria-hidden="true" style="color:inherit;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
           </span>
         </div>
-        <div class="card-custom-text pos-${escapeHtml(custom.layout || custom.position || 'left')} font-${escapeHtml(custom.font)}">
-          <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}">${escapeHtml(custom.name || "Your Name")}</strong>
-          <span class="card-custom-title ${!custom.title ? "is-placeholder" : ""}" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.title || "Your Title / Role")}</span>
+
+        <div class="card-drag-item card-element-name ${namePosClass} font-${escapeHtml(custom.font)}" style="${nameStyle}" data-drag-element="name" data-product-id="${escapeHtml(p.id)}">
+          <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}" style="font-size:${nameFontSize};">${escapeHtml(custom.name || "Your Name")}</strong>
         </div>
+
+        <div class="card-drag-item card-element-title ${titlePosClass} font-${escapeHtml(custom.font)}" style="${titleStyle}" data-drag-element="title" data-product-id="${escapeHtml(p.id)}">
+          <span class="card-custom-title ${!custom.title && numExtras === 0 ? "is-placeholder" : ""}" style="color:${escapeHtml(custom.accentColor)}; font-size:${subFontSize};">${escapeHtml(custom.title || (numExtras > 0 ? "" : "Your Title / Role"))}</span>
+        </div>
+
+        ${(custom.extraLines || []).map((line, idx) => {
+          if (!line || !line.trim()) return "";
+          const extraKey = `extra-${idx}`;
+          const extraPos = ep[extraKey];
+          const extraPosClass = extraPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')} pos-extra-${idx}`;
+          let extraStyle = extraPos ? `left:${extraPos.x}%; top:${extraPos.y}%;` : "";
+          if (!extraPos) {
+            if (custom.layout === "reverse") {
+              extraStyle = `top:${60 + idx * 16}px; bottom:auto;`;
+            } else {
+              extraStyle = `bottom:${22 + (numExtras - 1 - idx) * 16}px;`;
+            }
+          }
+          return `
+            <div class="card-drag-item card-element-extra ${extraPosClass} font-${escapeHtml(custom.font)}" style="${extraStyle}" data-drag-element="${extraKey}" data-extra-index="${idx}" data-product-id="${escapeHtml(p.id)}">
+              <span class="card-custom-extra-line" style="color:${escapeHtml(custom.accentColor)}; font-size:${subFontSize};">${escapeHtml(line.trim())}</span>
+            </div>
+          `;
+        }).join("")}
+
+        ${(custom.dividerLines || []).map((line, idx) => {
+          const dividerKey = `divider-${idx}`;
+          const dividerPos = ep[dividerKey];
+          const isVert = line.orientation === "vertical";
+          const len = line.length || (isVert ? 60 : 100);
+          const dividerStyle = dividerPos
+            ? `left:${dividerPos.x}%; top:${dividerPos.y}%; --divider-len:${len}px;`
+            : `left:50%; top:${50 + idx * 12}%; --divider-len:${len}px;`;
+          return `
+            <div class="card-drag-item card-element-divider divider-${escapeHtml(line.orientation || 'horizontal')} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom" style="${dividerStyle} color:${escapeHtml(custom.accentColor)};" data-drag-element="${dividerKey}" data-divider-index="${idx}" data-product-id="${escapeHtml(p.id)}"></div>
+          `;
+        }).join("")}
       </div>`;
 
-      const backIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${luminanceClass} card-view-back" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="back">
+      const backQrPos = ep["back-qr"];
+      const backQrStyle = backQrPos ? `left:${backQrPos.x}%; top:${backQrPos.y}%; --scale:${qrScale};` : `--scale:${qrScale};`;
+      const backQrClass = backQrPos ? "pos-custom" : "";
+
+      const backIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${luminanceClass} card-view-back" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="back" data-interactive-card="${escapeHtml(p.id)}">
         ${renderBackMotifSvg(custom.surfaceMotif, custom.accentColor)}
-        <div class="card-back-center-qr">
+        <div class="card-drag-item card-back-center-qr ${backQrClass}" style="${backQrStyle}" data-drag-element="back-qr" data-product-id="${escapeHtml(p.id)}">
           <div class="card-qr-wrap ${escapeHtml(custom.backQrStyle || 'minimal')}">
             ${renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal')}
           </div>
+          ${(custom.backSubtitle && custom.backSubtitle.trim()) ? `<span class="card-back-subtitle" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.backSubtitle.trim())}</span>` : ""}
         </div>
         <div class="card-back-footer">
           <img class="mini-product-logo card-back-oneinfo-logo" src="${logoUrl}" alt="Oneinfo logo" />
@@ -345,7 +434,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         <section class="card-customizer-studio" data-product-id="${escapeHtml(p.id)}" aria-label="Card personalization">
           <div class="customizer-header">
             <div>
-              <span class="customizer-kicker">✦ BESPOKE CARD STUDIO</span>
+              <span class="customizer-kicker">BESPOKE CARD STUDIO</span>
               <h3>Personalise your card</h3>
             </div>
             <span class="customizer-badge-free">Included free</span>
@@ -378,21 +467,150 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                 <span>2. Cardholder Details</span>
                 <small>Laser-engraved onto card</small>
               </div>
-              <div class="customizer-identity-grid">
+              <div class="custom-fields-stack">
                 <div class="custom-field">
-                  <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span><small class="char-count" id="name-count-${escapeHtml(p.id)}">${(custom.name || "").length}/50</small></label>
-                  <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="50" placeholder="e.g. Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
+                  <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span><small class="char-count" id="name-count-${escapeHtml(p.id)}">${(custom.name || "").length}/25</small></label>
+                  <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="25" placeholder="e.g. Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
                 </div>
                 <div class="custom-field">
-                  <label for="custom-title-${escapeHtml(p.id)}"><span>Title / Subline <small>(optional)</small></span><small class="char-count" id="title-count-${escapeHtml(p.id)}">${(custom.title || "").length}/60</small></label>
-                  <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="60" placeholder="e.g. Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
+                  <label for="custom-title-${escapeHtml(p.id)}"><span>Designation / Title <small>(optional)</small></span><small class="char-count" id="title-count-${escapeHtml(p.id)}">${(custom.title || "").length}/35</small></label>
+                  <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="35" placeholder="e.g. Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
+                </div>
+                ${(custom.extraLines || []).map((line, idx) => `
+                  <div class="custom-field extra-field-row">
+                    <label for="custom-extra-${escapeHtml(p.id)}-${idx}">
+                      <span>Line ${idx + 3}: Info <small>(optional)</small></span>
+                      <span style="display:flex;align-items:center;gap:8px;">
+                        <small class="char-count" id="extra-count-${escapeHtml(p.id)}-${idx}">${(line || "").length}/35</small>
+                        <button type="button" class="remove-line-btn" data-custom-action="remove-extra-line" data-line-index="${idx}">Remove</button>
+                      </span>
+                    </label>
+                    <input id="custom-extra-${escapeHtml(p.id)}-${idx}" type="text" maxlength="35" placeholder="${idx === 0 ? 'e.g. Acme Corporation' : 'e.g. Department or Note'}" value="${escapeHtml(line || "")}" data-custom-extra-line="${idx}" />
+                  </div>
+                `).join("")}
+                ${(!custom.extraLines || custom.extraLines.length < 4) ? `
+                  <button type="button" class="add-extra-field-btn" data-custom-action="add-extra-line">+ Add Line (Company, Dept, etc.)</button>
+                ` : ""}
+              </div>
+              <div class="text-size-control-wrap">
+                <div class="text-size-toolbar-row">
+                  <div class="toolbar-label-group">
+                    <strong>Text Size</strong>
+                    <span class="toolbar-hint">Scale text or drag anywhere on card</span>
+                  </div>
+                  <div class="font-size-stepper" role="group" aria-label="Text Size Stepper">
+                    <button type="button" class="size-step-btn" data-custom-text-size-step="-2" title="Smaller text (A-)" aria-label="Smaller text">A-</button>
+                    <span class="size-display-val" id="text-size-val-${escapeHtml(p.id)}">${custom.textSize || 14} pt</span>
+                    <button type="button" class="size-step-btn" data-custom-text-size-step="2" title="Larger text (A+)" aria-label="Larger text">A+</button>
+                  </div>
+                </div>
+                <div class="size-preset-pills" role="radiogroup" aria-label="Text size presets">
+                  <button type="button" class="size-pill ${(custom.textSize || 14) === 10 ? 'is-selected' : ''}" data-custom-text-size="10">Small (10 pt)</button>
+                  <button type="button" class="size-pill ${(custom.textSize || 14) === 14 ? 'is-selected' : ''}" data-custom-text-size="14">Regular (14 pt)</button>
+                  <button type="button" class="size-pill ${(custom.textSize || 14) === 18 ? 'is-selected' : ''}" data-custom-text-size="18">Large (18 pt)</button>
+                </div>
+              </div>
+
+              <div class="text-size-control-wrap" style="margin-top: 10px;">
+                <div class="text-size-toolbar-row">
+                  <div class="toolbar-label-group">
+                    <strong>NFC Icon Size</strong>
+                    <span class="toolbar-hint">Scale contactless icon or drag on card</span>
+                  </div>
+                  <div class="font-size-stepper" role="group" aria-label="NFC Icon Size Stepper">
+                    <button type="button" class="size-step-btn" data-custom-icon-size-step="-15" title="Smaller icon (-)" aria-label="Smaller icon">-</button>
+                    <span class="size-display-val" id="icon-size-val-${escapeHtml(p.id)}">${custom.iconSize || 100}%</span>
+                    <button type="button" class="size-step-btn" data-custom-icon-size-step="15" title="Larger icon (+)" aria-label="Larger icon">+</button>
+                  </div>
+                </div>
+                <div class="size-preset-pills" role="radiogroup" aria-label="NFC icon size presets">
+                  <button type="button" class="size-pill ${(custom.iconSize || 100) === 75 ? 'is-selected' : ''}" data-custom-icon-size="75">Small (75%)</button>
+                  <button type="button" class="size-pill ${(custom.iconSize || 100) === 100 ? 'is-selected' : ''}" data-custom-icon-size="100">Default (100%)</button>
+                  <button type="button" class="size-pill ${(custom.iconSize || 100) === 125 ? 'is-selected' : ''}" data-custom-icon-size="125">Large (125%)</button>
+                </div>
+              </div>
+
+              <div class="divider-manager-wrap">
+                <div class="toolbar-label-group">
+                  <strong>Divider Lines (HR & Vertical)</strong>
+                  <span class="toolbar-hint">Add divider lines, change length/style, or drag anywhere on card</span>
+                </div>
+                <div class="divider-add-actions">
+                  <button type="button" class="divider-add-btn" data-custom-action="add-divider-line" data-divider-orient="horizontal" ${((custom.dividerLines || []).length >= 4) ? 'disabled' : ''}>+ Add Horizontal Line (HR)</button>
+                  <button type="button" class="divider-add-btn" data-custom-action="add-divider-line" data-divider-orient="vertical" ${((custom.dividerLines || []).length >= 4) ? 'disabled' : ''}>+ Add Vertical Line</button>
+                </div>
+                ${(custom.dividerLines || []).map((line, idx) => `
+                  <div class="divider-line-item">
+                    <div class="divider-line-header">
+                      <span>Line ${idx + 1} (${line.orientation === 'vertical' ? 'Vertical' : 'Horizontal'})</span>
+                      <button type="button" class="remove-line-btn" data-custom-action="remove-divider-line" data-divider-index="${idx}">Remove ✕</button>
+                    </div>
+                    <div class="divider-line-controls">
+                      <button type="button" class="divider-chip-btn" data-custom-action="toggle-divider-orient" data-divider-index="${idx}">${line.orientation === 'vertical' ? 'Make Horizontal' : 'Make Vertical'}</button>
+                      <button type="button" class="divider-chip-btn ${line.style === 'dashed' ? 'is-active' : ''}" data-custom-action="toggle-divider-style" data-divider-index="${idx}">${line.style === 'dashed' ? 'Dashed' : 'Solid'}</button>
+                      <div class="font-size-stepper" style="margin-left:auto;">
+                        <button type="button" class="size-step-btn" data-custom-action="step-divider-len" data-divider-index="${idx}" data-step="-20" title="Shorter line">-</button>
+                        <span class="size-display-val" style="min-width:44px;font-size:0.75rem;">${line.length || (line.orientation === 'vertical' ? 60 : 100)}px</span>
+                        <button type="button" class="size-step-btn" data-custom-action="step-divider-len" data-divider-index="${idx}" data-step="20" title="Longer line">+</button>
+                      </div>
+                    </div>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="customizer-section customizer-logo-section">
+              <div class="customizer-section-title">
+                <span>3. Upload Logo <small>(Company or Personal)</small></span>
+                <small>Laser-engraved onto card front</small>
+              </div>
+              <div class="customizer-logo-studio">
+                ${(custom.logoPreviewUrl || custom.logoUrl) ? `
+                  <div class="logo-preview-badge">
+                    <div class="logo-preview-thumb-wrap">
+                      <img class="logo-preview-thumb" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Custom logo preview" />
+                    </div>
+                    <div class="logo-preview-meta">
+                      <strong>${escapeHtml(custom.logoFileName || 'Custom Logo Attached')}</strong>
+                      <small>Visible on front card</small>
+                    </div>
+                    <button type="button" class="logo-action-btn remove-logo-btn" data-custom-action="remove-logo" title="Remove custom logo" aria-label="Remove custom logo">✕</button>
+                  </div>
+                ` : `
+                  <div class="logo-dropzone" data-custom-dropzone>
+                    <input type="file" id="logo-file-${escapeHtml(p.id)}" accept="image/png, image/jpeg, image/svg+xml, image/webp" data-custom-file="logo" class="logo-file-input visually-hidden" />
+                    <label for="logo-file-${escapeHtml(p.id)}" class="logo-dropzone-label">
+                      <svg class="logo-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <span class="logo-dropzone-cta"><strong>Upload Company or Personal Logo</strong></span>
+                      <small class="logo-dropzone-hint">SVG, transparent PNG, JPEG, WebP (up to 5 MB)</small>
+                    </label>
+                  </div>
+                `}
+
+                <div class="text-size-control-wrap" style="margin-top: 10px;">
+                  <div class="text-size-toolbar-row">
+                    <div class="toolbar-label-group">
+                      <strong>Logo Size</strong>
+                      <span class="toolbar-hint">Scale logo on card or drag to position</span>
+                    </div>
+                    <div class="font-size-stepper" role="group" aria-label="Logo Size Stepper">
+                      <button type="button" class="size-step-btn" data-custom-logo-size-step="-15" title="Smaller logo (-)" aria-label="Smaller logo">-</button>
+                      <span class="size-display-val" id="logo-size-val-${escapeHtml(p.id)}">${custom.logoSize || 100}%</span>
+                      <button type="button" class="size-step-btn" data-custom-logo-size-step="15" title="Larger logo (+)" aria-label="Larger logo">+</button>
+                    </div>
+                  </div>
+                  <div class="size-preset-pills" role="radiogroup" aria-label="Logo size presets">
+                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 75 ? 'is-selected' : ''}" data-custom-logo-size="75">Small (75%)</button>
+                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 100 ? 'is-selected' : ''}" data-custom-logo-size="100">Default (100%)</button>
+                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 130 ? 'is-selected' : ''}" data-custom-logo-size="130">Large (130%)</button>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>3. Surface Area & Texture Motif</span>
+                <span>4. Surface Area & Texture Motif</span>
                 <small>Decorative vector inlay</small>
               </div>
               <div class="customizer-pills" role="radiogroup" aria-label="Surface motif">
@@ -408,7 +626,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
               <div class="color-config-cols">
                 <div class="color-picker-group">
                   <div class="customizer-section-title">
-                    <span>4a. Surface Base Colour</span>
+                    <span>5a. Surface Base Colour</span>
                     <small id="surface-color-name-${escapeHtml(p.id)}">${escapeHtml(SURFACE_COLORS.find(c => c.hex.toLowerCase() === custom.surfaceColor.toLowerCase())?.name || custom.surfaceColor)}</small>
                   </div>
                   <div class="color-swatches-grid" role="radiogroup" aria-label="Surface base colour">
@@ -424,7 +642,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
                 <div class="color-picker-group">
                   <div class="customizer-section-title">
-                    <span>4b. Foil & Accent Colour</span>
+                    <span>5b. Foil & Accent Colour</span>
                     <small id="accent-color-name-${escapeHtml(p.id)}">${escapeHtml(ACCENT_COLORS.find(c => c.hex.toLowerCase() === custom.accentColor.toLowerCase())?.name || custom.accentColor)}</small>
                   </div>
                   <div class="color-swatches-grid" role="radiogroup" aria-label="Foil inlay accent colour">
@@ -442,7 +660,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
             <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>5. Layout & Placement</span>
+                <span>6. Layout & Placement</span>
                 <small>10 Design Layouts</small>
               </div>
               <div class="customizer-pills" role="radiogroup" aria-label="Layout placement">
@@ -460,7 +678,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
             <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>6. Typography Style</span>
+                <span>7. Typography Style</span>
                 <small>Precision typography</small>
               </div>
               <div class="customizer-pills" role="radiogroup" aria-label="Typography style">
@@ -470,17 +688,41 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
               </div>
             </div>
 
-            <div class="customizer-section customizer-back-section">
+            <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>7. Back Side Configuration (NFC & QR)</span>
-                <small>Reverse face details</small>
+                <span>8. Back Side Configuration (NFC & QR)</span>
+                <small>Reverse face details & QR inlay</small>
               </div>
-              <div class="back-qr-style-group" style="margin-top: 6px;">
-                <span class="customizer-sublabel" style="display:block; font-size:0.78rem; font-weight:600; color:var(--ink, #121316); margin-bottom:6px;">QR Inlay Style</span>
-                <div class="customizer-pills" role="radiogroup" aria-label="QR Frame Style">
+              <div class="custom-fields-stack">
+                <div class="custom-field">
+                  <label for="custom-back-sub-${escapeHtml(p.id)}"><span>Website / Subline <small>(optional)</small></span><small class="char-count" id="back-sub-count-${escapeHtml(p.id)}">${(custom.backSubtitle || "").length}/40</small></label>
+                  <input id="custom-back-sub-${escapeHtml(p.id)}" type="text" maxlength="40" placeholder="e.g. oneinfo.me/username or website.com" value="${escapeHtml(custom.backSubtitle || "")}" data-custom-input="backSubtitle" />
+                </div>
+              </div>
+              <div style="margin-top: 10px;">
+                <label style="font-size:0.78rem;font-weight:600;display:block;margin-bottom:6px;">QR Inlay Style</label>
+                <div class="customizer-pills" role="radiogroup" aria-label="QR Inlay style">
                   <button type="button" class="customizer-pill ${custom.backQrStyle === 'minimal' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="minimal" role="radio" aria-checked="${custom.backQrStyle === 'minimal'}"><span class="pill-dot"></span> Clean Minimal (Official)</button>
                   <button type="button" class="customizer-pill ${custom.backQrStyle === 'framed' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="framed" role="radio" aria-checked="${custom.backQrStyle === 'framed'}"><span class="pill-dot"></span> Foil Framed</button>
                   <button type="button" class="customizer-pill ${custom.backQrStyle === 'badge' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="badge" role="radio" aria-checked="${custom.backQrStyle === 'badge'}"><span class="pill-dot"></span> Dashed Badge</button>
+                </div>
+              </div>
+              <div class="text-size-control-wrap" style="margin-top: 10px;">
+                <div class="text-size-toolbar-row">
+                  <div class="toolbar-label-group">
+                    <strong>QR Code Size</strong>
+                    <span class="toolbar-hint">Scale QR inlay or drag to position</span>
+                  </div>
+                  <div class="font-size-stepper" role="group" aria-label="QR Code Size Stepper">
+                    <button type="button" class="size-step-btn" data-custom-qr-size-step="-10" title="Smaller QR (-)" aria-label="Smaller QR">-</button>
+                    <span class="size-display-val" id="qr-size-val-${escapeHtml(p.id)}">${custom.qrSize || 100}%</span>
+                    <button type="button" class="size-step-btn" data-custom-qr-size-step="10" title="Larger QR (+)" aria-label="Larger QR">+</button>
+                  </div>
+                </div>
+                <div class="size-preset-pills" role="radiogroup" aria-label="QR code size presets">
+                  <button type="button" class="size-pill ${(custom.qrSize || 100) === 80 ? 'is-selected' : ''}" data-custom-qr-size="80">Small (80%)</button>
+                  <button type="button" class="size-pill ${(custom.qrSize || 100) === 100 ? 'is-selected' : ''}" data-custom-qr-size="100">Standard (100%)</button>
+                  <button type="button" class="size-pill ${(custom.qrSize || 100) === 125 ? 'is-selected' : ''}" data-custom-qr-size="125">Large (125%)</button>
                 </div>
               </div>
             </div>
@@ -669,7 +911,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     const openDisclosures = new Map($$(".purchase-disclosure", host).map(el => [el.dataset.disclosure, el.open]));
     host.innerHTML = `<a class="back-to-products" href="#products">${icon("arrow-left")} Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup(product) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
     if (product) void loadProductReviews(product, host);
-    if (!catalogReady) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
+    if (!catalogReady && catalogFailed) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
     document.title = product ? `${product.name} | Oneinfo` : "Product | Oneinfo";
     watchImages();
     $$(".purchase-disclosure", host).forEach(el => { el.open = openDisclosures.get(el.dataset.disclosure) ?? false; });
@@ -768,26 +1010,194 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         headerBanner.remove();
       }
 
-      const nfcWave = frontCard.querySelector(".card-nfc-wave");
-      if (nfcWave) nfcWave.style.color = custom.accentColor;
+      const ep = custom.elementPositions || {};
+      const scale = (custom.textSize || 14) / 14;
+      const nameSize = `${(1.125 * scale).toFixed(3)}rem`;
+      const subSize = `${(0.65 * scale).toFixed(3)}rem`;
 
-      const textEl = frontCard.querySelector(".card-custom-text");
-      if (textEl) {
-        textEl.className = textEl.className
-          .replace(/\bpos-\S+/g, "")
-          .replace(/\bfont-\S+/g, "")
-          .trim() + ` pos-${custom.layout || custom.position || 'left'} font-${custom.font || 'sans'}`;
+      // 1. Logo element
+      const logoEl = frontCard.querySelector(".card-element-logo");
+      if (logoEl) {
+        let logoImg = logoEl.querySelector(".mini-product-logo");
+        const activeLogo = custom.logoPreviewUrl || custom.logoUrl;
+        if (activeLogo) {
+          if (!logoImg) {
+            logoImg = document.createElement("img");
+            logoEl.appendChild(logoImg);
+          }
+          logoImg.className = "mini-product-logo custom-user-logo";
+          logoImg.src = mediaUrl(activeLogo);
+          logoImg.alt = "Custom logo";
+        } else if (logoImg) {
+          logoImg.className = "mini-product-logo";
+          logoImg.src = logoUrl;
+          logoImg.alt = "Oneinfo logo";
+        }
+        const logoScale = ((custom.logoSize || 100) / 100).toFixed(2);
+        logoEl.style.setProperty("--scale", logoScale);
+        if (ep.logo) {
+          logoEl.className = "card-drag-item card-element-logo pos-custom";
+          logoEl.style.left = `${ep.logo.x}%`;
+          logoEl.style.top = `${ep.logo.y}%`;
+          logoEl.style.transform = `translate(-50%, -50%) scale(${logoScale})`;
+        } else {
+          logoEl.className = `card-drag-item card-element-logo pos-${custom.layout || 'left'}`;
+          logoEl.style.left = ""; logoEl.style.top = "";
+          logoEl.style.transform = (custom.layout === "center" || custom.layout === "header")
+            ? `translateX(-50%) scale(${logoScale})`
+            : `scale(${logoScale})`;
+        }
       }
+
+      // 2. NFC wave sign element
+      const nfcEl = frontCard.querySelector(".card-element-nfc");
+      if (nfcEl) {
+        const iconScale = ((custom.iconSize || 100) / 100).toFixed(2);
+        nfcEl.style.setProperty("--scale", iconScale);
+        nfcEl.style.color = custom.accentColor;
+        if (ep.sign) {
+          nfcEl.className = "card-drag-item card-element-nfc pos-custom";
+          nfcEl.style.left = `${ep.sign.x}%`;
+          nfcEl.style.top = `${ep.sign.y}%`;
+          nfcEl.style.transform = `translate(-50%, -50%) scale(${iconScale})`;
+        } else {
+          nfcEl.className = `card-drag-item card-element-nfc pos-${custom.layout || 'left'}`;
+          nfcEl.style.left = ""; nfcEl.style.top = "";
+          nfcEl.style.transform = `scale(${iconScale})`;
+        }
+      }
+
+      // 3. Name element
+      const nameBox = frontCard.querySelector(".card-element-name");
       const nameEl = frontCard.querySelector(".card-custom-name");
+      const activeExtras = (custom.extraLines || []).filter(l => l && l.trim());
+      const numExtras = activeExtras.length;
+
+      if (nameBox) {
+        const namePos = ep.name || custom.customPos;
+        if (namePos) {
+          nameBox.className = `card-drag-item card-element-name pos-custom font-${custom.font || 'sans'}`;
+          nameBox.style.left = `${namePos.x}%`;
+          nameBox.style.top = `${namePos.y}%`;
+          nameBox.style.bottom = "auto";
+          nameBox.style.right = "auto";
+          nameBox.style.transform = "translate(-50%, -50%)";
+        } else {
+          nameBox.className = `card-drag-item card-element-name pos-${custom.layout || 'left'} font-${custom.font || 'sans'}`;
+          nameBox.style.left = "";
+          nameBox.style.top = custom.layout === "reverse" ? "20px" : "";
+          nameBox.style.bottom = custom.layout === "reverse" ? "auto" : `${42 + numExtras * 16}px`;
+          nameBox.style.right = "";
+          nameBox.style.transform = "";
+        }
+      }
       if (nameEl) {
         nameEl.textContent = custom.name ? custom.name.trim() : "Your Name";
         nameEl.classList.toggle("is-placeholder", !custom.name);
+        nameEl.style.fontSize = nameSize;
       }
-      const titleEl = frontCard.querySelector(".card-custom-title");
+
+      // 4. Title element (independent draggable line)
+      const legacyDetails = frontCard.querySelector(".card-element-details");
+      if (legacyDetails) legacyDetails.remove();
+
+      let titleBox = frontCard.querySelector(".card-element-title");
+      if (!titleBox) {
+        titleBox = document.createElement("div");
+        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${custom.font || 'sans'}`;
+        titleBox.setAttribute("data-drag-element", "title");
+        titleBox.setAttribute("data-product-id", productId);
+        titleBox.innerHTML = `<span class="card-custom-title" style="color:${custom.accentColor}; font-size:${subSize};"></span>`;
+        frontCard.appendChild(titleBox);
+      }
+      const titleEl = titleBox.querySelector(".card-custom-title");
+      const titlePos = ep.title;
+      if (titlePos) {
+        titleBox.className = `card-drag-item card-element-title pos-custom font-${custom.font || 'sans'}`;
+        titleBox.style.left = `${titlePos.x}%`;
+        titleBox.style.top = `${titlePos.y}%`;
+        titleBox.style.bottom = "auto";
+        titleBox.style.right = "auto";
+        titleBox.style.transform = "translate(-50%, -50%)";
+      } else {
+        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${custom.font || 'sans'}`;
+        titleBox.style.left = "";
+        titleBox.style.top = custom.layout === "reverse" ? "44px" : "";
+        titleBox.style.bottom = custom.layout === "reverse" ? "auto" : `${22 + numExtras * 16}px`;
+        titleBox.style.right = "";
+        titleBox.style.transform = "";
+      }
       if (titleEl) {
-        titleEl.textContent = custom.title ? custom.title.trim() : "Your Title / Role";
-        titleEl.classList.toggle("is-placeholder", !custom.title);
+        titleEl.textContent = custom.title ? custom.title.trim() : (numExtras > 0 ? "" : "Your Title / Role");
+        titleEl.classList.toggle("is-placeholder", !custom.title && numExtras === 0);
         titleEl.style.color = custom.accentColor;
+        titleEl.style.fontSize = subSize;
+      }
+
+      // 5. Extra Lines elements (each line is an independent draggable element)
+      frontCard.querySelectorAll(".card-element-extra").forEach(el => el.remove());
+      if (Array.isArray(custom.extraLines)) {
+        custom.extraLines.forEach((line, idx) => {
+          if (!line || !line.trim()) return;
+          const extraKey = `extra-${idx}`;
+          const extraPos = ep[extraKey];
+          const div = document.createElement("div");
+          div.setAttribute("data-drag-element", extraKey);
+          div.setAttribute("data-product-id", productId);
+          div.setAttribute("data-extra-index", String(idx));
+          if (extraPos) {
+            div.className = `card-drag-item card-element-extra pos-custom font-${custom.font || 'sans'}`;
+            div.style.left = `${extraPos.x}%`;
+            div.style.top = `${extraPos.y}%`;
+            div.style.bottom = "auto";
+            div.style.right = "auto";
+            div.style.transform = "translate(-50%, -50%)";
+          } else {
+            div.className = `card-drag-item card-element-extra pos-${custom.layout || 'left'} pos-extra-${idx} font-${custom.font || 'sans'}`;
+            if (custom.layout === "reverse") {
+              div.style.top = `${60 + idx * 16}px`;
+              div.style.bottom = "auto";
+            } else {
+              div.style.bottom = `${22 + (numExtras - 1 - idx) * 16}px`;
+              div.style.top = "";
+            }
+          }
+          const span = document.createElement("span");
+          span.className = "card-custom-extra-line";
+          span.style.color = custom.accentColor;
+          span.style.fontSize = subSize;
+          span.textContent = line.trim();
+          div.appendChild(span);
+          frontCard.appendChild(div);
+        });
+      }
+
+      // 6. Divider Lines (Horizontal HR & Vertical)
+      frontCard.querySelectorAll(".card-element-divider").forEach(el => el.remove());
+      if (Array.isArray(custom.dividerLines)) {
+        custom.dividerLines.forEach((line, idx) => {
+          const dividerKey = `divider-${idx}`;
+          const dividerPos = ep[dividerKey];
+          const isVert = line.orientation === "vertical";
+          const len = line.length || (isVert ? 60 : 100);
+          const div = document.createElement("div");
+          div.setAttribute("data-drag-element", dividerKey);
+          div.setAttribute("data-divider-index", String(idx));
+          div.setAttribute("data-product-id", productId);
+          div.className = `card-drag-item card-element-divider divider-${line.orientation || 'horizontal'} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom`;
+          div.style.setProperty("--divider-len", `${len}px`);
+          div.style.color = custom.accentColor;
+          if (dividerPos) {
+            div.style.left = `${dividerPos.x}%`;
+            div.style.top = `${dividerPos.y}%`;
+            div.style.transform = "translate(-50%, -50%)";
+          } else {
+            div.style.left = "50%";
+            div.style.top = `${50 + idx * 12}%`;
+            div.style.transform = "translate(-50%, -50%)";
+          }
+          frontCard.appendChild(div);
+        });
       }
     }
 
@@ -812,15 +1222,41 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const backWave = backCard.querySelector(".card-nfc-wave");
       if (backWave) backWave.style.color = custom.accentColor;
 
+      const qrCenter = backCard.querySelector(".card-back-center-qr");
+      const backQrPos = ep["back-qr"];
+      const qrScale = ((custom.qrSize || 100) / 100).toFixed(2);
+      if (qrCenter) {
+        qrCenter.style.setProperty("--scale", qrScale);
+        if (backQrPos) {
+          qrCenter.className = "card-drag-item card-back-center-qr pos-custom";
+          qrCenter.style.left = `${backQrPos.x}%`;
+          qrCenter.style.top = `${backQrPos.y}%`;
+          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale})`;
+        } else {
+          qrCenter.className = "card-drag-item card-back-center-qr";
+          qrCenter.style.left = "";
+          qrCenter.style.top = "";
+          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale})`;
+        }
+
+        let subEl = qrCenter.querySelector(".card-back-subtitle");
+        if (custom.backSubtitle && custom.backSubtitle.trim()) {
+          if (!subEl) {
+            subEl = document.createElement("span");
+            subEl.className = "card-back-subtitle";
+            qrCenter.appendChild(subEl);
+          }
+          subEl.style.color = custom.accentColor;
+          subEl.textContent = custom.backSubtitle.trim();
+        } else if (subEl) {
+          subEl.remove();
+        }
+      }
+
       const qrWrap = backCard.querySelector(".card-qr-wrap");
       if (qrWrap) {
         qrWrap.className = `card-qr-wrap ${custom.backQrStyle || 'minimal'}`;
         qrWrap.innerHTML = renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal');
-      }
-
-      const subEl = backCard.querySelector(".card-back-subtitle");
-      if (subEl) {
-        subEl.remove();
       }
     }
   }
@@ -835,6 +1271,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     current.surfaceColor = preset.surfaceColor;
     current.accentColor = preset.accentColor;
     current.position = preset.layout;
+    current.customPos = null;
+    current.elementPositions = {};
     productCustomizations.set(productId, current);
 
     const studio = $(`[data-product-id="${productId}"].card-customizer-studio`);
@@ -917,6 +1355,304 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       if (productId) applyPreset(productId, presetBtn.dataset.customPreset);
       return;
     }
+    const removeLogoBtn = event.target.closest("[data-custom-action='remove-logo']");
+    if (removeLogoBtn) {
+      const studio = removeLogoBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.logoUrl = "";
+      current.logoPreviewUrl = "";
+      current.logoFileName = "";
+      productCustomizations.set(productId, current);
+      renderRoute();
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const addLineBtn = event.target.closest("[data-custom-action='add-extra-line']");
+    if (addLineBtn) {
+      const studio = addLineBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!Array.isArray(current.extraLines)) current.extraLines = [];
+      if (current.extraLines.length >= 4) {
+        toast("You can add up to 4 additional lines.");
+        return;
+      }
+      current.extraLines.push("");
+      if (current.extraLines.length >= 2 && (!current.textSize || current.textSize > 12)) {
+        current.textSize = 12;
+      }
+      productCustomizations.set(productId, current);
+      renderRoute();
+      syncCustomCardPreview(productId);
+      const newIdx = current.extraLines.length - 1;
+      const newInput = $(`#custom-extra-${productId}-${newIdx}`);
+      newInput?.focus();
+      return;
+    }
+    const removeLineBtn = event.target.closest("[data-custom-action='remove-extra-line']");
+    if (removeLineBtn) {
+      const studio = removeLineBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const lineIdx = parseInt(removeLineBtn.dataset.lineIndex, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (Array.isArray(current.extraLines) && !isNaN(lineIdx)) {
+        current.extraLines.splice(lineIdx, 1);
+        productCustomizations.set(productId, current);
+        renderRoute();
+        syncCustomCardPreview(productId);
+      }
+      return;
+    }
+    const stepBtn = event.target.closest("[data-custom-text-size-step]");
+    if (stepBtn) {
+      const studio = stepBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const delta = parseInt(stepBtn.dataset.customTextSizeStep, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      let size = (current.textSize || 14) + delta;
+      if (size < 8) size = 8;
+      if (size > 24) size = 24;
+      current.textSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#text-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size} pt`;
+      studio.querySelectorAll(".size-pill").forEach(p => {
+        p.classList.toggle("is-selected", parseInt(p.dataset.customTextSize, 10) === size);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const sizePill = event.target.closest("[data-custom-text-size]");
+    if (sizePill) {
+      const studio = sizePill.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const size = parseInt(sizePill.dataset.customTextSize, 10);
+      if (isNaN(size)) return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.textSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#text-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size} pt`;
+      studio.querySelectorAll(".size-pill[data-custom-text-size]").forEach(p => {
+        p.classList.toggle("is-selected", p === sizePill);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const iconStepBtn = event.target.closest("[data-custom-icon-size-step]");
+    if (iconStepBtn) {
+      const studio = iconStepBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const delta = parseInt(iconStepBtn.dataset.customIconSizeStep, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      let size = (current.iconSize || 100) + delta;
+      if (size < 50) size = 50;
+      if (size > 200) size = 200;
+      current.iconSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#icon-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size}%`;
+      studio.querySelectorAll("[data-custom-icon-size]").forEach(p => {
+        p.classList.toggle("is-selected", parseInt(p.dataset.customIconSize, 10) === size);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const iconSizePill = event.target.closest("[data-custom-icon-size]");
+    if (iconSizePill) {
+      const studio = iconSizePill.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const size = parseInt(iconSizePill.dataset.customIconSize, 10);
+      if (isNaN(size)) return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.iconSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#icon-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size}%`;
+      studio.querySelectorAll("[data-custom-icon-size]").forEach(p => {
+        p.classList.toggle("is-selected", p === iconSizePill);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const logoStepBtn = event.target.closest("[data-custom-logo-size-step]");
+    if (logoStepBtn) {
+      const studio = logoStepBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const delta = parseInt(logoStepBtn.dataset.customLogoSizeStep, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      let size = (current.logoSize || 100) + delta;
+      if (size < 40) size = 40;
+      if (size > 200) size = 200;
+      current.logoSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#logo-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size}%`;
+      studio.querySelectorAll("[data-custom-logo-size]").forEach(p => {
+        p.classList.toggle("is-selected", parseInt(p.dataset.customLogoSize, 10) === size);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const logoSizePill = event.target.closest("[data-custom-logo-size]");
+    if (logoSizePill) {
+      const studio = logoSizePill.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const size = parseInt(logoSizePill.dataset.customLogoSize, 10);
+      if (isNaN(size)) return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.logoSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#logo-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size}%`;
+      studio.querySelectorAll("[data-custom-logo-size]").forEach(p => {
+        p.classList.toggle("is-selected", p === logoSizePill);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const qrStepBtn = event.target.closest("[data-custom-qr-size-step]");
+    if (qrStepBtn) {
+      const studio = qrStepBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const delta = parseInt(qrStepBtn.dataset.customQrSizeStep, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      let size = (current.qrSize || 100) + delta;
+      if (size < 50) size = 50;
+      if (size > 180) size = 180;
+      current.qrSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#qr-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size}%`;
+      studio.querySelectorAll("[data-custom-qr-size]").forEach(p => {
+        p.classList.toggle("is-selected", parseInt(p.dataset.customQrSize, 10) === size);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const qrSizePill = event.target.closest("[data-custom-qr-size]");
+    if (qrSizePill) {
+      const studio = qrSizePill.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const size = parseInt(qrSizePill.dataset.customQrSize, 10);
+      if (isNaN(size)) return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.qrSize = size;
+      productCustomizations.set(productId, current);
+      const valEl = $(`#qr-size-val-${productId}`);
+      if (valEl) valEl.textContent = `${size}%`;
+      studio.querySelectorAll("[data-custom-qr-size]").forEach(p => {
+        p.classList.toggle("is-selected", p === qrSizePill);
+      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const addDividerBtn = event.target.closest("[data-custom-action='add-divider-line']");
+    if (addDividerBtn) {
+      const studio = addDividerBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const orient = addDividerBtn.dataset.dividerOrient === "vertical" ? "vertical" : "horizontal";
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!Array.isArray(current.dividerLines)) current.dividerLines = [];
+      if (current.dividerLines.length < 4) {
+        current.dividerLines.push({
+          orientation: orient,
+          length: orient === "vertical" ? 60 : 100,
+          style: "solid",
+        });
+        productCustomizations.set(productId, current);
+        renderRoute();
+        syncCustomCardPreview(productId);
+      }
+      return;
+    }
+    const removeDividerBtn = event.target.closest("[data-custom-action='remove-divider-line']");
+    if (removeDividerBtn) {
+      const studio = removeDividerBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const idx = parseInt(removeDividerBtn.dataset.dividerIndex, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (Array.isArray(current.dividerLines) && !isNaN(idx)) {
+        current.dividerLines.splice(idx, 1);
+        if (current.elementPositions) {
+          delete current.elementPositions[`divider-${idx}`];
+        }
+        productCustomizations.set(productId, current);
+        renderRoute();
+        syncCustomCardPreview(productId);
+      }
+      return;
+    }
+    const toggleOrientBtn = event.target.closest("[data-custom-action='toggle-divider-orient']");
+    if (toggleOrientBtn) {
+      const studio = toggleOrientBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const idx = parseInt(toggleOrientBtn.dataset.dividerIndex, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (Array.isArray(current.dividerLines) && current.dividerLines[idx]) {
+        const line = current.dividerLines[idx];
+        line.orientation = line.orientation === "vertical" ? "horizontal" : "vertical";
+        if (line.orientation === "vertical" && line.length > 140) line.length = 70;
+        productCustomizations.set(productId, current);
+        renderRoute();
+        syncCustomCardPreview(productId);
+      }
+      return;
+    }
+    const toggleStyleBtn = event.target.closest("[data-custom-action='toggle-divider-style']");
+    if (toggleStyleBtn) {
+      const studio = toggleStyleBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const idx = parseInt(toggleStyleBtn.dataset.dividerIndex, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (Array.isArray(current.dividerLines) && current.dividerLines[idx]) {
+        const line = current.dividerLines[idx];
+        line.style = line.style === "dashed" ? "solid" : "dashed";
+        productCustomizations.set(productId, current);
+        renderRoute();
+        syncCustomCardPreview(productId);
+      }
+      return;
+    }
+    const stepLenBtn = event.target.closest("[data-custom-action='step-divider-len']");
+    if (stepLenBtn) {
+      const studio = stepLenBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const idx = parseInt(stepLenBtn.dataset.dividerIndex, 10);
+      const step = parseInt(stepLenBtn.dataset.step, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (Array.isArray(current.dividerLines) && current.dividerLines[idx]) {
+        const line = current.dividerLines[idx];
+        const isVert = line.orientation === "vertical";
+        const minLen = 20;
+        const maxLen = isVert ? 160 : 300;
+        let newLen = (line.length || (isVert ? 60 : 100)) + step;
+        if (newLen < minLen) newLen = minLen;
+        if (newLen > maxLen) newLen = maxLen;
+        line.length = newLen;
+        productCustomizations.set(productId, current);
+        renderRoute();
+        syncCustomCardPreview(productId);
+      }
+      return;
+    }
     const pill = event.target.closest("[data-custom-set]");
     if (pill) {
       const studio = pill.closest(".card-customizer-studio");
@@ -926,7 +1662,11 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const val = pill.dataset.value;
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       current[prop] = val;
-      if (prop === "layout") current.position = val;
+      if (prop === "layout") {
+        current.position = val;
+        current.customPos = null;
+        current.elementPositions = {};
+      }
       if (prop === "surfaceMotif" || prop === "surfaceColor" || prop === "accentColor" || prop === "layout") {
         current.presetId = undefined;
         studio.querySelectorAll(".preset-chip").forEach(chip => {
@@ -996,6 +1736,14 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         customization = {
           name: draft.name.trim(),
           title: (draft.title || "").trim(),
+          extraLines: (draft.extraLines || []).map(l => (l || "").trim()).filter(Boolean),
+          textSize: draft.textSize || 14,
+          logoSize: draft.logoSize || 100,
+          iconSize: draft.iconSize || 100,
+          qrSize: draft.qrSize || 100,
+          dividerLines: (draft.dividerLines || []),
+          ...(draft.customPos ? { customPos: draft.customPos } : {}),
+          ...(draft.elementPositions && Object.keys(draft.elementPositions).length ? { elementPositions: draft.elementPositions } : {}),
           layout: draft.layout || "left",
           surfaceMotif: draft.surfaceMotif || "facets",
           surfaceColor: draft.surfaceColor || "#0a0b0d",
@@ -1004,6 +1752,9 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           finish: draft.finish || "matte",
           backQrStyle: draft.backQrStyle || "minimal",
           backSubtitle: (draft.backSubtitle || "").trim(),
+          ...(draft.logoUrl ? { logoUrl: draft.logoUrl } : {}),
+          ...(draft.logoStyle ? { logoStyle: draft.logoStyle } : {}),
+          ...(draft.companyName ? { companyName: draft.companyName.trim() } : {}),
           ...(draft.presetId ? { presetId: draft.presetId } : {}),
           position: draft.layout || draft.position || "left",
         };
@@ -1041,6 +1792,23 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       syncCustomCardPreview(productId);
       return;
     }
+    const extraInput = event.target.closest("[data-custom-extra-line]");
+    if (extraInput) {
+      const studio = extraInput.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const lineIdx = parseInt(extraInput.dataset.customExtraLine, 10);
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!Array.isArray(current.extraLines)) current.extraLines = [];
+      current.extraLines[lineIdx] = extraInput.value;
+      productCustomizations.set(productId, current);
+
+      const countEl = $(`#extra-count-${productId}-${lineIdx}`);
+      if (countEl) countEl.textContent = `${extraInput.value.length}/35`;
+
+      syncCustomCardPreview(productId);
+      return;
+    }
     const input = event.target.closest("[data-custom-input]");
     if (!input) return;
     const studio = input.closest(".card-customizer-studio");
@@ -1058,7 +1826,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         nameEl.textContent = input.value.trim() || "Your Name";
         nameEl.classList.toggle("is-placeholder", !input.value.trim());
       }
-      if (countEl) countEl.textContent = `${input.value.length}/50`;
+      if (countEl) countEl.textContent = `${input.value.length}/25`;
     } else if (field === "title") {
       const titleEl = $("#product-detail .card-view-front .card-custom-title");
       const countEl = $(`#title-count-${productId}`);
@@ -1066,14 +1834,188 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         titleEl.textContent = input.value.trim() || "Your Title / Role";
         titleEl.classList.toggle("is-placeholder", !input.value.trim());
       }
-      if (countEl) countEl.textContent = `${input.value.length}/60`;
+      if (countEl) countEl.textContent = `${input.value.length}/35`;
     } else if (field === "backSubtitle") {
       const backSubEl = $("#product-detail .card-view-back .card-back-subtitle");
       const countEl = $(`#back-sub-count-${productId}`);
       const val = input.value.trim() || "oneinfo.me";
       if (backSubEl) backSubEl.textContent = val;
       if (countEl) countEl.textContent = `${input.value.length}/80`;
+    } else if (field === "companyName") {
+      const logoEl = $("#product-detail .card-view-front .custom-user-logo");
+      if (logoEl) logoEl.alt = `${input.value.trim() || current.name || 'Company'} logo`;
     }
+    syncCustomCardPreview(productId);
+  });
+
+  function processCustomLogoFile(file, productId) {
+    if (!file || !productId) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast("Logo file is too large. Please choose an image under 5 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = e => {
+      const dataUrl = e.target?.result;
+      if (!dataUrl || typeof dataUrl !== "string") return;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.logoPreviewUrl = dataUrl;
+      current.logoUrl = dataUrl;
+      current.logoFileName = file.name;
+      productCustomizations.set(productId, current);
+      renderRoute();
+      syncCustomCardPreview(productId);
+
+      // Upload to API in background to obtain clean media URL
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      fetch(`${apiUrl}/api/v1/product-media/custom-logo/${ext}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: file,
+      })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data?.url) {
+            const updated = productCustomizations.get(productId) ?? current;
+            updated.logoPreviewUrl = dataUrl;
+            updated.logoUrl = data.url;
+            productCustomizations.set(productId, updated);
+          }
+        })
+        .catch(() => {});
+    };
+    reader.readAsDataURL(file);
+  }
+
+  $("#product-detail").addEventListener("change", event => {
+    const fileInput = event.target.closest("[data-custom-file='logo']");
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
+    const studio = fileInput.closest(".card-customizer-studio");
+    const productId = studio?.dataset.productId;
+    if (productId) processCustomLogoFile(fileInput.files[0], productId);
+  });
+
+  $("#product-detail").addEventListener("dragover", event => {
+    const dropzone = event.target.closest("[data-custom-dropzone]");
+    if (dropzone) {
+      event.preventDefault();
+      dropzone.classList.add("is-dragover");
+    }
+  });
+  $("#product-detail").addEventListener("dragleave", event => {
+    const dropzone = event.target.closest("[data-custom-dropzone]");
+    if (dropzone) dropzone.classList.remove("is-dragover");
+  });
+  $("#product-detail").addEventListener("drop", event => {
+    const dropzone = event.target.closest("[data-custom-dropzone]");
+    if (!dropzone) return;
+    event.preventDefault();
+    dropzone.classList.remove("is-dragover");
+    const file = event.dataTransfer?.files?.[0];
+    const studio = dropzone.closest(".card-customizer-studio");
+    const productId = studio?.dataset.productId;
+    if (file && productId) processCustomLogoFile(file, productId);
+  });
+
+  let activeDragItem = null;
+  document.addEventListener("mousedown", event => {
+    const dragItem = event.target.closest("[data-drag-element]");
+    if (!dragItem) return;
+    const cardFace = dragItem.closest("[data-interactive-card]");
+    const productId = cardFace?.dataset.interactiveCard;
+    const elKey = dragItem.dataset.dragElement;
+    if (!cardFace || !productId || !elKey) return;
+
+    activeDragItem = { dragItem, cardFace, productId, elKey };
+    dragItem.classList.add("is-dragging");
+    event.preventDefault();
+  });
+
+  document.addEventListener("mousemove", event => {
+    if (!activeDragItem) return;
+    const { dragItem, cardFace, productId, elKey } = activeDragItem;
+    const rect = cardFace.getBoundingClientRect();
+
+    const halfW = ((dragItem.offsetWidth || 24) / 2 / rect.width) * 100;
+    const halfH = ((dragItem.offsetHeight || 24) / 2 / rect.height) * 100;
+    const minX = Math.max(1, Math.min(15, Math.round(halfW)));
+    const maxX = Math.min(98, Math.max(minX, Math.round(101 - halfW)));
+    const minY = Math.max(1, Math.min(15, Math.round(halfH)));
+    const maxY = Math.min(98, Math.max(minY, Math.round(101 - halfH)));
+
+    const rawX = Math.round(((event.clientX - rect.left) / rect.width) * 100);
+    const rawY = Math.round(((event.clientY - rect.top) / rect.height) * 100);
+    const xPercent = Math.min(maxX, Math.max(minX, rawX));
+    const yPercent = Math.min(maxY, Math.max(minY, rawY));
+
+    dragItem.className = dragItem.className.replace(/\bpos-\S+/g, "").trim() + " pos-custom is-dragging";
+    dragItem.style.left = `${xPercent}%`;
+    dragItem.style.top = `${yPercent}%`;
+    dragItem.style.bottom = "auto";
+    dragItem.style.right = "auto";
+    const scale = dragItem.style.getPropertyValue("--scale");
+    dragItem.style.transform = scale ? `translate(-50%, -50%) scale(${scale})` : "translate(-50%, -50%)";
+
+    const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+    if (!current.elementPositions) current.elementPositions = {};
+    current.elementPositions[elKey] = { x: xPercent, y: yPercent };
+    productCustomizations.set(productId, current);
+  });
+
+  document.addEventListener("mouseup", () => {
+    if (!activeDragItem) return;
+    activeDragItem.dragItem.classList.remove("is-dragging");
+    activeDragItem = null;
+  });
+
+  document.addEventListener("touchstart", event => {
+    const dragItem = event.target.closest("[data-drag-element]");
+    if (!dragItem) return;
+    const cardFace = dragItem.closest("[data-interactive-card]");
+    const productId = cardFace?.dataset.interactiveCard;
+    const elKey = dragItem.dataset.dragElement;
+    if (!cardFace || !productId || !elKey) return;
+
+    activeDragItem = { dragItem, cardFace, productId, elKey };
+    dragItem.classList.add("is-dragging");
+  }, { passive: true });
+
+  document.addEventListener("touchmove", event => {
+    if (!activeDragItem || !event.touches[0]) return;
+    const { dragItem, cardFace, productId, elKey } = activeDragItem;
+    const touch = event.touches[0];
+    const rect = cardFace.getBoundingClientRect();
+
+    const halfW = ((dragItem.offsetWidth || 24) / 2 / rect.width) * 100;
+    const halfH = ((dragItem.offsetHeight || 24) / 2 / rect.height) * 100;
+    const minX = Math.max(1, Math.min(15, Math.round(halfW)));
+    const maxX = Math.min(98, Math.max(minX, Math.round(101 - halfW)));
+    const minY = Math.max(1, Math.min(15, Math.round(halfH)));
+    const maxY = Math.min(98, Math.max(minY, Math.round(101 - halfH)));
+
+    const rawX = Math.round(((touch.clientX - rect.left) / rect.width) * 100);
+    const rawY = Math.round(((touch.clientY - rect.top) / rect.height) * 100);
+    const xPercent = Math.min(maxX, Math.max(minX, rawX));
+    const yPercent = Math.min(maxY, Math.max(minY, rawY));
+
+    dragItem.className = dragItem.className.replace(/\bpos-\S+/g, "").trim() + " pos-custom is-dragging";
+    dragItem.style.left = `${xPercent}%`;
+    dragItem.style.top = `${yPercent}%`;
+    dragItem.style.bottom = "auto";
+    dragItem.style.right = "auto";
+    const scale = dragItem.style.getPropertyValue("--scale");
+    dragItem.style.transform = scale ? `translate(-50%, -50%) scale(${scale})` : "translate(-50%, -50%)";
+
+    const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+    if (!current.elementPositions) current.elementPositions = {};
+    current.elementPositions[elKey] = { x: xPercent, y: yPercent };
+    productCustomizations.set(productId, current);
+  }, { passive: true });
+
+  document.addEventListener("touchend", () => {
+    if (!activeDragItem) return;
+    activeDragItem.dragItem.classList.remove("is-dragging");
+    activeDragItem = null;
   });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) void loadProducts(); });
   window.setInterval(() => { if (!document.hidden && !$(".modal.open")) void loadProducts(); }, 30000);

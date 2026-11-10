@@ -343,7 +343,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   } });
 
-  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 32 * 1024 }, async (request, reply) => {
+  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 512 * 1024 }, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const reserving = route === "/reserve";
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);

@@ -291,3 +291,43 @@ test("two-sided card customization supports front/back vector motifs, QR styles,
   assert.equal(cart[0].customization.backQrStyle, "framed");
   assert.equal(cart[0].customization.backSubtitle, "oneinfo.me/avery");
 });
+
+test("customization supports resizing logo, icon, qr and adding divider lines (horizontal and vertical)", () => {
+  const customSizing = {
+    name: "Nazmul Hossain",
+    title: "Lead Engineer",
+    textSize: 16,
+    logoSize: 120,
+    iconSize: 90,
+    qrSize: 110,
+    dividerLines: [
+      { orientation: "horizontal", length: 120, style: "solid" },
+      { orientation: "vertical", length: 50, style: "dashed" },
+    ],
+    elementPositions: {
+      "divider-0": { x: 50, y: 55 },
+      "divider-1": { x: 40, y: 70 },
+      logo: { x: 25, y: 20 },
+      sign: { x: 85, y: 20 },
+    },
+  };
+  const parsed = ProductCustomizationSchema.parse(customSizing);
+  assert.equal(parsed.logoSize, 120);
+  assert.equal(parsed.iconSize, 90);
+  assert.equal(parsed.qrSize, 110);
+  assert.equal(parsed.dividerLines.length, 2);
+  assert.equal(parsed.dividerLines[0].orientation, "horizontal");
+  assert.equal(parsed.dividerLines[0].length, 120);
+  assert.equal(parsed.dividerLines[0].style, "solid");
+  assert.equal(parsed.dividerLines[1].orientation, "vertical");
+  assert.equal(parsed.dividerLines[1].style, "dashed");
+  assert.equal(parsed.elementPositions["divider-0"].x, 50);
+
+  const product = { id: "p1", name: "Oneinfo Card", customizable: true };
+  const variant = { id: "v1", name: "Gold", colorHex: "#d8b26e", available: true, priceMinor: 200000, salePriceMinor: null };
+  const cart = addCartVariant([], product, variant, 1, parsed);
+  assert.equal(cart[0].customization.logoSize, 120);
+  assert.equal(cart[0].customization.iconSize, 90);
+  assert.equal(cart[0].customization.qrSize, 110);
+  assert.equal(cart[0].customization.dividerLines.length, 2);
+});

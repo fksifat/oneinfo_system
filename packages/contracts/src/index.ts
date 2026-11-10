@@ -354,9 +354,16 @@ export type SurfaceMotif = z.infer<typeof SurfaceMotifSchema>;
 
 export const HexColorSchema = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/i);
 
+export const DividerLineSchema = z.object({
+  orientation: z.enum(["horizontal", "vertical"]).default("horizontal"),
+  length: z.number().int().min(20).max(300).default(100),
+  style: z.enum(["solid", "dashed"]).default("solid").optional(),
+});
+export type DividerLine = z.infer<typeof DividerLineSchema>;
+
 export const ProductCustomizationSchema = z.object({
-  name: z.string().trim().min(1).max(50),
-  title: z.string().trim().max(60).optional().default(""),
+  name: z.string().trim().min(1).max(25),
+  title: z.string().trim().max(35).optional().default(""),
   layout: CardLayoutSchema.default("left"),
   surfaceMotif: SurfaceMotifSchema.default("facets"),
   surfaceColor: HexColorSchema.default("#0a0b0d"),
@@ -367,6 +374,17 @@ export const ProductCustomizationSchema = z.object({
   presetId: z.string().max(30).optional(),
   backQrStyle: z.enum(["framed", "minimal", "badge"]).default("framed").optional(),
   backSubtitle: z.string().trim().max(80).default("").optional(),
+  logoUrl: z.string().trim().max(500_000).optional(),
+  logoStyle: z.enum(["original", "monochrome"]).default("original").optional(),
+  companyName: z.string().trim().max(60).optional(),
+  extraLines: z.array(z.string().trim().max(35)).max(5).default([]).optional(),
+  textSize: z.number().int().min(8).max(26).default(14).optional(),
+  logoSize: z.number().int().min(30).max(250).default(100).optional(),
+  iconSize: z.number().int().min(30).max(250).default(100).optional(),
+  qrSize: z.number().int().min(30).max(250).default(100).optional(),
+  dividerLines: z.array(DividerLineSchema).max(4).default([]).optional(),
+  customPos: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).optional(),
+  elementPositions: z.record(z.string(), z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) })).optional(),
 });
 export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
 
