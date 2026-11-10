@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import type { ProductCustomization } from "@oneinfo/contracts";
 import oneinfoLogo from "./assets/oneinfo-logo.svg";
+import { productMediaUrl } from "./api.js";
 
 interface AdminCardPreviewProps {
   custom: ProductCustomization;
@@ -236,7 +237,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
   const activeExtras = (custom.extraLines || []).filter((l) => l && l.trim());
   const numExtras = activeExtras.length;
 
-  // Front Drag Positions
+  // Front Positions & Styles
   const epLogo = ep.logo;
   const epSign = ep.sign;
   const epName = ep.name || custom.customPos;
@@ -245,6 +246,12 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
   const epNameTyped = epName as { size?: number; font?: "sans" | "serif" | "mono"; rotate?: number; bold?: boolean; italic?: boolean } | undefined;
   const epTitleTyped = epTitle as { size?: number; font?: "sans" | "serif" | "mono"; rotate?: number; bold?: boolean; italic?: boolean } | undefined;
   const epQr = ep["back-qr"];
+
+  const hasLogoPos = epLogo?.x != null && epLogo?.y != null;
+  const hasSignPos = epSign?.x != null && epSign?.y != null;
+  const hasNamePos = epName?.x != null && epName?.y != null;
+  const hasTitlePos = epTitle?.x != null && epTitle?.y != null;
+  const hasQrPos = epQr?.x != null && epQr?.y != null;
 
   const isNameBold = epNameTyped?.bold !== undefined ? epNameTyped.bold : (custom.bold !== undefined ? custom.bold : true);
   const isNameItalic = epNameTyped?.italic !== undefined ? epNameTyped.italic : Boolean(custom.italic);
@@ -264,44 +271,44 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
   const nameRot = epNameTyped?.rotate || 0;
   const titleRot = epTitleTyped?.rotate || 0;
 
-  const logoStyle: React.CSSProperties = epLogo
-    ? { position: "absolute", left: `${epLogo.x}%`, top: `${epLogo.y}%`, transform: `translate(-50%, -50%) scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "center center", zIndex: 3 }
+  const logoStyle: React.CSSProperties = hasLogoPos
+    ? { position: "absolute", left: `${epLogo!.x}%`, top: `${epLogo!.y}%`, transform: `translate(-50%, -50%) scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "center center", zIndex: 3 }
     : layout === "center" || layout === "header"
-    ? { position: "absolute", left: "50%", top: "18px", transform: `translateX(-50%) scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top center", zIndex: 3 }
+    ? { position: "absolute", left: "50%", top: "22px", transform: `translateX(-50%) scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top center", zIndex: 3 }
     : layout === "right"
     ? { position: "absolute", right: "20px", top: "18px", transform: `scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top right", zIndex: 3 }
     : layout === "reverse"
     ? { position: "absolute", left: "20px", bottom: "18px", transform: `scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "bottom left", zIndex: 3 }
     : { position: "absolute", left: "20px", top: "18px", transform: `scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top left", zIndex: 3 };
 
-  const signStyle: React.CSSProperties = epSign
-    ? { position: "absolute", left: `${epSign.x}%`, top: `${epSign.y}%`, transform: `translate(-50%, -50%) scale(${iconScale}) rotate(${signRot}deg)`, transformOrigin: "center center", zIndex: 3 }
+  const signStyle: React.CSSProperties = hasSignPos
+    ? { position: "absolute", left: `${epSign!.x}%`, top: `${epSign!.y}%`, transform: `translate(-50%, -50%) scale(${iconScale}) rotate(${signRot}deg)`, transformOrigin: "center center", zIndex: 3 }
     : { position: "absolute", right: "20px", top: "18px", transform: `scale(${iconScale}) rotate(${signRot}deg)`, transformOrigin: "top right", zIndex: 3 };
 
-  const nameStyle: React.CSSProperties = epName
-    ? { position: "absolute", left: `${epName.x}%`, top: `${epName.y}%`, transform: `translate(-50%, -50%) rotate(${nameRot}deg)`, zIndex: 3 }
+  const nameStyle: React.CSSProperties = hasNamePos
+    ? { position: "absolute", left: `${epName!.x}%`, top: `${epName!.y}%`, transform: `translate(-50%, -50%) rotate(${nameRot}deg)`, zIndex: 3 }
     : layout === "center" || layout === "header"
-    ? { position: "absolute", left: "50%", bottom: "46px", transform: `translateX(-50%) rotate(${nameRot}deg)`, textAlign: "center", zIndex: 3 }
+    ? { position: "absolute", left: "50%", bottom: "48px", transform: `translateX(-50%) rotate(${nameRot}deg)`, textAlign: "center", zIndex: 3 }
     : layout === "right"
-    ? { position: "absolute", right: "22px", bottom: `${40 + numExtras * 16}px`, transform: `rotate(${nameRot}deg)`, textAlign: "right", zIndex: 3 }
+    ? { position: "absolute", right: "22px", bottom: `${48 + numExtras * 18}px`, transform: `rotate(${nameRot}deg)`, textAlign: "right", zIndex: 3 }
     : layout === "reverse"
     ? { position: "absolute", left: "22px", top: "20px", transform: `rotate(${nameRot}deg)`, zIndex: 3 }
-    : { position: "absolute", left: "22px", bottom: `${40 + numExtras * 16}px`, transform: `rotate(${nameRot}deg)`, zIndex: 3 };
+    : { position: "absolute", left: "22px", bottom: `${48 + numExtras * 18}px`, transform: `rotate(${nameRot}deg)`, zIndex: 3 };
 
-  const titleStyle: React.CSSProperties = epTitle
-    ? { position: "absolute", left: `${epTitle.x}%`, top: `${epTitle.y}%`, transform: `translate(-50%, -50%) rotate(${titleRot}deg)`, zIndex: 3 }
+  const titleStyle: React.CSSProperties = hasTitlePos
+    ? { position: "absolute", left: `${epTitle!.x}%`, top: `${epTitle!.y}%`, transform: `translate(-50%, -50%) rotate(${titleRot}deg)`, zIndex: 3 }
     : layout === "center" || layout === "header"
-    ? { position: "absolute", left: "50%", bottom: "26px", transform: `translateX(-50%) rotate(${titleRot}deg)`, textAlign: "center", zIndex: 3 }
+    ? { position: "absolute", left: "50%", bottom: "20px", transform: `translateX(-50%) rotate(${titleRot}deg)`, textAlign: "center", zIndex: 3 }
     : layout === "right"
-    ? { position: "absolute", right: "22px", bottom: `${22 + numExtras * 16}px`, transform: `rotate(${titleRot}deg)`, textAlign: "right", zIndex: 3 }
+    ? { position: "absolute", right: "22px", bottom: `${20 + numExtras * 18}px`, transform: `rotate(${titleRot}deg)`, textAlign: "right", zIndex: 3 }
     : layout === "reverse"
-    ? { position: "absolute", left: "22px", top: "44px", transform: `rotate(${titleRot}deg)`, zIndex: 3 }
-    : { position: "absolute", left: "22px", bottom: `${22 + numExtras * 16}px`, transform: `rotate(${titleRot}deg)`, zIndex: 3 };
+    ? { position: "absolute", left: "22px", top: "46px", transform: `rotate(${titleRot}deg)`, zIndex: 3 }
+    : { position: "absolute", left: "22px", bottom: `${20 + numExtras * 18}px`, transform: `rotate(${titleRot}deg)`, zIndex: 3 };
 
-  // Back Drag Positions
+  // Back Positions & Styles
   const qrRot = epQr?.rotate || 0;
-  const qrStyle: React.CSSProperties = epQr
-    ? { position: "absolute", left: `${epQr.x}%`, top: `${epQr.y}%`, transform: `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`, transformOrigin: "center center", zIndex: 3 }
+  const qrStyle: React.CSSProperties = hasQrPos
+    ? { position: "absolute", left: `${epQr!.x}%`, top: `${epQr!.y}%`, transform: `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`, transformOrigin: "center center", zIndex: 3 }
     : { position: "absolute", left: "50%", top: "48%", transform: `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`, transformOrigin: "center center", zIndex: 3 };
 
   const cardMaxWidth = isZoomed ? "500px" : "340px";
@@ -538,7 +545,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
               <div style={logoStyle}>
                 {custom.logoUrl ? (
                   <img
-                    src={custom.logoUrl}
+                    src={productMediaUrl(custom.logoUrl)}
                     alt="Custom logo"
                     style={{
                       maxHeight: "30px",
@@ -584,7 +591,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                   style={{
                     display: "block",
                     fontFamily: resolveFontFamily(epNameTyped?.font || custom.font),
-                    fontSize: `calc(1.08rem * ${nameScale})`,
+                    fontSize: `calc(1.125rem * ${nameScale})`,
                     fontWeight: isNameBold ? 700 : 400,
                     fontStyle: isNameItalic ? "italic" : "normal",
                     letterSpacing: "-0.015em",
@@ -604,7 +611,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                   style={{
                     display: "block",
                     fontFamily: resolveFontFamily(epTitleTyped?.font || custom.font),
-                    fontSize: `calc(0.62rem * ${titleScale})`,
+                    fontSize: `calc(0.65rem * ${titleScale})`,
                     fontWeight: isTitleBold ? 700 : 400,
                     fontStyle: isTitleItalic ? "italic" : "normal",
                     letterSpacing: "0.08em",
@@ -621,14 +628,15 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
               {/* Extra Lines */}
               {activeExtras.map((line, idx) => {
                 const epExtra = ep[`extra-${idx}`] as { x?: number; y?: number; rotate?: number; size?: number; font?: "sans" | "serif" | "mono"; bold?: boolean; italic?: boolean } | undefined;
+                const hasExtraPos = epExtra?.x != null && epExtra?.y != null;
                 const extraRot = epExtra?.rotate || 0;
                 const extraScale = ((epExtra?.size || Math.round((custom.textSize || 14) * 0.75)) / 14);
                 const extraFont = resolveFontFamily(epExtra?.font || custom.font);
                 const isExtraBold = epExtra?.bold !== undefined ? epExtra.bold : Boolean(custom.bold);
                 const isExtraItalic = epExtra?.italic !== undefined ? epExtra.italic : Boolean(custom.italic);
-                const extraStyle: React.CSSProperties = epExtra
-                  ? { position: "absolute", left: `${epExtra.x}%`, top: `${epExtra.y}%`, transform: `translate(-50%, -50%) rotate(${extraRot}deg)`, zIndex: 3 }
-                  : { position: "absolute", left: "22px", bottom: `${22 + (numExtras - 1 - idx) * 15}px`, transform: `rotate(${extraRot}deg)`, zIndex: 3 };
+                const extraStyle: React.CSSProperties = hasExtraPos
+                  ? { position: "absolute", left: `${epExtra!.x}%`, top: `${epExtra!.y}%`, transform: `translate(-50%, -50%) rotate(${extraRot}deg)`, zIndex: 3 }
+                  : { position: "absolute", left: "22px", bottom: `${20 + (numExtras - 1 - idx) * 16}px`, transform: `rotate(${extraRot}deg)`, zIndex: 3 };
 
                 return (
                   <div key={idx} style={extraStyle}>
@@ -636,7 +644,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                       style={{
                         display: "block",
                         fontFamily: extraFont,
-                        fontSize: `calc(0.62rem * ${extraScale})`,
+                        fontSize: `calc(0.65rem * ${extraScale})`,
                         fontWeight: isExtraBold ? 700 : 400,
                         fontStyle: isExtraItalic ? "italic" : "normal",
                         letterSpacing: "0.08em",
@@ -655,15 +663,16 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
               {(custom.dividerLines || []).map((line, idx) => {
                 const dividerKey = `divider-${idx}`;
                 const dividerPos = ep[dividerKey];
+                const hasDivPos = dividerPos?.x != null && dividerPos?.y != null;
                 const divRot = dividerPos?.rotate || 0;
                 const isVert = line.orientation === "vertical";
                 const len = line.length || (isVert ? 60 : 100);
                 const isDashed = line.style === "dashed";
-                const divStyle: React.CSSProperties = dividerPos
+                const divStyle: React.CSSProperties = hasDivPos
                   ? {
                       position: "absolute",
-                      left: `${dividerPos.x}%`,
-                      top: `${dividerPos.y}%`,
+                      left: `${dividerPos!.x}%`,
+                      top: `${dividerPos!.y}%`,
                       transform: `translate(-50%, -50%) rotate(${divRot}deg)`,
                       zIndex: 3,
                     }
@@ -747,7 +756,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
               </div>
 
               {/* Back Footer: Oneinfo Logo & AriseStudio Branding (Omitted in Without Logo edition) */}
-              {custom.hasOneinfoLogo !== false && (
+              {custom.hasOneinfoLogo !== false && custom.brandingMode !== "without-logo" && (
                 <div
                   style={{
                     position: "absolute",

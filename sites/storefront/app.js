@@ -470,15 +470,17 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
       const logoRot = stLogo.rotate;
       const signRot = stSign.rotate;
-      const namePos = ep.name || custom.customPos;
       const nameRot = stName.rotate;
-      const titlePos = ep.title;
       const titleRot = stTitle.rotate;
-      const backQrPos = ep["back-qr"];
+      const logoPos = (ep.logo && ep.logo.x != null && ep.logo.y != null) ? ep.logo : null;
+      const signPos = (ep.sign && ep.sign.x != null && ep.sign.y != null) ? ep.sign : null;
+      const namePos = (ep.name && ep.name.x != null && ep.name.y != null) ? ep.name : ((custom.customPos && custom.customPos.x != null && custom.customPos.y != null) ? custom.customPos : null);
+      const titlePos = (ep.title && ep.title.x != null && ep.title.y != null) ? ep.title : null;
+      const backQrPos = (ep["back-qr"] && ep["back-qr"].x != null && ep["back-qr"].y != null) ? ep["back-qr"] : null;
       const qrRot = stQr.rotate;
 
-      const logoStyle = ep.logo ? `left:${ep.logo.x}%; top:${ep.logo.y}%; --scale:${logoScale}; --rot:${logoRot}deg;` : `--scale:${logoScale}; --rot:${logoRot}deg;`;
-      const signStyle = ep.sign ? `left:${ep.sign.x}%; top:${ep.sign.y}%; --scale:${iconScale}; --rot:${signRot}deg;` : `--scale:${iconScale}; --rot:${signRot}deg;`;
+      const logoStyle = logoPos ? `left:${logoPos.x}%; top:${logoPos.y}%; --scale:${logoScale}; --rot:${logoRot}deg;` : `--scale:${logoScale}; --rot:${logoRot}deg;`;
+      const signStyle = signPos ? `left:${signPos.x}%; top:${signPos.y}%; --scale:${iconScale}; --rot:${signRot}deg;` : `--scale:${iconScale}; --rot:${signRot}deg;`;
 
       let nameStyle = namePos ? `left:${namePos.x}%; top:${namePos.y}%; --rot:${nameRot}deg;` : `--rot:${nameRot}deg;`;
       if (!namePos) {
@@ -498,13 +500,13 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         }
       }
 
-      const logoPosClass = ep.logo ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
-      const signPosClass = ep.sign ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
+      const logoPosClass = logoPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
+      const signPosClass = signPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
       const namePosClass = namePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
       const titlePosClass = titlePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
 
-      const isLogoNearTop = !ep.logo || ep.logo.y < 24;
-      const isSignNearTop = !ep.sign || ep.sign.y < 24;
+      const isLogoNearTop = !logoPos || logoPos.y < 24;
+      const isSignNearTop = !signPos || signPos.y < 24;
       const isNameNearTop = namePos ? namePos.y < 24 : custom.layout === "reverse";
       const isTitleNearTop = titlePos ? titlePos.y < 24 : false;
 
@@ -1332,7 +1334,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         logoEl.style.setProperty("--scale", logoScale);
         logoEl.style.setProperty("--rot", `${logoRot}deg`);
         ensureRotateHandle(logoEl, "logo");
-        if (ep.logo) {
+        if (ep.logo && ep.logo.x != null && ep.logo.y != null) {
           logoEl.className = "card-drag-item card-element-logo pos-custom";
           logoEl.style.left = `${ep.logo.x}%`;
           logoEl.style.top = `${ep.logo.y}%`;
@@ -1355,7 +1357,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         nfcEl.style.setProperty("--rot", `${signRot}deg`);
         nfcEl.style.color = custom.accentColor;
         ensureRotateHandle(nfcEl, "sign");
-        if (ep.sign) {
+        if (ep.sign && ep.sign.x != null && ep.sign.y != null) {
           nfcEl.className = "card-drag-item card-element-nfc pos-custom";
           nfcEl.style.left = `${ep.sign.x}%`;
           nfcEl.style.top = `${ep.sign.y}%`;
@@ -1374,7 +1376,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const numExtras = activeExtras.length;
 
       if (nameBox) {
-        const namePos = ep.name || custom.customPos;
+        const namePos = (ep.name && ep.name.x != null && ep.name.y != null) ? ep.name : ((custom.customPos && custom.customPos.x != null && custom.customPos.y != null) ? custom.customPos : null);
         const nameRot = stName.rotate || 0;
         nameBox.style.setProperty("--rot", `${nameRot}deg`);
         ensureRotateHandle(nameBox, "name");
@@ -1389,7 +1391,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           nameBox.className = `card-drag-item card-element-name pos-${custom.layout || 'left'} font-${stName.font || 'sans'}`;
           nameBox.style.left = "";
           nameBox.style.top = custom.layout === "reverse" ? "20px" : "";
-          nameBox.style.bottom = custom.layout === "reverse" ? "auto" : `${42 + numExtras * 16}px`;
+          nameBox.style.bottom = custom.layout === "reverse" ? "auto" : `${48 + numExtras * 18}px`;
           nameBox.style.right = "";
           nameBox.style.transform = `rotate(${nameRot}deg)`;
         }
@@ -1422,7 +1424,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       titleBox.style.setProperty("--rot", `${titleRot}deg`);
       ensureRotateHandle(titleBox, "title");
       const titleEl = titleBox.querySelector(".card-custom-title");
-      const titlePos = ep.title;
+      const titlePos = (ep.title && ep.title.x != null && ep.title.y != null) ? ep.title : null;
       if (titlePos) {
         titleBox.className = `card-drag-item card-element-title pos-custom font-${stTitle.font || 'sans'}`;
         titleBox.style.left = `${titlePos.x}%`;
@@ -1433,8 +1435,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       } else {
         titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${stTitle.font || 'sans'}`;
         titleBox.style.left = "";
-        titleBox.style.top = custom.layout === "reverse" ? "44px" : "";
-        titleBox.style.bottom = custom.layout === "reverse" ? "auto" : `${22 + numExtras * 16}px`;
+        titleBox.style.top = custom.layout === "reverse" ? "46px" : "";
+        titleBox.style.bottom = custom.layout === "reverse" ? "auto" : `${20 + numExtras * 18}px`;
         titleBox.style.right = "";
         titleBox.style.transform = `rotate(${titleRot}deg)`;
       }
@@ -1558,7 +1560,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         qrCenter.style.setProperty("--scale", qrScale);
         qrCenter.style.setProperty("--rot", `${qrRot}deg`);
         ensureRotateHandle(qrCenter, "back-qr");
-        if (backQrPos) {
+        if (backQrPos && backQrPos.x != null && backQrPos.y != null) {
           qrCenter.className = "card-drag-item card-back-center-qr pos-custom";
           qrCenter.style.left = `${backQrPos.x}%`;
           qrCenter.style.top = `${backQrPos.y}%`;
@@ -1892,8 +1894,6 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
         current.elementPositions[targetKey] = {
-          x: 50,
-          y: 50,
           rotate: st.rotate,
           size: st.size,
           font: st.font,
@@ -1924,9 +1924,12 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, font: fontVal };
+        current.elementPositions[targetKey] = { rotate: 0, font: fontVal };
       } else {
         current.elementPositions[targetKey].font = fontVal;
+      }
+      if (targetKey === "name") {
+        current.font = fontVal;
       }
       productCustomizations.set(productId, current);
       syncCustomCardPreview(productId);
@@ -1947,9 +1950,12 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       let newSize = Math.max(minVal, Math.min(maxVal, st.size + delta));
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: st.rotate, size: newSize, font: st.font };
+        current.elementPositions[targetKey] = { rotate: st.rotate, size: newSize, font: st.font, bold: st.bold, italic: st.italic };
       } else {
         current.elementPositions[targetKey].size = newSize;
+      }
+      if (targetKey === "name") {
+        current.textSize = newSize;
       }
       productCustomizations.set(productId, current);
       syncCustomCardPreview(productId);
@@ -2126,7 +2132,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       let newRot = Math.round((oldRot + delta) % 360);
       if (newRot < 0) newRot += 360;
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: newRot };
+        current.elementPositions[targetKey] = { rotate: newRot };
       } else {
         current.elementPositions[targetKey].rotate = newRot;
       }
@@ -2173,7 +2179,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: rotVal };
+        current.elementPositions[targetKey] = { rotate: rotVal };
       } else {
         current.elementPositions[targetKey].rotate = rotVal;
       }
@@ -2200,7 +2206,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const oldRot = current.elementPositions[elKey]?.rotate || 0;
       const nextRot = (oldRot + 90) % 360;
       if (!current.elementPositions[elKey]) {
-        current.elementPositions[elKey] = { x: 50, y: 50, rotate: nextRot };
+        current.elementPositions[elKey] = { rotate: nextRot };
       } else {
         current.elementPositions[elKey].rotate = nextRot;
       }
@@ -2387,24 +2393,27 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           button.textContent = "Add to cart";
           return;
         }
+        const stName = getElementStyle(draft, "name");
         customization = {
           name: draft.name.trim(),
           title: (draft.title || "").trim(),
           extraLines: (draft.extraLines || []).map(l => (l || "").trim()).filter(Boolean),
-          textSize: draft.textSize || 14,
+          textSize: stName.size || draft.textSize || 14,
           logoSize: draft.logoSize || 100,
           iconSize: draft.iconSize || 100,
           qrSize: draft.qrSize || 100,
           dividerLines: (draft.dividerLines || []),
           brandingMode: draft.brandingMode || "with-logo",
           hasOneinfoLogo: hasLogo,
+          bold: stName.bold,
+          italic: stName.italic,
+          font: stName.font || draft.font || "sans",
           ...(draft.customPos ? { customPos: draft.customPos } : {}),
           ...(draft.elementPositions && Object.keys(draft.elementPositions).length ? { elementPositions: draft.elementPositions } : {}),
           layout: draft.layout || "left",
           surfaceMotif: draft.surfaceMotif || "facets",
           surfaceColor: draft.surfaceColor || "#0a0b0d",
           accentColor: draft.accentColor || "#d8b26e",
-          font: draft.font || "sans",
           finish: draft.finish || "matte",
           backQrStyle: draft.backQrStyle || "minimal",
           backSubtitle: (draft.backSubtitle || "").trim(),
@@ -2435,7 +2444,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, font: fontVal };
+        current.elementPositions[targetKey] = { rotate: 0, font: fontVal };
       } else {
         current.elementPositions[targetKey].font = fontVal;
       }
@@ -2461,9 +2470,12 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, size: clamped };
+        current.elementPositions[targetKey] = { rotate: 0, size: clamped };
       } else {
         current.elementPositions[targetKey].size = clamped;
+      }
+      if (targetKey === "name") {
+        current.textSize = clamped;
       }
       productCustomizations.set(productId, current);
       syncCustomCardPreview(productId);
@@ -2481,7 +2493,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: val };
+        current.elementPositions[targetKey] = { rotate: val };
       } else {
         current.elementPositions[targetKey].rotate = val;
       }
@@ -2706,7 +2718,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[targetKey]) {
-        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, font: fontVal };
+        current.elementPositions[targetKey] = { rotate: 0, font: fontVal };
       } else {
         current.elementPositions[targetKey].font = fontVal;
       }
@@ -2829,7 +2841,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[elKey]) {
-        current.elementPositions[elKey] = { x: 50, y: 50, rotate: angle };
+        current.elementPositions[elKey] = { rotate: angle };
       } else {
         current.elementPositions[elKey].rotate = angle;
       }
@@ -2878,8 +2890,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
     const current = productCustomizations.get(productId) ?? defaultCustomization("01");
     if (!current.elementPositions) current.elementPositions = {};
-    const existingRot = current.elementPositions[elKey]?.rotate || 0;
-    current.elementPositions[elKey] = { x: xPercent, y: yPercent, rotate: existingRot };
+    const existing = current.elementPositions[elKey] || {};
+    current.elementPositions[elKey] = { ...existing, x: xPercent, y: yPercent, rotate: existing.rotate || 0 };
     productCustomizations.set(productId, current);
   });
 
@@ -2898,7 +2910,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         const current = productCustomizations.get(productId) ?? defaultCustomization("01");
         if (!current.elementPositions) current.elementPositions = {};
         if (!current.elementPositions[elKey]) {
-          current.elementPositions[elKey] = { x: 50, y: 50, rotate: nextAngle };
+          current.elementPositions[elKey] = { rotate: nextAngle };
         } else {
           current.elementPositions[elKey].rotate = nextAngle;
         }
@@ -3010,7 +3022,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       if (!current.elementPositions) current.elementPositions = {};
       if (!current.elementPositions[elKey]) {
-        current.elementPositions[elKey] = { x: 50, y: 50, rotate: angle };
+        current.elementPositions[elKey] = { rotate: angle };
       } else {
         current.elementPositions[elKey].rotate = angle;
       }
@@ -3060,8 +3072,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
     const current = productCustomizations.get(productId) ?? defaultCustomization("01");
     if (!current.elementPositions) current.elementPositions = {};
-    const existingRot = current.elementPositions[elKey]?.rotate || 0;
-    current.elementPositions[elKey] = { x: xPercent, y: yPercent, rotate: existingRot };
+    const existing = current.elementPositions[elKey] || {};
+    current.elementPositions[elKey] = { ...existing, x: xPercent, y: yPercent, rotate: existing.rotate || 0 };
     productCustomizations.set(productId, current);
   }, { passive: true });
 
@@ -3080,7 +3092,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         const current = productCustomizations.get(productId) ?? defaultCustomization("01");
         if (!current.elementPositions) current.elementPositions = {};
         if (!current.elementPositions[elKey]) {
-          current.elementPositions[elKey] = { x: 50, y: 50, rotate: nextAngle };
+          current.elementPositions[elKey] = { rotate: nextAngle };
         } else {
           current.elementPositions[elKey].rotate = nextAngle;
         }
