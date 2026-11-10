@@ -19,7 +19,7 @@ import { CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 type View = "orders" | "custom-orders" | "tracking" | "products" | "reviews" | "overview" | "profiles" | "cards" | "assigned" | "batches" | "stations" | "audit" | "production" | "companies";
 const nav: { id: View; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "◫" }, { id: "products", label: "Products", icon: "▣" },
-  { id: "orders", label: "Orders", icon: "≡" }, { id: "custom-orders", label: "Custom orders", icon: "✦" }, { id: "tracking", label: "Card pipeline", icon: "→" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
+  { id: "orders", label: "Orders", icon: "≡" }, { id: "tracking", label: "Card pipeline", icon: "→" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
   { id: "cards", label: "Cards & inventory", icon: "▱" }, { id: "assigned", label: "Assigned cards", icon: "◎" }, { id: "batches", label: "Production batches", icon: "▦" },
   { id: "production", label: "NFC & QR operations", icon: "⌁" }, { id: "stations", label: "Stations", icon: "⌂" },
   { id: "audit", label: "Audit history", icon: "≡" },
@@ -27,7 +27,7 @@ const nav: { id: View; label: string; icon: string }[] = [
 ];
 const currentView = () => nav.find(item => item.id === window.location.hash.slice(1))?.id ?? "overview";
 const navGroups: { label: string; pages: View[] }[] = [
-  { label: "Workspace", pages: ["overview", "orders", "custom-orders", "tracking", "products", "reviews"] },
+  { label: "Workspace", pages: ["overview", "orders", "tracking", "products", "reviews"] },
   { label: "Production", pages: ["cards", "assigned", "batches", "production", "stations"] },
   { label: "People & activity", pages: ["profiles", "companies", "audit"] },
 ];
