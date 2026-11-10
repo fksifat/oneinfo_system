@@ -1,8 +1,9 @@
 import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
-import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg } from "./catalog.js";
+import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
+import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
 (function () {
   "use strict";
@@ -256,33 +257,79 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       const motifClass = isCustomizable ? `motif-${escapeHtml(custom.surfaceMotif || 'facets')}` : "";
       const luminanceClass = isLight ? "is-light-surface light-card" : "dark-card";
 
-      const illustration = `<div class="mini-product-card ${v.appearance}-card ${isCustomizable ? `customizable-card ${layoutClass} ${motifClass} ${luminanceClass}` : ""}" style="background:${surfaceBg}; --card-accent:${cardAccent};">
-        ${isCustomizable ? renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor) : ""}
-        ${isCustomizable && custom.layout === "column" ? `<div class="card-side-column-bar" aria-hidden="true"></div>` : ""}
-        ${isCustomizable && custom.layout === "header" ? `<div class="card-header-banner" aria-hidden="true"></div>` : ""}
+      const frontIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${layoutClass} ${motifClass} ${luminanceClass} card-view-front" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="front">
+        ${renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor)}
+        ${custom.layout === "column" ? `<div class="card-side-column-bar" aria-hidden="true"></div>` : ""}
+        ${custom.layout === "header" ? `<div class="card-header-banner" aria-hidden="true"></div>` : ""}
         <div class="card-header-row">
           <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
-          <span class="card-nfc-wave" aria-hidden="true" style="color:${isCustomizable ? escapeHtml(custom.accentColor) : 'currentColor'};">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M8.5 16.5a5 5 0 0 1 0-7"/><path d="M12 19a8.5 8.5 0 0 1 0-14"/><path d="M15.5 21.5a12 12 0 0 1 0-19"/></svg>
+          <span class="card-nfc-wave" aria-hidden="true" style="color:${escapeHtml(custom.accentColor)};">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
           </span>
         </div>
-        ${isCustomizable ? `
-          <div class="card-custom-text pos-${escapeHtml(custom.layout || custom.position || 'left')} font-${escapeHtml(custom.font)}">
-            <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}">${escapeHtml(custom.name || "Your Name")}</strong>
-            <span class="card-custom-title ${!custom.title ? "is-placeholder" : ""}" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.title || "Your Title / Role")}</span>
-          </div>
-        ` : `<strong>${escapeHtml(p.name)}</strong>`}
-      </div>`;
-      return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
-        ${detail ? `<div class="product-gallery">` : ""}<div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
-          <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
-          ${illustration}${imageUrl ? `<img class="catalog-image" draggable="false" src="${escapeHtml(imageSource(imageUrl))}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
-          ${detail && item?.type === "video" ? (drivePreview ? `<iframe class="gallery-video" src="${escapeHtml(drivePreview)}" title="${escapeHtml(item.label || p.name + ' video')}" allowfullscreen referrerpolicy="no-referrer"></iframe>` : `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(imageSource(item.poster))}"` : ""} src="${escapeHtml(mediaUrl(item.url))}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>`) : ""}
-          ${detail && media.length ? `<p class="gallery-error" role="status" hidden>Media could not load. Choose another item or check the URL.</p>` : ""}
-
+        <div class="card-custom-text pos-${escapeHtml(custom.layout || custom.position || 'left')} font-${escapeHtml(custom.font)}">
+          <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}">${escapeHtml(custom.name || "Your Name")}</strong>
+          <span class="card-custom-title ${!custom.title ? "is-placeholder" : ""}" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.title || "Your Title / Role")}</span>
         </div>
-        ${thumbnails.length ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(imageSource(m.url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<span>${icon("play")}</span>`}</button>`).join("")}</div>` : ""}
-        ${model ? `<section class="gallery-model-card" aria-label="Interactive 3D view">
+      </div>`;
+
+      const backIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${luminanceClass} card-view-back" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="back">
+        ${renderBackMotifSvg(custom.surfaceMotif, custom.accentColor)}
+        <div class="card-back-center-qr">
+          <div class="card-qr-wrap ${escapeHtml(custom.backQrStyle || 'minimal')}">
+            ${renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal')}
+          </div>
+        </div>
+        <div class="card-back-footer">
+          <img class="mini-product-logo card-back-oneinfo-logo" src="${logoUrl}" alt="Oneinfo logo" />
+          ${renderAriseLogoSvg()}
+        </div>
+      </div>`;
+
+      const standardIllustration = `<div class="mini-product-card ${v.appearance}-card" style="background:${surfaceBg};">
+        <div class="card-header-row">
+          <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
+          <span class="card-nfc-wave" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
+          </span>
+        </div>
+        <strong>${escapeHtml(p.name)}</strong>
+      </div>`;
+
+      return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
+        ${detail ? `<div class="product-gallery">` : ""}
+        ${isCustomizable ? `
+          <div class="product-art custom-stage-unified ${p.featured ? 'has-badge' : ''}">
+            <div class="product-badges">
+              ${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}
+            </div>
+
+            <div class="custom-card-face-block">
+              <div class="custom-face-label-row">
+                <span class="custom-face-tag">Front Face</span>
+              </div>
+              ${frontIllustration}
+            </div>
+
+            <div class="custom-card-face-divider" aria-hidden="true"></div>
+
+            <div class="custom-card-face-block">
+              <div class="custom-face-label-row">
+                <span class="custom-face-tag">Back Face</span>
+              </div>
+              ${backIllustration}
+            </div>
+          </div>
+        ` : `
+          <div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
+            <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
+            ${standardIllustration}${imageUrl ? `<img class="catalog-image" draggable="false" src="${escapeHtml(imageSource(imageUrl))}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
+            ${detail && item?.type === "video" ? (drivePreview ? `<iframe class="gallery-video" src="${escapeHtml(drivePreview)}" title="${escapeHtml(item.label || p.name + ' video')}" allowfullscreen referrerpolicy="no-referrer"></iframe>` : `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(imageSource(item.poster))}"` : ""} src="${escapeHtml(mediaUrl(item.url))}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>`) : ""}
+            ${detail && media.length ? `<p class="gallery-error" role="status" hidden>Media could not load. Choose another item or check the URL.</p>` : ""}
+          </div>
+        `}
+        ${thumbnails.length && !isCustomizable ? `<div class="gallery-items" role="group" aria-label="Product media">${thumbnails.map(({variant,media:m,index:i}) => `<button class="gallery-item ${variant.id === v.id ? "selected-colour" : ""}" type="button" data-media="${i}" data-media-variant="${escapeHtml(variant.id)}" aria-pressed="${variant.id === v.id && active === i}" aria-label="${escapeHtml(variant.name + ' — ' + (m.label || (m.type === 'video' ? 'Video' : 'Image') + ' ' + (i+1)))}">${m.type === 'image' ? `<img src="${escapeHtml(imageSource(m.url))}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : `<span>${icon("play")}</span>`}</button>`).join("")}</div>` : ""}
+        ${model && !isCustomizable ? `<section class="gallery-model-card" aria-label="Interactive 3D view">
           <header><h2>3D View</h2><span>${escapeHtml(model.variant.name)}</span></header>
           <div class="gallery-model-stage" data-appearance="${escapeHtml(model.variant.appearance)}">
             <model-viewer class="gallery-model" src="${escapeHtml(modelSource(model.media.url))}" alt="${escapeHtml(p.name + " — " + model.variant.name + " 3D model")}" camera-controls camera-orbit="0deg 85deg 105%" interaction-prompt="none" touch-action="none" min-camera-orbit="auto 0deg auto" max-camera-orbit="auto 180deg auto" disable-pan></model-viewer>
@@ -293,7 +340,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
         </section>` : ""}
         ${detail ? `</div><div class="product-details-copy">` : ""}
         <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((v.priceMinor - variantPrice(v)) / 100)}</span>` : ''}</div></div>
-        <div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>
+        ${!isCustomizable ? `<div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>` : ""}
         ${detail && p.customizable ? `
         <section class="card-customizer-studio" data-product-id="${escapeHtml(p.id)}" aria-label="Card personalization">
           <div class="customizer-header">
@@ -420,6 +467,21 @@ import logoUrl from "./assets/oneinfo-logo.svg";
                 <button type="button" class="customizer-pill ${custom.font === 'sans' ? 'is-selected' : ''}" data-custom-set="font" data-value="sans" aria-checked="${custom.font === 'sans'}" role="radio"><span class="font-sample" style="font-family: inherit; font-weight: 700;">Aa</span> Modern Sans</button>
                 <button type="button" class="customizer-pill ${custom.font === 'serif' ? 'is-selected' : ''}" data-custom-set="font" data-value="serif" aria-checked="${custom.font === 'serif'}" role="radio"><span class="font-sample" style="font-family: Georgia, serif; font-style: italic; font-weight: 700;">Aa</span> Luxury Serif</button>
                 <button type="button" class="customizer-pill ${custom.font === 'mono' ? 'is-selected' : ''}" data-custom-set="font" data-value="mono" aria-checked="${custom.font === 'mono'}" role="radio"><span class="font-sample" style="font-family: monospace; font-weight: 700;">Aa</span> Minimal Mono</button>
+              </div>
+            </div>
+
+            <div class="customizer-section customizer-back-section">
+              <div class="customizer-section-title">
+                <span>7. Back Side Configuration (NFC & QR)</span>
+                <small>Reverse face details</small>
+              </div>
+              <div class="back-qr-style-group" style="margin-top: 6px;">
+                <span class="customizer-sublabel" style="display:block; font-size:0.78rem; font-weight:600; color:var(--ink, #121316); margin-bottom:6px;">QR Inlay Style</span>
+                <div class="customizer-pills" role="radiogroup" aria-label="QR Frame Style">
+                  <button type="button" class="customizer-pill ${custom.backQrStyle === 'minimal' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="minimal" role="radio" aria-checked="${custom.backQrStyle === 'minimal'}"><span class="pill-dot"></span> Clean Minimal (Official)</button>
+                  <button type="button" class="customizer-pill ${custom.backQrStyle === 'framed' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="framed" role="radio" aria-checked="${custom.backQrStyle === 'framed'}"><span class="pill-dot"></span> Foil Framed</button>
+                  <button type="button" class="customizer-pill ${custom.backQrStyle === 'badge' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="badge" role="radio" aria-checked="${custom.backQrStyle === 'badge'}"><span class="pill-dot"></span> Dashed Badge</button>
+                </div>
               </div>
             </div>
           </div>
@@ -666,65 +728,100 @@ import logoUrl from "./assets/oneinfo-logo.svg";
   $("#catalog-retry").addEventListener("click", () => void loadProducts());
 
   function syncCustomCardPreview(productId) {
-    const card = $("#product-detail .mini-product-card.customizable-card");
-    if (!card) return;
     const custom = productCustomizations.get(productId) ?? defaultCustomization("01");
     const light = isColorLight(custom.surfaceColor);
 
-    card.style.background = custom.surfaceColor;
-    card.style.setProperty("--card-accent", custom.accentColor);
-    card.classList.toggle("is-light-surface", light);
-    card.classList.toggle("light-card", light);
-    card.classList.toggle("dark-card", !light);
+    // 1. Update Front Card (Top)
+    const frontCard = $("#product-detail .card-view-front");
+    if (frontCard) {
+      frontCard.style.background = custom.surfaceColor;
+      frontCard.style.setProperty("--card-accent", custom.accentColor);
+      frontCard.classList.toggle("is-light-surface", light);
+      frontCard.classList.toggle("light-card", light);
+      frontCard.classList.toggle("dark-card", !light);
 
-    card.className = card.className
-      .replace(/\blayout-\S+/g, "")
-      .replace(/\bmotif-\S+/g, "")
-      .trim() + ` layout-${custom.layout || 'left'} motif-${custom.surfaceMotif || 'facets'}`;
+      frontCard.className = frontCard.className
+        .replace(/\blayout-\S+/g, "")
+        .replace(/\bmotif-\S+/g, "")
+        .trim() + ` layout-${custom.layout || 'left'} motif-${custom.surfaceMotif || 'facets'}`;
 
-    const existingMotif = card.querySelector(".card-surface-motif");
-    const nextMotifHtml = renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor);
-    if (existingMotif) {
-      if (nextMotifHtml) existingMotif.outerHTML = nextMotifHtml;
-      else existingMotif.remove();
-    } else if (nextMotifHtml) {
-      card.insertAdjacentHTML("afterbegin", nextMotifHtml);
+      const existingMotif = frontCard.querySelector(".card-surface-motif");
+      const nextMotifHtml = renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor);
+      if (existingMotif) {
+        if (nextMotifHtml) existingMotif.outerHTML = nextMotifHtml;
+        else existingMotif.remove();
+      } else if (nextMotifHtml) {
+        frontCard.insertAdjacentHTML("afterbegin", nextMotifHtml);
+      }
+
+      const colBar = frontCard.querySelector(".card-side-column-bar");
+      if (custom.layout === "column") {
+        if (!colBar) frontCard.insertAdjacentHTML("afterbegin", `<div class="card-side-column-bar" aria-hidden="true"></div>`);
+      } else if (colBar) {
+        colBar.remove();
+      }
+
+      const headerBanner = frontCard.querySelector(".card-header-banner");
+      if (custom.layout === "header") {
+        if (!headerBanner) frontCard.insertAdjacentHTML("afterbegin", `<div class="card-header-banner" aria-hidden="true"></div>`);
+      } else if (headerBanner) {
+        headerBanner.remove();
+      }
+
+      const nfcWave = frontCard.querySelector(".card-nfc-wave");
+      if (nfcWave) nfcWave.style.color = custom.accentColor;
+
+      const textEl = frontCard.querySelector(".card-custom-text");
+      if (textEl) {
+        textEl.className = textEl.className
+          .replace(/\bpos-\S+/g, "")
+          .replace(/\bfont-\S+/g, "")
+          .trim() + ` pos-${custom.layout || custom.position || 'left'} font-${custom.font || 'sans'}`;
+      }
+      const nameEl = frontCard.querySelector(".card-custom-name");
+      if (nameEl) {
+        nameEl.textContent = custom.name ? custom.name.trim() : "Your Name";
+        nameEl.classList.toggle("is-placeholder", !custom.name);
+      }
+      const titleEl = frontCard.querySelector(".card-custom-title");
+      if (titleEl) {
+        titleEl.textContent = custom.title ? custom.title.trim() : "Your Title / Role";
+        titleEl.classList.toggle("is-placeholder", !custom.title);
+        titleEl.style.color = custom.accentColor;
+      }
     }
 
-    const colBar = card.querySelector(".card-side-column-bar");
-    if (custom.layout === "column") {
-      if (!colBar) card.insertAdjacentHTML("afterbegin", `<div class="card-side-column-bar" aria-hidden="true"></div>`);
-    } else if (colBar) {
-      colBar.remove();
-    }
+    // 2. Update Back Card (Bottom)
+    const backCard = $("#product-detail .card-view-back");
+    if (backCard) {
+      backCard.style.background = custom.surfaceColor;
+      backCard.style.setProperty("--card-accent", custom.accentColor);
+      backCard.classList.toggle("is-light-surface", light);
+      backCard.classList.toggle("light-card", light);
+      backCard.classList.toggle("dark-card", !light);
 
-    const headerBanner = card.querySelector(".card-header-banner");
-    if (custom.layout === "header") {
-      if (!headerBanner) card.insertAdjacentHTML("afterbegin", `<div class="card-header-banner" aria-hidden="true"></div>`);
-    } else if (headerBanner) {
-      headerBanner.remove();
-    }
+      const existingBackMotif = backCard.querySelector(".card-surface-motif");
+      const nextBackMotifHtml = renderBackMotifSvg(custom.surfaceMotif, custom.accentColor);
+      if (existingBackMotif) {
+        if (nextBackMotifHtml) existingBackMotif.outerHTML = nextBackMotifHtml;
+        else existingBackMotif.remove();
+      } else if (nextBackMotifHtml) {
+        backCard.insertAdjacentHTML("afterbegin", nextBackMotifHtml);
+      }
 
-    const nfcWave = card.querySelector(".card-nfc-wave");
-    if (nfcWave) nfcWave.style.color = custom.accentColor;
+      const backWave = backCard.querySelector(".card-nfc-wave");
+      if (backWave) backWave.style.color = custom.accentColor;
 
-    const textEl = card.querySelector(".card-custom-text");
-    if (textEl) {
-      textEl.className = textEl.className
-        .replace(/\bpos-\S+/g, "")
-        .replace(/\bfont-\S+/g, "")
-        .trim() + ` pos-${custom.layout || custom.position || 'left'} font-${custom.font || 'sans'}`;
-    }
-    const nameEl = card.querySelector(".card-custom-name");
-    if (nameEl) {
-      nameEl.textContent = custom.name ? custom.name.trim() : "Your Name";
-      nameEl.classList.toggle("is-placeholder", !custom.name);
-    }
-    const titleEl = card.querySelector(".card-custom-title");
-    if (titleEl) {
-      titleEl.textContent = custom.title ? custom.title.trim() : "Your Title / Role";
-      titleEl.classList.toggle("is-placeholder", !custom.title);
-      titleEl.style.color = custom.accentColor;
+      const qrWrap = backCard.querySelector(".card-qr-wrap");
+      if (qrWrap) {
+        qrWrap.className = `card-qr-wrap ${custom.backQrStyle || 'minimal'}`;
+        qrWrap.innerHTML = renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal');
+      }
+
+      const subEl = backCard.querySelector(".card-back-subtitle");
+      if (subEl) {
+        subEl.remove();
+      }
     }
   }
 
@@ -905,6 +1002,8 @@ import logoUrl from "./assets/oneinfo-logo.svg";
           accentColor: draft.accentColor || "#d8b26e",
           font: draft.font || "sans",
           finish: draft.finish || "matte",
+          backQrStyle: draft.backQrStyle || "minimal",
+          backSubtitle: (draft.backSubtitle || "").trim(),
           ...(draft.presetId ? { presetId: draft.presetId } : {}),
           position: draft.layout || draft.position || "left",
         };
@@ -953,7 +1052,7 @@ import logoUrl from "./assets/oneinfo-logo.svg";
     productCustomizations.set(productId, current);
 
     if (field === "name") {
-      const nameEl = $("#product-detail .card-custom-name");
+      const nameEl = $("#product-detail .card-view-front .card-custom-name");
       const countEl = $(`#name-count-${productId}`);
       if (nameEl) {
         nameEl.textContent = input.value.trim() || "Your Name";
@@ -961,13 +1060,19 @@ import logoUrl from "./assets/oneinfo-logo.svg";
       }
       if (countEl) countEl.textContent = `${input.value.length}/50`;
     } else if (field === "title") {
-      const titleEl = $("#product-detail .card-custom-title");
+      const titleEl = $("#product-detail .card-view-front .card-custom-title");
       const countEl = $(`#title-count-${productId}`);
       if (titleEl) {
         titleEl.textContent = input.value.trim() || "Your Title / Role";
         titleEl.classList.toggle("is-placeholder", !input.value.trim());
       }
       if (countEl) countEl.textContent = `${input.value.length}/60`;
+    } else if (field === "backSubtitle") {
+      const backSubEl = $("#product-detail .card-view-back .card-back-subtitle");
+      const countEl = $(`#back-sub-count-${productId}`);
+      const val = input.value.trim() || "oneinfo.me";
+      if (backSubEl) backSubEl.textContent = val;
+      if (countEl) countEl.textContent = `${input.value.length}/80`;
     }
   });
   document.addEventListener("visibilitychange", () => { if (!document.hidden) void loadProducts(); });
