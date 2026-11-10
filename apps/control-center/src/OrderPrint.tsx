@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { StoreOrder } from "@oneinfo/contracts";
-import { loadPrintTemplate, printArtwork } from "./print-artwork.js";
+import { loadPrintTemplate, printArtwork, generateCustomCardBackSvg } from "./print-artwork.js";
 import { api } from "./api.js";
 
 type Prepared = { printed: false; finish: "light" | "dark"; imageData: string; publicSlug: string };
@@ -44,14 +44,25 @@ export function OrderPrint({ order, token, onChange, startCardId, initiallyOpen 
     if (!prepared) return;
     const controller = new AbortController();
     let url: string | undefined;
-    void loadPrintTemplate(prepared.finish, controller.signal).then(template => {
-      const svg = printArtwork(template, prepared.imageData);
-      if (controller.signal.aborted) return;
-      url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-      setArtwork(url);
-    }).catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not open the artwork."); });
+
+    if (slot?.line?.customization) {
+      try {
+        const svg = generateCustomCardBackSvg(slot.line.customization, prepared.imageData);
+        url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+        setArtwork(url);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not generate the custom card artwork.");
+      }
+    } else {
+      void loadPrintTemplate(prepared.finish, controller.signal).then(template => {
+        const svg = printArtwork(template, prepared.imageData);
+        if (controller.signal.aborted) return;
+        url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+        setArtwork(url);
+      }).catch(e => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Could not open the artwork."); });
+    }
     return () => { controller.abort(); if (url) URL.revokeObjectURL(url); };
-  }, [prepared]);
+  }, [prepared, slot]);
 
   async function run(action: "prepare" | "confirm") {
     if (!slot || busy) return;
@@ -92,7 +103,7 @@ export function OrderPrint({ order, token, onChange, startCardId, initiallyOpen 
         </> : step === "preview" && prepared ? <>
           {artwork ? <>
             <img className="order-print-preview" src={artwork} alt="Back of the ordered card with its unique QR code" />
-            <p>Check the design, then download the 92 × 61 mm SVG with bleed.</p>
+            <p>Check the design, then download the 94 × 63 mm SVG with bleed (86 × 55 mm finished card).</p>
             <a className="order-print-primary order-print-download" href={artwork} download={`oneinfo-${prepared.publicSlug}-back.svg`} onClick={() => { setStep("scan"); focusStep(); }}>Download card back</a>
           </> : error ? <button className="order-print-primary" type="button" disabled={busy} onClick={() => void run("prepare")}>Retry preview</button>
             : <p role="status">Loading the card design…</p>}

@@ -112,6 +112,17 @@ export function defaultCustomization(presetId = "01") {
     position: preset.layout,
     backQrStyle: "minimal",
     backSubtitle: "",
+    logoUrl: "",
+    logoPreviewUrl: "",
+    logoFileName: "",
+    extraLines: [],
+    textSize: 14,
+    logoSize: 100,
+    iconSize: 100,
+    qrSize: 100,
+    dividerLines: [],
+    customPos: null,
+    elementPositions: {},
     activeSide: "front",
   };
 }

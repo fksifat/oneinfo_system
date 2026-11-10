@@ -5,6 +5,7 @@ import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearc
 import { api } from "./api.js";
 import { OrderTrackingPipeline } from "./OrderTrackingPipeline.js";
 import { downloadOrderEps } from "./eps-generator.js";
+import { AdminCardPreview } from "./AdminCardPreview.js";
 
 const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
@@ -308,7 +309,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 transition: "all 0.15s ease",
               }}
             >
-              ✦ Custom orders ({customOrdersCount})
+              Custom orders ({customOrdersCount})
             </button>
           </div>
         </div>
@@ -470,50 +471,149 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                       <strong className="order-item-title">{item.name}</strong>
                       <span className="order-item-variant">{item.variantName}</span>
                       {item.customization && (
-                        <div className="order-item-custom-card-panel" style={{ marginTop: "8px", padding: "10px 14px", background: "rgba(201, 147, 62, 0.08)", border: "1px solid rgba(201, 147, 62, 0.28)", borderRadius: "8px" }}>
-                          <span className="order-item-customization" style={{ display: "block", fontSize: "0.82rem", color: "var(--accent, #c9933e)", lineHeight: 1.45 }}>
-                            ✦ <strong>Bespoke Edition</strong>: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""}
+                        <div className="order-item-custom-card-panel" style={{ marginTop: "10px", padding: "12px 14px", background: "rgba(201, 147, 62, 0.05)", border: "1px solid rgba(201, 147, 62, 0.28)", borderRadius: "10px" }}>
+                          {/* Visual Card Preview matching customer storefront personalization */}
+                          <AdminCardPreview custom={item.customization} customerName={order.customer.name} />
+
+                          <span className="order-item-customization" style={{ display: "block", fontSize: "0.82rem", color: "var(--accent, #c9933e)", lineHeight: 1.45, marginTop: "8px" }}>
+                            <strong>Bespoke Edition</strong>: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""}
+                            {item.customization.extraLines && item.customization.extraLines.length > 0 && (
+                              <span style={{ display: "block", marginTop: "3px", fontSize: "0.78rem", color: "var(--text-secondary, #d4d4d8)" }}>
+                                {item.customization.extraLines.map((line: string, idx: number) => (
+                                  <span key={idx} style={{ display: "inline-block", marginRight: "8px" }}>Line {idx + 3}: <strong>{line}</strong></span>
+                                ))}
+                              </span>
+                            )}
                             <br />
                             <small style={{ opacity: 0.9, color: "var(--text-secondary, #a1a1aa)" }}>
-                              Motif: <strong>{item.customization.surfaceMotif || "facets"}</strong> · Layout: <strong>{String(item.customization.layout || item.customization.position || "left").replace("-", " ")}</strong> · Foil: <strong>{item.customization.accentColor || "#d4af37"}</strong> · Font: <strong>{item.customization.font || "sans"}</strong>{item.customization.backSubtitle ? ` · Back: "${item.customization.backSubtitle}"` : ""}
+                              Motif: <strong>{item.customization.surfaceMotif || "facets"}</strong> · Layout: <strong>{String(item.customization.layout || item.customization.position || "left").replace("-", " ")}</strong> · Foil: <strong>{item.customization.accentColor || "#d4af37"}</strong> · Font: <strong>{item.customization.font || "sans"}</strong>{item.customization.textSize && item.customization.textSize !== 14 ? ` · Size: ${item.customization.textSize}pt` : ""}{item.customization.backSubtitle ? ` · Back: "${item.customization.backSubtitle}"` : ""}
                             </small>
+                            {item.customization.logoUrl && (
+                              <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "0.78rem", color: "var(--text-secondary, #a1a1aa)" }}>Custom Logo:</span>
+                                <img
+                                  src={item.customization.logoUrl}
+                                  alt="Customer logo"
+                                  style={{ maxHeight: "24px", maxWidth: "64px", objectFit: "contain", background: "rgba(255,255,255,0.08)", borderRadius: "4px", padding: "2px" }}
+                                />
+                                <a
+                                  href={item.customization.logoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ fontSize: "0.76rem", color: "var(--accent, #c9933e)", textDecoration: "underline" }}
+                                >
+                                  View logo
+                                </a>
+                                {item.customization.companyName && (
+                                  <span style={{ fontSize: "0.76rem", color: "var(--text-secondary, #a1a1aa)" }}>({item.customization.companyName})</span>
+                                )}
+                              </div>
+                            )}
                           </span>
-                          <button
-                            type="button"
-                            className="button-download-eps"
-                            title={`Download production vector EPS (${(order.transactionId || order.invoiceNumber || order.id || "card").trim().replace(/[^a-zA-Z0-9_-]/g, "_")}.eps)`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              downloadOrderEps(item.customization!, {
-                                id: order.id,
-                                transactionId: order.transactionId,
-                                invoiceNumber: order.invoiceNumber,
-                                customerName: order.customer.name,
-                              });
-                            }}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              marginTop: "8px",
-                              padding: "6px 12px",
-                              fontSize: "0.78rem",
-                              fontWeight: 600,
-                              background: "#090d16",
-                              color: "#f59e0b",
-                              border: "1px solid #d97706",
-                              borderRadius: "6px",
-                              cursor: "pointer",
-                              transition: "all 0.15s ease",
-                            }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                              <polyline points="7 10 12 15 17 10" />
-                              <line x1="12" y1="15" x2="12" y2="3" />
-                            </svg>
-                            <span>Download Vector EPS ({order.transactionId ? `${order.transactionId}.eps` : `${order.invoiceNumber || order.id}.eps`})</span>
-                          </button>
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginTop: "10px" }}>
+                            <button
+                              type="button"
+                              className="button-download-eps"
+                              title="Download Front Vector EPS (94×63 mm canvas with 4mm bleed around 86×55 mm cut)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOrderEps(item.customization!, {
+                                  id: order.id,
+                                  transactionId: order.transactionId,
+                                  invoiceNumber: order.invoiceNumber,
+                                  customerName: order.customer.name,
+                                }, "front");
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "6px 12px",
+                                fontSize: "0.78rem",
+                                fontWeight: 600,
+                                background: "#090d16",
+                                color: "#f59e0b",
+                                border: "1px solid #d97706",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              <span>Front EPS (94×63 mm)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="button-download-eps"
+                              title="Download Back Vector EPS (94×63 mm canvas with 4mm bleed around 86×55 mm cut)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOrderEps(item.customization!, {
+                                  id: order.id,
+                                  transactionId: order.transactionId,
+                                  invoiceNumber: order.invoiceNumber,
+                                  customerName: order.customer.name,
+                                }, "back");
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "6px 12px",
+                                fontSize: "0.78rem",
+                                fontWeight: 600,
+                                background: "#090d16",
+                                color: "#f59e0b",
+                                border: "1px solid #d97706",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              <span>Back EPS (94×63 mm)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="button-download-eps-all"
+                              title="Download both Front and Back production EPS files (94×63 mm each)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOrderEps(item.customization!, {
+                                  id: order.id,
+                                  transactionId: order.transactionId,
+                                  invoiceNumber: order.invoiceNumber,
+                                  customerName: order.customer.name,
+                                }, "both");
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "6px 10px",
+                                fontSize: "0.74rem",
+                                fontWeight: 500,
+                                background: "rgba(217, 119, 6, 0.12)",
+                                color: "#fbbf24",
+                                border: "1px dashed #d97706",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <span>Both (Front + Back)</span>
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>

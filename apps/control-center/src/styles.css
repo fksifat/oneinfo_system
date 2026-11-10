@@ -73,7 +73,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .auth-card small { color: var(--text-caption); max-width: 500px; }
 .auth-visual { background: var(--ink-surface); display: grid; place-items: center; overflow: hidden; position: relative; }
 .auth-visual::before { content: ""; position: absolute; width: 680px; height: 680px; border: 1px solid rgba(185,245,106,.18); border-radius: 50%; box-shadow: 0 0 0 85px rgba(185,245,106,.025), 0 0 0 170px rgba(185,245,106,.018); }
-.auth-card-art { position: relative; z-index: 2; width: min(510px, 75%); aspect-ratio: 1.585; padding: 34px; border-radius: 24px; color: white; background: linear-gradient(135deg, #071c29, #24566a); box-shadow: 0 50px 100px rgba(0,0,0,.35); transform: rotate(-8deg); display: flex; flex-direction: column; }
+.auth-card-art { position: relative; z-index: 2; width: min(510px, 75%); aspect-ratio: 86 / 55; padding: 34px; border-radius: 24px; color: white; background: linear-gradient(135deg, #071c29, #24566a); box-shadow: 0 50px 100px rgba(0,0,0,.35); transform: rotate(-8deg); display: flex; flex-direction: column; }
 .auth-card-art span { font-size: .75rem; letter-spacing: .15em; font-weight: 900; }
 .auth-card-art strong { margin: auto 0; font-size: clamp(2.2rem, 4vw, 4rem); line-height: .95; }
 .auth-card-art small { letter-spacing: .12em; opacity: .65; }
