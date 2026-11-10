@@ -37,6 +37,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
   const selectedModels = new Map();
   const productCustomizations = new Map();
   let activeStudioTab = "details";
+  let selectedElementId = "name";
   const quantities = new Map();
   let addingToCart = false;
   let catalogReady = false;
@@ -228,6 +229,192 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     });
   }
 
+  function getElementStyle(custom, elKey) {
+    if (!custom) return { font: "sans", size: 14, rotate: 0, bold: false, italic: false };
+    const ep = custom.elementPositions || {};
+    const pos = ep[elKey] || (elKey === "name" ? custom.customPos : null) || {};
+    const defaultTextSize = custom.textSize || 14;
+    let size = pos.size;
+    let font = pos.font || custom.font || "sans";
+    let rotate = Number(pos.rotate !== undefined ? pos.rotate : (elKey === "name" ? (custom.customPos?.rotate || 0) : 0)) || 0;
+    let bold = pos.bold !== undefined ? Boolean(pos.bold) : (elKey === "name" ? (custom.bold !== undefined ? custom.bold : true) : Boolean(custom.bold));
+    let italic = pos.italic !== undefined ? Boolean(pos.italic) : Boolean(custom.italic);
+
+    if (size === undefined || size === null) {
+      if (elKey === "name") size = defaultTextSize;
+      else if (elKey === "title") size = Math.max(8, Math.round(defaultTextSize * 0.75));
+      else if (elKey.startsWith("extra-")) size = Math.max(8, Math.round(defaultTextSize * 0.75));
+      else if (elKey === "logo") size = custom.logoSize || 100;
+      else if (elKey === "sign") size = custom.iconSize || 100;
+      else if (elKey === "back-qr") size = custom.qrSize || 100;
+      else size = 100;
+    }
+
+    return { font, size: Number(size), rotate, bold, italic, x: pos.x, y: pos.y };
+  }
+
+  function renderQuickInspectorMarkup(productId) {
+    const custom = productCustomizations.get(productId) ?? defaultCustomization("01");
+    const elKey = selectedElementId;
+    if (!elKey) {
+      return `
+        <div class="card-quick-inspector is-idle" data-product-id="${escapeHtml(productId)}">
+          <span class="quick-inspector-hint">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 15l6 6m-11-4a7 7 0 110-14 7 7 0 010 14z"/></svg>
+            Click any element on the card to adjust size, font & angle
+          </span>
+        </div>
+      `;
+    }
+
+    const st = getElementStyle(custom, elKey);
+    let title = "Name";
+    let isText = false;
+    let isLogo = false;
+    let isSign = false;
+    let isDivider = false;
+    let isQr = false;
+    let dividerIdx = 0;
+
+    if (elKey === "name") {
+      title = "Name";
+      isText = true;
+    } else if (elKey === "title") {
+      title = "Title";
+      isText = true;
+    } else if (elKey.startsWith("extra-")) {
+      dividerIdx = parseInt(elKey.replace("extra-", ""), 10);
+      title = `Line ${dividerIdx + 3}`;
+      isText = true;
+    } else if (elKey === "logo") {
+      title = "Logo";
+      isLogo = true;
+    } else if (elKey === "sign") {
+      title = "NFC Wave";
+      isSign = true;
+    } else if (elKey.startsWith("divider-")) {
+      dividerIdx = parseInt(elKey.replace("divider-", ""), 10);
+      title = `Line ${dividerIdx + 1}`;
+      isDivider = true;
+    } else if (elKey === "back-qr") {
+      title = "QR Code";
+      isQr = true;
+    }
+
+    return `
+      <div class="card-quick-inspector is-active compact-prop-row" data-inspector-element="${escapeHtml(elKey)}" data-product-id="${escapeHtml(productId)}">
+        <div class="inspector-badge">
+          <span class="inspector-badge-dot"></span>
+          <strong>${escapeHtml(title)}</strong>
+        </div>
+
+        <div class="inspector-divider"></div>
+
+        ${isText ? `
+          <div class="inspector-font-select-wrap">
+            <select class="inspector-font-select" data-custom-font-select="${escapeHtml(elKey)}" aria-label="Font family">
+              <option value="sans" ${st.font === "sans" ? "selected" : ""}>Sans</option>
+              <option value="serif" ${st.font === "serif" ? "selected" : ""}>Serif</option>
+              <option value="mono" ${st.font === "mono" ? "selected" : ""}>Mono</option>
+            </select>
+            <svg class="select-chevron" viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+
+          <div class="inspector-style-group" role="group" aria-label="Text formatting">
+            <button type="button" class="inspector-style-btn ${st.bold ? 'is-active' : ''}" data-custom-toggle-style="bold" data-target-element="${escapeHtml(elKey)}" title="Bold" aria-pressed="${st.bold ? 'true' : 'false'}">B</button>
+            <button type="button" class="inspector-style-btn ${st.italic ? 'is-active' : ''}" data-custom-toggle-style="italic" data-target-element="${escapeHtml(elKey)}" title="Italic" aria-pressed="${st.italic ? 'true' : 'false'}"><em>I</em></button>
+          </div>
+
+          <div class="inspector-divider"></div>
+
+          <div class="font-size-stepper" role="group" aria-label="Font size">
+            <button type="button" class="size-step-btn" data-custom-element-size-step="-1" data-target-element="${escapeHtml(elKey)}" title="Smaller text">A-</button>
+            <div class="rot-input-wrap">
+              <input type="number" class="rot-input-field" data-custom-element-size-input="${escapeHtml(elKey)}" data-custom-text-size-input value="${st.size}" min="7" max="32" step="1" aria-label="Font size" />
+              <span class="rot-input-unit">pt</span>
+            </div>
+            <button type="button" class="size-step-btn" data-custom-element-size-step="1" data-target-element="${escapeHtml(elKey)}" title="Larger text">A+</button>
+          </div>
+        ` : ""}
+
+        ${isLogo ? `
+          <div class="font-size-stepper" role="group" aria-label="Logo size">
+            <button type="button" class="size-step-btn" data-custom-element-size-step="-10" data-target-element="logo" title="Smaller logo">-</button>
+            <div class="rot-input-wrap">
+              <input type="number" class="rot-input-field" data-custom-element-size-input="logo" value="${st.size}" min="30" max="250" step="5" aria-label="Logo size" />
+              <span class="rot-input-unit">%</span>
+            </div>
+            <button type="button" class="size-step-btn" data-custom-element-size-step="10" data-target-element="logo" title="Larger logo">+</button>
+          </div>
+        ` : ""}
+
+        ${isSign ? `
+          <div class="font-size-stepper" role="group" aria-label="Icon size">
+            <button type="button" class="size-step-btn" data-custom-element-size-step="-10" data-target-element="sign" title="Smaller icon">-</button>
+            <div class="rot-input-wrap">
+              <input type="number" class="rot-input-field" data-custom-element-size-input="sign" value="${st.size}" min="30" max="250" step="5" aria-label="Icon size" />
+              <span class="rot-input-unit">%</span>
+            </div>
+            <button type="button" class="size-step-btn" data-custom-element-size-step="10" data-target-element="sign" title="Larger icon">+</button>
+          </div>
+        ` : ""}
+
+        ${isDivider ? `
+          <div class="inspector-group">
+            <button type="button" class="inspector-btn ${custom.dividerLines?.[dividerIdx]?.style === 'dashed' ? 'is-active' : ''}" data-custom-action="toggle-divider-style" data-divider-index="${dividerIdx}">${custom.dividerLines?.[dividerIdx]?.style === 'dashed' ? 'Dashed' : 'Solid'}</button>
+            <button type="button" class="inspector-btn" data-custom-action="toggle-divider-orient" data-divider-index="${dividerIdx}">${custom.dividerLines?.[dividerIdx]?.orientation === 'vertical' ? 'Vertical' : 'Horizontal'}</button>
+          </div>
+
+          <div class="inspector-divider"></div>
+
+          <div class="font-size-stepper" title="Line length">
+            <button type="button" class="size-step-btn" data-custom-action="step-divider-len" data-divider-index="${dividerIdx}" data-step="-20" title="Shorter line">-</button>
+            <span class="size-display-val" style="min-width:38px;font-size:0.75rem;">${custom.dividerLines?.[dividerIdx]?.length || (custom.dividerLines?.[dividerIdx]?.orientation === 'vertical' ? 60 : 100)}px</span>
+            <button type="button" class="size-step-btn" data-custom-action="step-divider-len" data-divider-index="${dividerIdx}" data-step="20" title="Longer line">+</button>
+          </div>
+        ` : ""}
+
+        ${isQr ? `
+          <div class="inspector-group">
+            <button type="button" class="inspector-btn ${custom.backQrStyle === 'minimal' ? 'is-active' : ''}" data-custom-set="backQrStyle" data-value="minimal">Clean</button>
+            <button type="button" class="inspector-btn ${custom.backQrStyle === 'framed' ? 'is-active' : ''}" data-custom-set="backQrStyle" data-value="framed">Framed</button>
+            <button type="button" class="inspector-btn ${custom.backQrStyle === 'badge' ? 'is-active' : ''}" data-custom-set="backQrStyle" data-value="badge">Badge</button>
+          </div>
+
+          <div class="inspector-divider"></div>
+
+          <div class="font-size-stepper" role="group" aria-label="QR size">
+            <button type="button" class="size-step-btn" data-custom-element-size-step="-10" data-target-element="back-qr" title="Smaller QR">-</button>
+            <div class="rot-input-wrap">
+              <input type="number" class="rot-input-field" data-custom-element-size-input="back-qr" value="${st.size}" min="30" max="250" step="5" aria-label="QR size" />
+              <span class="rot-input-unit">%</span>
+            </div>
+            <button type="button" class="size-step-btn" data-custom-element-size-step="10" data-target-element="back-qr" title="Larger QR">+</button>
+          </div>
+        ` : ""}
+
+        <div class="inspector-divider"></div>
+
+        <div class="font-size-stepper" role="group" aria-label="Angle">
+          <button type="button" class="size-step-btn" data-custom-rot-step="-15" data-rot-target="${escapeHtml(elKey)}" title="Rotate -15°">-</button>
+          <div class="rot-input-wrap">
+            <input type="number" class="rot-input-field" id="inspector-rot-input-${escapeHtml(productId)}" data-custom-rot-input="${escapeHtml(elKey)}" value="${st.rotate}" min="-360" max="360" step="15" aria-label="Rotation angle" />
+            <span class="rot-input-unit">°</span>
+          </div>
+          <button type="button" class="size-step-btn" data-custom-rot-step="15" data-rot-target="${escapeHtml(elKey)}" title="Rotate +15°">+</button>
+        </div>
+
+        <button type="button" class="inspector-close-btn" data-custom-action="deselect-element" title="Deselect" aria-label="Deselect">
+          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    `;
+  }
+
+  function renderElementPropToolbar() {
+    return "";
+  }
+
   function productMarkup(p, detail = false) {
       const v = p.variants.find(v => v.id === selectedVariants.get(p.id)) ?? p.variants.find(v => v.available) ?? p.variants[0];
       selectedVariants.set(p.id, v.id);
@@ -265,37 +452,49 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const motifClass = isCustomizable ? `motif-${escapeHtml(custom.surfaceMotif || 'facets')}` : "";
       const luminanceClass = isLight ? "is-light-surface light-card" : "dark-card";
 
-      const textScale = ((custom.textSize || 14) / 14).toFixed(3);
-      const nameFontSize = `${(1.125 * (custom.textSize || 14) / 14).toFixed(3)}rem`;
-      const subFontSize = `${(0.65 * (custom.textSize || 14) / 14).toFixed(3)}rem`;
-      const logoScale = ((custom.logoSize || 100) / 100).toFixed(2);
-      const iconScale = ((custom.iconSize || 100) / 100).toFixed(2);
-      const qrScale = ((custom.qrSize || 100) / 100).toFixed(2);
-
       const ep = custom.elementPositions || {};
       const activeExtras = (custom.extraLines || []).filter(l => l && l.trim());
       const numExtras = activeExtras.length;
 
-      const logoStyle = ep.logo ? `left:${ep.logo.x}%; top:${ep.logo.y}%; --scale:${logoScale};` : `--scale:${logoScale};`;
-      const signStyle = ep.sign ? `left:${ep.sign.x}%; top:${ep.sign.y}%; --scale:${iconScale};` : `--scale:${iconScale};`;
+      const stName = getElementStyle(custom, "name");
+      const stTitle = getElementStyle(custom, "title");
+      const stLogo = getElementStyle(custom, "logo");
+      const stSign = getElementStyle(custom, "sign");
+      const stQr = getElementStyle(custom, "back-qr");
 
+      const nameFontSize = `${(1.125 * stName.size / 14).toFixed(3)}rem`;
+      const titleFontSize = `${(0.65 * stTitle.size / 14).toFixed(3)}rem`;
+      const logoScale = (stLogo.size / 100).toFixed(2);
+      const iconScale = (stSign.size / 100).toFixed(2);
+      const qrScale = (stQr.size / 100).toFixed(2);
+
+      const logoRot = stLogo.rotate;
+      const signRot = stSign.rotate;
       const namePos = ep.name || custom.customPos;
-      let nameStyle = namePos ? `left:${namePos.x}%; top:${namePos.y}%;` : "";
+      const nameRot = stName.rotate;
+      const titlePos = ep.title;
+      const titleRot = stTitle.rotate;
+      const backQrPos = ep["back-qr"];
+      const qrRot = stQr.rotate;
+
+      const logoStyle = ep.logo ? `left:${ep.logo.x}%; top:${ep.logo.y}%; --scale:${logoScale}; --rot:${logoRot}deg;` : `--scale:${logoScale}; --rot:${logoRot}deg;`;
+      const signStyle = ep.sign ? `left:${ep.sign.x}%; top:${ep.sign.y}%; --scale:${iconScale}; --rot:${signRot}deg;` : `--scale:${iconScale}; --rot:${signRot}deg;`;
+
+      let nameStyle = namePos ? `left:${namePos.x}%; top:${namePos.y}%; --rot:${nameRot}deg;` : `--rot:${nameRot}deg;`;
       if (!namePos) {
         if (custom.layout === "reverse") {
-          nameStyle = "top:20px; bottom:auto;";
+          nameStyle = `top:20px; bottom:auto; --rot:${nameRot}deg;`;
         } else {
-          nameStyle = `bottom:${42 + numExtras * 16}px;`;
+          nameStyle = `bottom:${42 + numExtras * 16}px; --rot:${nameRot}deg;`;
         }
       }
 
-      const titlePos = ep.title;
-      let titleStyle = titlePos ? `left:${titlePos.x}%; top:${titlePos.y}%;` : "";
+      let titleStyle = titlePos ? `left:${titlePos.x}%; top:${titlePos.y}%; --rot:${titleRot}deg;` : `--rot:${titleRot}deg;`;
       if (!titlePos) {
         if (custom.layout === "reverse") {
-          titleStyle = "top:44px; bottom:auto;";
+          titleStyle = `top:44px; bottom:auto; --rot:${titleRot}deg;`;
         } else {
-          titleStyle = `bottom:${22 + numExtras * 16}px;`;
+          titleStyle = `bottom:${22 + numExtras * 16}px; --rot:${titleRot}deg;`;
         }
       }
 
@@ -304,49 +503,69 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const namePosClass = namePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
       const titlePosClass = titlePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
 
+      const renderRotateHandle = (key) => `
+        <span class="corner-pin pin-tl" aria-hidden="true"></span>
+        <span class="corner-pin pin-tr" aria-hidden="true"></span>
+        <span class="corner-pin pin-bl" aria-hidden="true"></span>
+        <span class="corner-pin pin-br" aria-hidden="true"></span>
+        <button type="button" class="element-rotate-handle" data-rotate-handle="${escapeHtml(key)}" title="Click to rotate 90°, or drag to rotate freely" aria-label="Rotate element">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+        </button>
+      `;
+
       const frontIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${layoutClass} ${motifClass} ${luminanceClass} card-view-front" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="front" data-interactive-card="${escapeHtml(p.id)}">
         ${renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor)}
         ${custom.layout === "column" ? `<div class="card-side-column-bar" aria-hidden="true"></div>` : ""}
         ${custom.layout === "header" ? `<div class="card-header-banner" aria-hidden="true"></div>` : ""}
 
-        <div class="card-drag-item card-element-logo ${logoPosClass}" style="${logoStyle}" data-drag-element="logo" data-product-id="${escapeHtml(p.id)}">
+        <div class="card-drag-item card-element-logo ${logoPosClass} ${selectedElementId === 'logo' ? 'is-selected' : ''}" style="${logoStyle}" data-drag-element="logo" data-product-id="${escapeHtml(p.id)}">
           ${(custom.logoPreviewUrl || custom.logoUrl) ? `
             <img class="mini-product-logo custom-user-logo" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Custom logo" />
           ` : `
             <span class="card-logo-placeholder" style="color:${escapeHtml(custom.accentColor)};">YOUR LOGO</span>
           `}
+          ${renderRotateHandle("logo")}
         </div>
 
-        <div class="card-drag-item card-element-nfc ${signPosClass}" style="color:${escapeHtml(custom.accentColor)}; ${signStyle}" data-drag-element="sign" data-product-id="${escapeHtml(p.id)}">
+        <div class="card-drag-item card-element-nfc ${signPosClass} ${selectedElementId === 'sign' ? 'is-selected' : ''}" style="color:${escapeHtml(custom.accentColor)}; ${signStyle}" data-drag-element="sign" data-product-id="${escapeHtml(p.id)}">
           <span class="card-nfc-wave" aria-hidden="true" style="color:inherit;">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
           </span>
+          ${renderRotateHandle("sign")}
         </div>
 
-        <div class="card-drag-item card-element-name ${namePosClass} font-${escapeHtml(custom.font)}" style="${nameStyle}" data-drag-element="name" data-product-id="${escapeHtml(p.id)}">
-          <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""}" style="font-size:${nameFontSize};">${escapeHtml(custom.name || "Your Name")}</strong>
+        <div class="card-drag-item card-element-name ${namePosClass} font-${escapeHtml(stName.font)} ${selectedElementId === 'name' ? 'is-selected' : ''}" style="${nameStyle}" data-drag-element="name" data-product-id="${escapeHtml(p.id)}">
+          <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""} ${stName.bold ? "is-bold" : "is-not-bold"} ${stName.italic ? "is-italic" : ""}" style="font-size:${nameFontSize}; font-weight:${stName.bold ? 700 : 400}; font-style:${stName.italic ? 'italic' : 'normal'};">${escapeHtml(custom.name || "Your Name")}</strong>
+          ${renderRotateHandle("name")}
         </div>
 
-        <div class="card-drag-item card-element-title ${titlePosClass} font-${escapeHtml(custom.font)}" style="${titleStyle}" data-drag-element="title" data-product-id="${escapeHtml(p.id)}">
-          <span class="card-custom-title ${!custom.title && numExtras === 0 ? "is-placeholder" : ""}" style="color:${escapeHtml(custom.accentColor)}; font-size:${subFontSize};">${escapeHtml(custom.title || (numExtras > 0 ? "" : "Your Title / Role"))}</span>
+        <div class="card-drag-item card-element-title ${titlePosClass} font-${escapeHtml(stTitle.font)} ${selectedElementId === 'title' ? 'is-selected' : ''}" style="${titleStyle}" data-drag-element="title" data-product-id="${escapeHtml(p.id)}">
+          <span class="card-custom-title ${!custom.title && numExtras === 0 ? "is-placeholder" : ""} ${stTitle.bold ? "is-bold" : "is-not-bold"} ${stTitle.italic ? "is-italic" : ""}" style="color:${escapeHtml(custom.accentColor)}; font-size:${titleFontSize}; font-weight:${stTitle.bold ? 700 : 400}; font-style:${stTitle.italic ? 'italic' : 'normal'};">${escapeHtml(custom.title || (numExtras > 0 ? "" : "Your Title / Role"))}</span>
+          ${renderRotateHandle("title")}
         </div>
 
         ${(custom.extraLines || []).map((line, idx) => {
           if (!line || !line.trim()) return "";
           const extraKey = `extra-${idx}`;
+          const stExtra = getElementStyle(custom, extraKey);
           const extraPos = ep[extraKey];
+          const extraRot = stExtra.rotate;
+          const extraFontSize = `${(0.65 * stExtra.size / 14).toFixed(3)}rem`;
           const extraPosClass = extraPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')} pos-extra-${idx}`;
-          let extraStyle = extraPos ? `left:${extraPos.x}%; top:${extraPos.y}%;` : "";
+          let extraStyle = extraPos ? `left:${extraPos.x}%; top:${extraPos.y}%; --rot:${extraRot}deg;` : `--rot:${extraRot}deg;`;
           if (!extraPos) {
             if (custom.layout === "reverse") {
-              extraStyle = `top:${60 + idx * 16}px; bottom:auto;`;
+              extraStyle = `top:${60 + idx * 16}px; bottom:auto; --rot:${extraRot}deg;`;
             } else {
-              extraStyle = `bottom:${22 + (numExtras - 1 - idx) * 16}px;`;
+              extraStyle = `bottom:${22 + (numExtras - 1 - idx) * 16}px; --rot:${extraRot}deg;`;
             }
           }
           return `
-            <div class="card-drag-item card-element-extra ${extraPosClass} font-${escapeHtml(custom.font)}" style="${extraStyle}" data-drag-element="${extraKey}" data-extra-index="${idx}" data-product-id="${escapeHtml(p.id)}">
-              <span class="card-custom-extra-line" style="color:${escapeHtml(custom.accentColor)}; font-size:${subFontSize};">${escapeHtml(line.trim())}</span>
+            <div class="card-drag-item card-element-extra ${extraPosClass} font-${escapeHtml(stExtra.font)} ${selectedElementId === extraKey ? 'is-selected' : ''}" style="${extraStyle}" data-drag-element="${extraKey}" data-extra-index="${idx}" data-product-id="${escapeHtml(p.id)}">
+              <span class="card-custom-extra-line ${stExtra.bold ? 'is-bold' : 'is-not-bold'} ${stExtra.italic ? 'is-italic' : ''}" style="color:${escapeHtml(custom.accentColor)}; font-size:${extraFontSize}; font-weight:${stExtra.bold ? 700 : 400}; font-style:${stExtra.italic ? 'italic' : 'normal'};">${escapeHtml(line.trim())}</span>
+              ${renderRotateHandle(extraKey)}
             </div>
           `;
         }).join("")}
@@ -354,28 +573,31 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         ${(custom.dividerLines || []).map((line, idx) => {
           const dividerKey = `divider-${idx}`;
           const dividerPos = ep[dividerKey];
+          const divRot = dividerPos?.rotate || 0;
           const isVert = line.orientation === "vertical";
           const len = line.length || (isVert ? 60 : 100);
           const dividerStyle = dividerPos
-            ? `left:${dividerPos.x}%; top:${dividerPos.y}%; --divider-len:${len}px;`
-            : `left:50%; top:${50 + idx * 12}%; --divider-len:${len}px;`;
+            ? `left:${dividerPos.x}%; top:${dividerPos.y}%; --divider-len:${len}px; --rot:${divRot}deg;`
+            : `left:50%; top:${50 + idx * 12}%; --divider-len:${len}px; --rot:${divRot}deg;`;
           return `
-            <div class="card-drag-item card-element-divider divider-${escapeHtml(line.orientation || 'horizontal')} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom" style="${dividerStyle} color:${escapeHtml(custom.accentColor)};" data-drag-element="${dividerKey}" data-divider-index="${idx}" data-product-id="${escapeHtml(p.id)}"></div>
+            <div class="card-drag-item card-element-divider divider-${escapeHtml(line.orientation || 'horizontal')} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom ${selectedElementId === dividerKey ? 'is-selected' : ''}" style="${dividerStyle} color:${escapeHtml(custom.accentColor)};" data-drag-element="${dividerKey}" data-divider-index="${idx}" data-product-id="${escapeHtml(p.id)}">
+              ${renderRotateHandle(dividerKey)}
+            </div>
           `;
         }).join("")}
       </div>`;
 
-      const backQrPos = ep["back-qr"];
-      const backQrStyle = backQrPos ? `left:${backQrPos.x}%; top:${backQrPos.y}%; --scale:${qrScale};` : `--scale:${qrScale};`;
+      const backQrStyle = backQrPos ? `left:${backQrPos.x}%; top:${backQrPos.y}%; --scale:${qrScale}; --rot:${qrRot}deg;` : `--scale:${qrScale}; --rot:${qrRot}deg;`;
       const backQrClass = backQrPos ? "pos-custom" : "";
 
       const backIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${luminanceClass} card-view-back" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="back" data-interactive-card="${escapeHtml(p.id)}">
         ${renderBackMotifSvg(custom.surfaceMotif, custom.accentColor)}
-        <div class="card-drag-item card-back-center-qr ${backQrClass}" style="${backQrStyle}" data-drag-element="back-qr" data-product-id="${escapeHtml(p.id)}">
+        <div class="card-drag-item card-back-center-qr ${backQrClass} ${selectedElementId === 'back-qr' ? 'is-selected' : ''}" style="${backQrStyle}" data-drag-element="back-qr" data-product-id="${escapeHtml(p.id)}">
           <div class="card-qr-wrap ${escapeHtml(custom.backQrStyle || 'minimal')}">
             ${renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal')}
           </div>
           ${(custom.backSubtitle && custom.backSubtitle.trim()) ? `<span class="card-back-subtitle" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.backSubtitle.trim())}</span>` : ""}
+          ${renderRotateHandle("back-qr")}
         </div>
         <div class="card-back-footer" style="${custom.hasOneinfoLogo !== false ? '' : 'display:none;'}">
           ${custom.hasOneinfoLogo !== false ? `
@@ -401,6 +623,10 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           <div class="product-art custom-stage-unified ${p.featured ? 'has-badge' : ''}">
             <div class="product-badges">
               ${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}
+            </div>
+
+            <div class="stage-inspector-wrap" id="stage-inspector-wrap-${escapeHtml(p.id)}">
+              ${renderQuickInspectorMarkup(p.id)}
             </div>
 
             <div class="custom-card-face-block">
@@ -472,7 +698,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
               <span>Details</span>
             </button>
-            <button type="button" class="studio-tab-btn ${activeStudioTab === 'style' ? 'is-active' : ''}" data-studio-tab="style" role="tab" aria-selected="${activeStudioTab === 'style'}">
+            <button type="button" class="studio-tab-btn ${(activeStudioTab === 'themes' || activeStudioTab === 'style') ? 'is-active' : ''}" data-studio-tab="themes" role="tab" aria-selected="${activeStudioTab === 'themes' || activeStudioTab === 'style'}">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/></svg>
               <span>Themes</span>
             </button>
@@ -487,69 +713,34 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
             <div class="customizer-section" style="padding-top:0; border-top:none;">
               <div class="customizer-section-title">
                 <span>Cardholder Details</span>
-                <small>Laser-engraved onto card</small>
               </div>
               <div class="custom-fields-stack">
                 <div class="custom-field">
-                  <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span><small class="char-count" id="name-count-${escapeHtml(p.id)}">${(custom.name || "").length}/25</small></label>
-                  <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="25" placeholder="e.g. Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
+                  <label for="custom-name-${escapeHtml(p.id)}"><span>Cardholder Name</span></label>
+                  <input id="custom-name-${escapeHtml(p.id)}" type="text" maxlength="25" placeholder="Avery Morgan" value="${escapeHtml(custom.name || "")}" data-custom-input="name" autocomplete="name" />
                 </div>
                 <div class="custom-field">
-                  <label for="custom-title-${escapeHtml(p.id)}"><span>Designation / Title <small>(optional)</small></span><small class="char-count" id="title-count-${escapeHtml(p.id)}">${(custom.title || "").length}/35</small></label>
-                  <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="35" placeholder="e.g. Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
+                  <label for="custom-title-${escapeHtml(p.id)}"><span>Designation / Title</span></label>
+                  <input id="custom-title-${escapeHtml(p.id)}" type="text" maxlength="35" placeholder="Managing Director" value="${escapeHtml(custom.title || "")}" data-custom-input="title" />
                 </div>
                 ${(custom.extraLines || []).map((line, idx) => `
                   <div class="custom-field extra-field-row">
                     <label for="custom-extra-${escapeHtml(p.id)}-${idx}">
-                      <span>Line ${idx + 3}: Info <small>(optional)</small></span>
-                      <span style="display:flex;align-items:center;gap:8px;">
-                        <small class="char-count" id="extra-count-${escapeHtml(p.id)}-${idx}">${(line || "").length}/35</small>
-                        <button type="button" class="remove-line-btn" data-custom-action="remove-extra-line" data-line-index="${idx}">Remove</button>
-                      </span>
+                      <span>Line ${idx + 3}</span>
+                      <button type="button" class="remove-line-btn" data-custom-action="remove-extra-line" data-line-index="${idx}">Remove ✕</button>
                     </label>
-                    <input id="custom-extra-${escapeHtml(p.id)}-${idx}" type="text" maxlength="35" placeholder="${idx === 0 ? 'e.g. Acme Corporation' : 'e.g. Department or Note'}" value="${escapeHtml(line || "")}" data-custom-extra-line="${idx}" />
+                    <input id="custom-extra-${escapeHtml(p.id)}-${idx}" type="text" maxlength="35" placeholder="${idx === 0 ? 'Company or Brand' : 'Department or Note'}" value="${escapeHtml(line || "")}" data-custom-extra-line="${idx}" />
                   </div>
                 `).join("")}
                 ${(!custom.extraLines || custom.extraLines.length < 4) ? `
-                  <button type="button" class="add-extra-field-btn" data-custom-action="add-extra-line">+ Add Line (Company, Dept, etc.)</button>
+                  <button type="button" class="add-extra-field-btn" data-custom-action="add-extra-line">+ Add Line</button>
                 ` : ""}
               </div>
             </div>
 
             <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>Typography & Text Size</span>
-                <small>Scale font or drag anywhere on card</small>
-              </div>
-              <div class="customizer-pills" role="radiogroup" aria-label="Typography style" style="margin-bottom: 12px;">
-                <button type="button" class="customizer-pill ${custom.font === 'sans' ? 'is-selected' : ''}" data-custom-set="font" data-value="sans" aria-checked="${custom.font === 'sans'}" role="radio"><span class="font-sample" style="font-family: inherit; font-weight: 700;">Aa</span> Modern Sans</button>
-                <button type="button" class="customizer-pill ${custom.font === 'serif' ? 'is-selected' : ''}" data-custom-set="font" data-value="serif" aria-checked="${custom.font === 'serif'}" role="radio"><span class="font-sample" style="font-family: Georgia, serif; font-style: italic; font-weight: 700;">Aa</span> Luxury Serif</button>
-                <button type="button" class="customizer-pill ${custom.font === 'mono' ? 'is-selected' : ''}" data-custom-set="font" data-value="mono" aria-checked="${custom.font === 'mono'}" role="radio"><span class="font-sample" style="font-family: monospace; font-weight: 700;">Aa</span> Minimal Mono</button>
-              </div>
-              <div class="text-size-control-wrap">
-                <div class="text-size-toolbar-row">
-                  <div class="toolbar-label-group">
-                    <strong>Text Size Scale</strong>
-                    <span class="toolbar-hint">Scale cardholder name and details</span>
-                  </div>
-                  <div class="font-size-stepper" role="group" aria-label="Text Size Stepper">
-                    <button type="button" class="size-step-btn" data-custom-text-size-step="-2" title="Smaller text (A-)" aria-label="Smaller text">A-</button>
-                    <span class="size-display-val" id="text-size-val-${escapeHtml(p.id)}">${custom.textSize || 14} pt</span>
-                    <button type="button" class="size-step-btn" data-custom-text-size-step="2" title="Larger text (A+)" aria-label="Larger text">A+</button>
-                  </div>
-                </div>
-                <div class="size-preset-pills" role="radiogroup" aria-label="Text size presets">
-                  <button type="button" class="size-pill ${(custom.textSize || 14) === 10 ? 'is-selected' : ''}" data-custom-text-size="10">Small (10 pt)</button>
-                  <button type="button" class="size-pill ${(custom.textSize || 14) === 14 ? 'is-selected' : ''}" data-custom-text-size="14">Regular (14 pt)</button>
-                  <button type="button" class="size-pill ${(custom.textSize || 14) === 18 ? 'is-selected' : ''}" data-custom-text-size="18">Large (18 pt)</button>
-                </div>
-              </div>
-            </div>
-
-            <div class="customizer-section">
-              <div class="customizer-section-title">
-                <span>Upload Logo (Company or Personal)</span>
-                <small>Laser-engraved onto card front</small>
+                <span>Upload Logo</span>
               </div>
               <div class="custom-logo-zone">
                 ${(custom.logoPreviewUrl || custom.logoUrl) ? `
@@ -557,7 +748,6 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                     <img class="logo-thumb" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Uploaded logo" />
                     <div class="logo-meta">
                       <strong>${escapeHtml(custom.logoFileName || "Custom logo uploaded")}</strong>
-                      <small>Position or resize below</small>
                     </div>
                     <button type="button" class="remove-logo-btn" data-custom-action="remove-logo" aria-label="Remove custom logo">Remove ✕</button>
                   </div>
@@ -567,34 +757,16 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                     <label for="logo-file-${escapeHtml(p.id)}" class="logo-dropzone-label">
                       <svg class="logo-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                       <span class="logo-dropzone-cta"><strong>Upload Company or Personal Logo</strong></span>
-                      <small class="logo-dropzone-hint">SVG, transparent PNG, JPEG, WebP (up to 5 MB)</small>
+                      <small class="logo-dropzone-hint">SVG, transparent PNG, JPEG, WebP</small>
                     </label>
                   </div>
                 `}
-                <div class="text-size-control-wrap" style="margin-top: 10px;">
-                  <div class="text-size-toolbar-row">
-                    <div class="toolbar-label-group">
-                      <strong>Logo Size</strong>
-                      <span class="toolbar-hint">Scale logo on card or drag to position</span>
-                    </div>
-                    <div class="font-size-stepper" role="group" aria-label="Logo Size Stepper">
-                      <button type="button" class="size-step-btn" data-custom-logo-size-step="-15" title="Smaller logo (-)" aria-label="Smaller logo">-</button>
-                      <span class="size-display-val" id="logo-size-val-${escapeHtml(p.id)}">${custom.logoSize || 100}%</span>
-                      <button type="button" class="size-step-btn" data-custom-logo-size-step="15" title="Larger logo (+)" aria-label="Larger logo">+</button>
-                    </div>
-                  </div>
-                  <div class="size-preset-pills" role="radiogroup" aria-label="Logo size presets">
-                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 75 ? 'is-selected' : ''}" data-custom-logo-size="75">Small (75%)</button>
-                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 100 ? 'is-selected' : ''}" data-custom-logo-size="100">Default (100%)</button>
-                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 130 ? 'is-selected' : ''}" data-custom-logo-size="130">Large (130%)</button>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
 
           <!-- TAB 2: THEMES & COLORS -->
-          <div class="studio-tab-pane" id="studio-pane-style" ${activeStudioTab !== 'style' ? 'hidden' : ''}>
+          <div class="studio-tab-pane" id="studio-pane-themes" ${(activeStudioTab !== 'themes' && activeStudioTab !== 'style') ? 'hidden' : ''}>
             <div class="customizer-section" style="padding-top:0; border-top:none;">
               <div class="customizer-section-title">
                 <span>Quick Presets (10 Premium Editions)</span>
@@ -690,36 +862,17 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
             <div class="customizer-section">
               <div class="customizer-section-title">
                 <span>NFC Contactless Wave Icon</span>
-                <small>Contactless indicator sizing</small>
-              </div>
-              <div class="text-size-control-wrap">
-                <div class="text-size-toolbar-row">
-                  <div class="toolbar-label-group">
-                    <strong>NFC Icon Size</strong>
-                    <span class="toolbar-hint">Scale contactless icon or drag on card</span>
-                  </div>
-                  <div class="font-size-stepper" role="group" aria-label="NFC Icon Size Stepper">
-                    <button type="button" class="size-step-btn" data-custom-icon-size-step="-15" title="Smaller icon (-)" aria-label="Smaller icon">-</button>
-                    <span class="size-display-val" id="icon-size-val-${escapeHtml(p.id)}">${custom.iconSize || 100}%</span>
-                    <button type="button" class="size-step-btn" data-custom-icon-size-step="15" title="Larger icon (+)" aria-label="Larger icon">+</button>
-                  </div>
-                </div>
-                <div class="size-preset-pills" role="radiogroup" aria-label="NFC icon size presets">
-                  <button type="button" class="size-pill ${(custom.iconSize || 100) === 75 ? 'is-selected' : ''}" data-custom-icon-size="75">Small (75%)</button>
-                  <button type="button" class="size-pill ${(custom.iconSize || 100) === 100 ? 'is-selected' : ''}" data-custom-icon-size="100">Default (100%)</button>
-                  <button type="button" class="size-pill ${(custom.iconSize || 100) === 125 ? 'is-selected' : ''}" data-custom-icon-size="125">Large (125%)</button>
-                </div>
+                <small>Tap or drag on card to position</small>
               </div>
             </div>
 
             <div class="customizer-section">
               <div class="divider-manager-wrap">
                 <div class="toolbar-label-group">
-                  <strong>Divider Lines (HR & Vertical)</strong>
-                  <span class="toolbar-hint">Add divider lines, change length/style, or drag anywhere on card</span>
+                  <strong>Divider Lines</strong>
                 </div>
                 <div class="divider-add-actions">
-                  <button type="button" class="divider-add-btn" data-custom-action="add-divider-line" data-divider-orient="horizontal" ${((custom.dividerLines || []).length >= 4) ? 'disabled' : ''}>+ Add Horizontal Line (HR)</button>
+                  <button type="button" class="divider-add-btn" data-custom-action="add-divider-line" data-divider-orient="horizontal" ${((custom.dividerLines || []).length >= 4) ? 'disabled' : ''}>+ Add Horizontal Line</button>
                   <button type="button" class="divider-add-btn" data-custom-action="add-divider-line" data-divider-orient="vertical" ${((custom.dividerLines || []).length >= 4) ? 'disabled' : ''}>+ Add Vertical Line</button>
                 </div>
                 ${(custom.dividerLines || []).map((line, idx) => `
@@ -731,6 +884,16 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                     <div class="divider-line-controls">
                       <button type="button" class="divider-chip-btn" data-custom-action="toggle-divider-orient" data-divider-index="${idx}">${line.orientation === 'vertical' ? 'Make Horizontal' : 'Make Vertical'}</button>
                       <button type="button" class="divider-chip-btn ${line.style === 'dashed' ? 'is-active' : ''}" data-custom-action="toggle-divider-style" data-divider-index="${idx}">${line.style === 'dashed' ? 'Dashed' : 'Solid'}</button>
+                      
+                      <div class="font-size-stepper" title="Rotate Line">
+                        <button type="button" class="size-step-btn" data-custom-rot-step="-15" data-rot-target="divider-${idx}" title="Rotate -15°">-</button>
+                        <div class="rot-input-wrap">
+                          <input type="number" class="rot-input-field" id="rot-input-divider-${idx}-${escapeHtml(p.id)}" data-custom-rot-input="divider-${idx}" value="${ep[`divider-${idx}`]?.rotate || 0}" min="-360" max="360" step="15" aria-label="Divider rotation degrees" />
+                          <span class="rot-input-unit">°</span>
+                        </div>
+                        <button type="button" class="size-step-btn" data-custom-rot-step="15" data-rot-target="divider-${idx}" title="Rotate +15°">+</button>
+                      </div>
+
                       <div class="font-size-stepper" style="margin-left:auto;">
                         <button type="button" class="size-step-btn" data-custom-action="step-divider-len" data-divider-index="${idx}" data-step="-20" title="Shorter line">-</button>
                         <span class="size-display-val" style="min-width:44px;font-size:0.75rem;">${line.length || (line.orientation === 'vertical' ? 60 : 100)}px</span>
@@ -744,13 +907,12 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
             <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>Back Side Configuration (NFC & QR)</span>
-                <small>Reverse face details & QR inlay</small>
+                <span>Back Side Details</span>
               </div>
               <div class="custom-fields-stack">
                 <div class="custom-field">
-                  <label for="custom-back-sub-${escapeHtml(p.id)}"><span>Website / Subline <small>(optional)</small></span><small class="char-count" id="back-sub-count-${escapeHtml(p.id)}">${(custom.backSubtitle || "").length}/40</small></label>
-                  <input id="custom-back-sub-${escapeHtml(p.id)}" type="text" maxlength="40" placeholder="e.g. oneinfo.me/username or website.com" value="${escapeHtml(custom.backSubtitle || "")}" data-custom-input="backSubtitle" />
+                  <label for="custom-back-sub-${escapeHtml(p.id)}"><span>Website / Subline</span></label>
+                  <input id="custom-back-sub-${escapeHtml(p.id)}" type="text" maxlength="40" placeholder="oneinfo.me/username or website.com" value="${escapeHtml(custom.backSubtitle || "")}" data-custom-input="backSubtitle" />
                 </div>
               </div>
               <div style="margin-top: 10px;">
@@ -759,24 +921,6 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                   <button type="button" class="customizer-pill ${custom.backQrStyle === 'minimal' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="minimal" role="radio" aria-checked="${custom.backQrStyle === 'minimal'}"><span class="pill-dot"></span> Clean Minimal (Official)</button>
                   <button type="button" class="customizer-pill ${custom.backQrStyle === 'framed' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="framed" role="radio" aria-checked="${custom.backQrStyle === 'framed'}"><span class="pill-dot"></span> Foil Framed</button>
                   <button type="button" class="customizer-pill ${custom.backQrStyle === 'badge' ? 'is-selected' : ''}" data-custom-set="backQrStyle" data-value="badge" role="radio" aria-checked="${custom.backQrStyle === 'badge'}"><span class="pill-dot"></span> Dashed Badge</button>
-                </div>
-              </div>
-              <div class="text-size-control-wrap" style="margin-top: 10px;">
-                <div class="text-size-toolbar-row">
-                  <div class="toolbar-label-group">
-                    <strong>QR Code Size</strong>
-                    <span class="toolbar-hint">Scale QR inlay or drag to position</span>
-                  </div>
-                  <div class="font-size-stepper" role="group" aria-label="QR Code Size Stepper">
-                    <button type="button" class="size-step-btn" data-custom-qr-size-step="-10" title="Smaller QR (-)" aria-label="Smaller QR">-</button>
-                    <span class="size-display-val" id="qr-size-val-${escapeHtml(p.id)}">${custom.qrSize || 100}%</span>
-                    <button type="button" class="size-step-btn" data-custom-qr-size-step="10" title="Larger QR (+)" aria-label="Larger QR">+</button>
-                  </div>
-                </div>
-                <div class="size-preset-pills" role="radiogroup" aria-label="QR code size presets">
-                  <button type="button" class="size-pill ${(custom.qrSize || 100) === 80 ? 'is-selected' : ''}" data-custom-qr-size="80">Small (80%)</button>
-                  <button type="button" class="size-pill ${(custom.qrSize || 100) === 100 ? 'is-selected' : ''}" data-custom-qr-size="100">Standard (100%)</button>
-                  <button type="button" class="size-pill ${(custom.qrSize || 100) === 125 ? 'is-selected' : ''}" data-custom-qr-size="125">Large (125%)</button>
                 </div>
               </div>
             </div>
@@ -1023,6 +1167,28 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
   }
   $("#catalog-retry").addEventListener("click", () => void loadProducts());
 
+  function ensureRotateHandle(el, key) {
+    if (!el || !key) return;
+    if (!el.querySelector(".corner-pin")) {
+      el.insertAdjacentHTML("afterbegin", `
+        <span class="corner-pin pin-tl" aria-hidden="true"></span>
+        <span class="corner-pin pin-tr" aria-hidden="true"></span>
+        <span class="corner-pin pin-bl" aria-hidden="true"></span>
+        <span class="corner-pin pin-br" aria-hidden="true"></span>
+      `);
+    }
+    if (!el.querySelector(".element-rotate-handle")) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "element-rotate-handle";
+      btn.dataset.rotateHandle = key;
+      btn.title = "Click to rotate 90°, or drag to rotate freely";
+      btn.setAttribute("aria-label", "Rotate element");
+      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
+      el.appendChild(btn);
+    }
+  }
+
   function syncCustomCardPreview(productId) {
     const custom = productCustomizations.get(productId) ?? defaultCustomization("01");
     const light = isColorLight(custom.surfaceColor);
@@ -1065,9 +1231,12 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       }
 
       const ep = custom.elementPositions || {};
-      const scale = (custom.textSize || 14) / 14;
-      const nameSize = `${(1.125 * scale).toFixed(3)}rem`;
-      const subSize = `${(0.65 * scale).toFixed(3)}rem`;
+      const stName = getElementStyle(custom, "name");
+      const stTitle = getElementStyle(custom, "title");
+      const stLogo = getElementStyle(custom, "logo");
+      const stSign = getElementStyle(custom, "sign");
+      const nameSize = `${(1.125 * stName.size / 14).toFixed(3)}rem`;
+      const titleSize = `${(0.65 * stTitle.size / 14).toFixed(3)}rem`;
 
       // 1. Logo element (Customer Logo or "YOUR LOGO" text placeholder)
       const logoEl = frontCard.querySelector(".card-element-logo");
@@ -1098,37 +1267,43 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           logoPlaceholder.style.display = "";
           logoPlaceholder.style.color = custom.accentColor;
         }
-        const logoScale = ((custom.logoSize || 100) / 100).toFixed(2);
+        const logoScale = ((stLogo.size || 100) / 100).toFixed(2);
+        const logoRot = stLogo.rotate || 0;
         logoEl.style.setProperty("--scale", logoScale);
+        logoEl.style.setProperty("--rot", `${logoRot}deg`);
+        ensureRotateHandle(logoEl, "logo");
         if (ep.logo) {
           logoEl.className = "card-drag-item card-element-logo pos-custom";
           logoEl.style.left = `${ep.logo.x}%`;
           logoEl.style.top = `${ep.logo.y}%`;
-          logoEl.style.transform = `translate(-50%, -50%) scale(${logoScale})`;
+          logoEl.style.transform = `translate(-50%, -50%) scale(${logoScale}) rotate(${logoRot}deg)`;
         } else {
           logoEl.className = `card-drag-item card-element-logo pos-${custom.layout || 'left'}`;
           logoEl.style.left = ""; logoEl.style.top = "";
           logoEl.style.transform = (custom.layout === "center" || custom.layout === "header")
-            ? `translateX(-50%) scale(${logoScale})`
-            : `scale(${logoScale})`;
+            ? `translateX(-50%) scale(${logoScale}) rotate(${logoRot}deg)`
+            : `scale(${logoScale}) rotate(${logoRot}deg)`;
         }
       }
 
       // 2. NFC wave sign element
       const nfcEl = frontCard.querySelector(".card-element-nfc");
       if (nfcEl) {
-        const iconScale = ((custom.iconSize || 100) / 100).toFixed(2);
+        const iconScale = ((stSign.size || 100) / 100).toFixed(2);
+        const signRot = stSign.rotate || 0;
         nfcEl.style.setProperty("--scale", iconScale);
+        nfcEl.style.setProperty("--rot", `${signRot}deg`);
         nfcEl.style.color = custom.accentColor;
+        ensureRotateHandle(nfcEl, "sign");
         if (ep.sign) {
           nfcEl.className = "card-drag-item card-element-nfc pos-custom";
           nfcEl.style.left = `${ep.sign.x}%`;
           nfcEl.style.top = `${ep.sign.y}%`;
-          nfcEl.style.transform = `translate(-50%, -50%) scale(${iconScale})`;
+          nfcEl.style.transform = `translate(-50%, -50%) scale(${iconScale}) rotate(${signRot}deg)`;
         } else {
           nfcEl.className = `card-drag-item card-element-nfc pos-${custom.layout || 'left'}`;
           nfcEl.style.left = ""; nfcEl.style.top = "";
-          nfcEl.style.transform = `scale(${iconScale})`;
+          nfcEl.style.transform = `scale(${iconScale}) rotate(${signRot}deg)`;
         }
       }
 
@@ -1140,26 +1315,34 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
       if (nameBox) {
         const namePos = ep.name || custom.customPos;
+        const nameRot = stName.rotate || 0;
+        nameBox.style.setProperty("--rot", `${nameRot}deg`);
+        ensureRotateHandle(nameBox, "name");
         if (namePos) {
-          nameBox.className = `card-drag-item card-element-name pos-custom font-${custom.font || 'sans'}`;
+          nameBox.className = `card-drag-item card-element-name pos-custom font-${stName.font || 'sans'}`;
           nameBox.style.left = `${namePos.x}%`;
           nameBox.style.top = `${namePos.y}%`;
           nameBox.style.bottom = "auto";
           nameBox.style.right = "auto";
-          nameBox.style.transform = "translate(-50%, -50%)";
+          nameBox.style.transform = `translate(-50%, -50%) rotate(${nameRot}deg)`;
         } else {
-          nameBox.className = `card-drag-item card-element-name pos-${custom.layout || 'left'} font-${custom.font || 'sans'}`;
+          nameBox.className = `card-drag-item card-element-name pos-${custom.layout || 'left'} font-${stName.font || 'sans'}`;
           nameBox.style.left = "";
           nameBox.style.top = custom.layout === "reverse" ? "20px" : "";
           nameBox.style.bottom = custom.layout === "reverse" ? "auto" : `${42 + numExtras * 16}px`;
           nameBox.style.right = "";
-          nameBox.style.transform = "";
+          nameBox.style.transform = `rotate(${nameRot}deg)`;
         }
       }
       if (nameEl) {
         nameEl.textContent = custom.name ? custom.name.trim() : "Your Name";
         nameEl.classList.toggle("is-placeholder", !custom.name);
+        nameEl.classList.toggle("is-bold", Boolean(stName.bold));
+        nameEl.classList.toggle("is-not-bold", !stName.bold);
+        nameEl.classList.toggle("is-italic", Boolean(stName.italic));
         nameEl.style.fontSize = nameSize;
+        nameEl.style.fontWeight = stName.bold ? "700" : "400";
+        nameEl.style.fontStyle = stName.italic ? "italic" : "normal";
       }
 
       // 4. Title element (independent draggable line)
@@ -1169,34 +1352,42 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       let titleBox = frontCard.querySelector(".card-element-title");
       if (!titleBox) {
         titleBox = document.createElement("div");
-        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${custom.font || 'sans'}`;
+        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${stTitle.font || 'sans'}`;
         titleBox.setAttribute("data-drag-element", "title");
         titleBox.setAttribute("data-product-id", productId);
-        titleBox.innerHTML = `<span class="card-custom-title" style="color:${custom.accentColor}; font-size:${subSize};"></span>`;
+        titleBox.innerHTML = `<span class="card-custom-title" style="color:${custom.accentColor}; font-size:${titleSize};"></span>`;
         frontCard.appendChild(titleBox);
       }
+      const titleRot = stTitle.rotate || 0;
+      titleBox.style.setProperty("--rot", `${titleRot}deg`);
+      ensureRotateHandle(titleBox, "title");
       const titleEl = titleBox.querySelector(".card-custom-title");
       const titlePos = ep.title;
       if (titlePos) {
-        titleBox.className = `card-drag-item card-element-title pos-custom font-${custom.font || 'sans'}`;
+        titleBox.className = `card-drag-item card-element-title pos-custom font-${stTitle.font || 'sans'}`;
         titleBox.style.left = `${titlePos.x}%`;
         titleBox.style.top = `${titlePos.y}%`;
         titleBox.style.bottom = "auto";
         titleBox.style.right = "auto";
-        titleBox.style.transform = "translate(-50%, -50%)";
+        titleBox.style.transform = `translate(-50%, -50%) rotate(${titleRot}deg)`;
       } else {
-        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${custom.font || 'sans'}`;
+        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${stTitle.font || 'sans'}`;
         titleBox.style.left = "";
         titleBox.style.top = custom.layout === "reverse" ? "44px" : "";
         titleBox.style.bottom = custom.layout === "reverse" ? "auto" : `${22 + numExtras * 16}px`;
         titleBox.style.right = "";
-        titleBox.style.transform = "";
+        titleBox.style.transform = `rotate(${titleRot}deg)`;
       }
       if (titleEl) {
         titleEl.textContent = custom.title ? custom.title.trim() : (numExtras > 0 ? "" : "Your Title / Role");
         titleEl.classList.toggle("is-placeholder", !custom.title && numExtras === 0);
+        titleEl.classList.toggle("is-bold", Boolean(stTitle.bold));
+        titleEl.classList.toggle("is-not-bold", !stTitle.bold);
+        titleEl.classList.toggle("is-italic", Boolean(stTitle.italic));
         titleEl.style.color = custom.accentColor;
-        titleEl.style.fontSize = subSize;
+        titleEl.style.fontSize = titleSize;
+        titleEl.style.fontWeight = stTitle.bold ? "700" : "400";
+        titleEl.style.fontStyle = stTitle.italic ? "italic" : "normal";
       }
 
       // 5. Extra Lines elements (each line is an independent draggable element)
@@ -1205,20 +1396,24 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         custom.extraLines.forEach((line, idx) => {
           if (!line || !line.trim()) return;
           const extraKey = `extra-${idx}`;
+          const stExtra = getElementStyle(custom, extraKey);
           const extraPos = ep[extraKey];
+          const extraRot = stExtra.rotate || 0;
+          const extraSize = `${(0.65 * stExtra.size / 14).toFixed(3)}rem`;
           const div = document.createElement("div");
           div.setAttribute("data-drag-element", extraKey);
           div.setAttribute("data-product-id", productId);
           div.setAttribute("data-extra-index", String(idx));
+          div.style.setProperty("--rot", `${extraRot}deg`);
           if (extraPos) {
-            div.className = `card-drag-item card-element-extra pos-custom font-${custom.font || 'sans'}`;
+            div.className = `card-drag-item card-element-extra pos-custom font-${stExtra.font || 'sans'}`;
             div.style.left = `${extraPos.x}%`;
             div.style.top = `${extraPos.y}%`;
             div.style.bottom = "auto";
             div.style.right = "auto";
-            div.style.transform = "translate(-50%, -50%)";
+            div.style.transform = `translate(-50%, -50%) rotate(${extraRot}deg)`;
           } else {
-            div.className = `card-drag-item card-element-extra pos-${custom.layout || 'left'} pos-extra-${idx} font-${custom.font || 'sans'}`;
+            div.className = `card-drag-item card-element-extra pos-${custom.layout || 'left'} pos-extra-${idx} font-${stExtra.font || 'sans'}`;
             if (custom.layout === "reverse") {
               div.style.top = `${60 + idx * 16}px`;
               div.style.bottom = "auto";
@@ -1226,13 +1421,17 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
               div.style.bottom = `${22 + (numExtras - 1 - idx) * 16}px`;
               div.style.top = "";
             }
+            div.style.transform = `rotate(${extraRot}deg)`;
           }
           const span = document.createElement("span");
-          span.className = "card-custom-extra-line";
+          span.className = `card-custom-extra-line ${stExtra.bold ? 'is-bold' : 'is-not-bold'} ${stExtra.italic ? 'is-italic' : ''}`;
           span.style.color = custom.accentColor;
-          span.style.fontSize = subSize;
+          span.style.fontSize = extraSize;
+          span.style.fontWeight = stExtra.bold ? "700" : "400";
+          span.style.fontStyle = stExtra.italic ? "italic" : "normal";
           span.textContent = line.trim();
           div.appendChild(span);
+          ensureRotateHandle(div, extraKey);
           frontCard.appendChild(div);
         });
       }
@@ -1243,6 +1442,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         custom.dividerLines.forEach((line, idx) => {
           const dividerKey = `divider-${idx}`;
           const dividerPos = ep[dividerKey];
+          const divRot = dividerPos?.rotate || 0;
           const isVert = line.orientation === "vertical";
           const len = line.length || (isVert ? 60 : 100);
           const div = document.createElement("div");
@@ -1251,16 +1451,18 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           div.setAttribute("data-product-id", productId);
           div.className = `card-drag-item card-element-divider divider-${line.orientation || 'horizontal'} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom`;
           div.style.setProperty("--divider-len", `${len}px`);
+          div.style.setProperty("--rot", `${divRot}deg`);
           div.style.color = custom.accentColor;
           if (dividerPos) {
             div.style.left = `${dividerPos.x}%`;
             div.style.top = `${dividerPos.y}%`;
-            div.style.transform = "translate(-50%, -50%)";
+            div.style.transform = `translate(-50%, -50%) rotate(${divRot}deg)`;
           } else {
             div.style.left = "50%";
             div.style.top = `${50 + idx * 12}%`;
-            div.style.transform = "translate(-50%, -50%)";
+            div.style.transform = `translate(-50%, -50%) rotate(${divRot}deg)`;
           }
+          ensureRotateHandle(div, dividerKey);
           frontCard.appendChild(div);
         });
       }
@@ -1289,19 +1491,23 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
       const qrCenter = backCard.querySelector(".card-back-center-qr");
       const backQrPos = ep["back-qr"];
-      const qrScale = ((custom.qrSize || 100) / 100).toFixed(2);
+      const stQr = getElementStyle(custom, "back-qr");
+      const qrScale = ((stQr.size || 100) / 100).toFixed(2);
+      const qrRot = stQr.rotate || 0;
       if (qrCenter) {
         qrCenter.style.setProperty("--scale", qrScale);
+        qrCenter.style.setProperty("--rot", `${qrRot}deg`);
+        ensureRotateHandle(qrCenter, "back-qr");
         if (backQrPos) {
           qrCenter.className = "card-drag-item card-back-center-qr pos-custom";
           qrCenter.style.left = `${backQrPos.x}%`;
           qrCenter.style.top = `${backQrPos.y}%`;
-          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale})`;
+          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`;
         } else {
           qrCenter.className = "card-drag-item card-back-center-qr";
           qrCenter.style.left = "";
           qrCenter.style.top = "";
-          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale})`;
+          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`;
         }
 
         let subEl = qrCenter.querySelector(".card-back-subtitle");
@@ -1327,6 +1533,91 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const backFooter = backCard.querySelector(".card-back-footer");
       if (backFooter) {
         backFooter.style.display = custom.hasOneinfoLogo !== false ? "flex" : "none";
+      }
+    }
+
+    // Update toolbar inputs and states in studio
+    const studio = $(`#product-detail .card-customizer-studio[data-product-id="${productId}"]`);
+    if (studio) {
+      studio.querySelectorAll(".element-prop-toolbar").forEach(tb => {
+        const tbElKey = tb.dataset.toolbarElement;
+        if (!tbElKey) return;
+        const st = getElementStyle(custom, tbElKey);
+        tb.classList.toggle("is-focused", Boolean(selectedElementId && tbElKey === selectedElementId));
+        tb.querySelectorAll(".prop-font-btn").forEach(btn => {
+          btn.classList.toggle("is-active", btn.dataset.customElementFont === st.font);
+        });
+        const sizeInp = tb.querySelector("[data-custom-element-size-input]");
+        if (sizeInp && document.activeElement !== sizeInp) sizeInp.value = String(st.size);
+        const rotInp = tb.querySelector("[data-custom-rot-input]");
+        if (rotInp && document.activeElement !== rotInp) rotInp.value = String(st.rotate);
+      });
+    }
+
+    // 3. Update element selection and on-canvas Quick Inspector
+    const stageRoot = document.querySelector(`[data-interactive-card="${productId}"]`)?.closest(".product-art") || document;
+    stageRoot.querySelectorAll(".card-drag-item").forEach(item => {
+      const isTarget = selectedElementId && item.dataset.dragElement === selectedElementId;
+      item.classList.toggle("is-selected", Boolean(isTarget));
+    });
+    const inspectorWrap = document.getElementById(`stage-inspector-wrap-${productId}`);
+    if (inspectorWrap) {
+      const activeInp = document.activeElement;
+      const isInteractingInspector = activeInp && inspectorWrap.contains(activeInp) && (activeInp.tagName === "INPUT" || activeInp.tagName === "SELECT");
+      if (!isInteractingInspector) {
+        inspectorWrap.innerHTML = renderQuickInspectorMarkup(productId);
+      } else {
+        const st = getElementStyle(custom, selectedElementId);
+        const rotInp = inspectorWrap.querySelector(`[data-custom-rot-input]`);
+        if (rotInp && rotInp !== activeInp) rotInp.value = String(st.rotate);
+        const sizeInp = inspectorWrap.querySelector(`[data-custom-element-size-input]`);
+        if (sizeInp && sizeInp !== activeInp) sizeInp.value = String(st.size);
+        const fontSel = inspectorWrap.querySelector(`[data-custom-font-select]`);
+        if (fontSel && fontSel !== activeInp) fontSel.value = st.font;
+      }
+    }
+  }
+
+  function switchStudioTab(rawTabName, productId) {
+    const tabName = rawTabName === "style" ? "themes" : rawTabName;
+    activeStudioTab = tabName;
+    const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+    if (studio) {
+      studio.querySelectorAll(".studio-tab-btn").forEach(b => {
+        const bTab = b.dataset.studioTab === "style" ? "themes" : b.dataset.studioTab;
+        const isAct = bTab === tabName;
+        b.classList.toggle("is-active", isAct);
+        b.setAttribute("aria-selected", String(isAct));
+      });
+      studio.querySelectorAll(".studio-tab-pane").forEach(pane => {
+        const isMatch = pane.id === `studio-pane-${tabName}` || (tabName === "themes" && pane.id === "studio-pane-style");
+        pane.hidden = !isMatch;
+      });
+    }
+  }
+
+  function selectElement(elKey, productId) {
+    selectedElementId = elKey;
+    const stageRoot = document.querySelector(`[data-interactive-card="${productId}"]`)?.closest(".product-art") || document;
+    stageRoot.querySelectorAll(".card-drag-item").forEach(item => {
+      const isTarget = elKey && item.dataset.dragElement === elKey;
+      item.classList.toggle("is-selected", Boolean(isTarget));
+    });
+    const inspectorWrap = document.getElementById(`stage-inspector-wrap-${productId}`);
+    if (inspectorWrap) {
+      inspectorWrap.innerHTML = renderQuickInspectorMarkup(productId);
+    }
+    const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+    if (studio) {
+      studio.querySelectorAll(".element-prop-toolbar").forEach(tb => {
+        tb.classList.toggle("is-focused", Boolean(elKey && tb.dataset.toolbarElement === elKey));
+      });
+      if (elKey) {
+        if (elKey === "sign" || elKey.startsWith("divider-") || elKey === "back-qr") {
+          switchStudioTab("layout", productId);
+        } else if (elKey === "logo" || elKey === "name" || elKey === "title" || elKey.startsWith("extra-")) {
+          switchStudioTab("details", productId);
+        }
       }
     }
   }
@@ -1435,16 +1726,19 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     const tabBtn = event.target.closest("[data-studio-tab]");
     if (tabBtn) {
       const studio = tabBtn.closest(".card-customizer-studio");
-      const tabName = tabBtn.dataset.studioTab;
+      const rawTab = tabBtn.dataset.studioTab;
+      const tabName = rawTab === "style" ? "themes" : rawTab;
       activeStudioTab = tabName;
       if (studio) {
         studio.querySelectorAll(".studio-tab-btn").forEach(b => {
-          const isAct = b.dataset.studioTab === tabName;
+          const bTab = b.dataset.studioTab === "style" ? "themes" : b.dataset.studioTab;
+          const isAct = bTab === tabName;
           b.classList.toggle("is-active", isAct);
           b.setAttribute("aria-selected", String(isAct));
         });
         studio.querySelectorAll(".studio-tab-pane").forEach(pane => {
-          pane.hidden = (pane.id !== `studio-pane-${tabName}`);
+          const isMatch = pane.id === `studio-pane-${tabName}` || (tabName === "themes" && pane.id === "studio-pane-style");
+          pane.hidden = !isMatch;
         });
       }
       return;
@@ -1508,162 +1802,326 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       }
       return;
     }
+    const deselectBtn = event.target.closest("[data-custom-action='deselect-element']");
+    if (deselectBtn) {
+      const container = deselectBtn.closest(".card-quick-inspector, .card-customizer-studio, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (productId) selectElement(null, productId);
+      return;
+    }
+    const toggleTextStyleBtn = event.target.closest("[data-custom-toggle-style]");
+    if (toggleTextStyleBtn) {
+      const container = toggleTextStyleBtn.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = toggleTextStyleBtn.dataset.targetElement || selectedElementId || "name";
+      const styleType = toggleTextStyleBtn.dataset.customToggleStyle; // "bold" or "italic"
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      const st = getElementStyle(current, targetKey);
+      const nextVal = !st[styleType];
+
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = {
+          x: 50,
+          y: 50,
+          rotate: st.rotate,
+          size: st.size,
+          font: st.font,
+          bold: styleType === "bold" ? nextVal : st.bold,
+          italic: styleType === "italic" ? nextVal : st.italic,
+        };
+      } else {
+        current.elementPositions[targetKey][styleType] = nextVal;
+      }
+      if (targetKey === "name") {
+        current[styleType] = nextVal;
+      }
+
+      toggleTextStyleBtn.classList.toggle("is-active", nextVal);
+      toggleTextStyleBtn.setAttribute("aria-pressed", String(nextVal));
+
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const elemFontBtn = event.target.closest("[data-custom-element-font]");
+    if (elemFontBtn) {
+      const container = elemFontBtn.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = elemFontBtn.dataset.targetElement || selectedElementId || "name";
+      const fontVal = elemFontBtn.dataset.customElementFont;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, font: fontVal };
+      } else {
+        current.elementPositions[targetKey].font = fontVal;
+      }
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const elemSizeStepBtn = event.target.closest("[data-custom-element-size-step]");
+    if (elemSizeStepBtn) {
+      const container = elemSizeStepBtn.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = elemSizeStepBtn.dataset.targetElement || selectedElementId || "name";
+      const delta = parseInt(elemSizeStepBtn.dataset.customElementSizeStep, 10) || 1;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      const st = getElementStyle(current, targetKey);
+      const isText = targetKey === "name" || targetKey === "title" || targetKey.startsWith("extra-");
+      const minVal = isText ? 7 : 30;
+      const maxVal = isText ? 32 : 250;
+      let newSize = Math.max(minVal, Math.min(maxVal, st.size + delta));
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: st.rotate, size: newSize, font: st.font };
+      } else {
+        current.elementPositions[targetKey].size = newSize;
+      }
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const propToolbar = event.target.closest(".element-prop-toolbar");
+    if (propToolbar && propToolbar.dataset.toolbarElement && !event.target.closest("button, input")) {
+      const productId = propToolbar.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (productId && selectedElementId !== propToolbar.dataset.toolbarElement) {
+        selectElement(propToolbar.dataset.toolbarElement, productId);
+      }
+    }
     const stepBtn = event.target.closest("[data-custom-text-size-step]");
     if (stepBtn) {
-      const studio = stepBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = stepBtn.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const delta = parseInt(stepBtn.dataset.customTextSizeStep, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       let size = (current.textSize || 14) + delta;
       if (size < 8) size = 8;
-      if (size > 24) size = 24;
+      if (size > 28) size = 28;
       current.textSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#text-size-input-${productId}`) || studio?.querySelector("[data-custom-text-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#text-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size} pt`;
-      studio.querySelectorAll(".size-pill").forEach(p => {
-        p.classList.toggle("is-selected", parseInt(p.dataset.customTextSize, 10) === size);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const sizePill = event.target.closest("[data-custom-text-size]");
     if (sizePill) {
       const studio = sizePill.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const productId = studio?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const size = parseInt(sizePill.dataset.customTextSize, 10);
       if (isNaN(size)) return;
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       current.textSize = size;
       productCustomizations.set(productId, current);
+      const inputEl = studio.querySelector(`#text-size-input-${productId}`) || studio.querySelector("[data-custom-text-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#text-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size} pt`;
-      studio.querySelectorAll(".size-pill[data-custom-text-size]").forEach(p => {
-        p.classList.toggle("is-selected", p === sizePill);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const iconStepBtn = event.target.closest("[data-custom-icon-size-step]");
     if (iconStepBtn) {
-      const studio = iconStepBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = iconStepBtn.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const delta = parseInt(iconStepBtn.dataset.customIconSizeStep, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       let size = (current.iconSize || 100) + delta;
-      if (size < 50) size = 50;
-      if (size > 200) size = 200;
+      if (size < 40) size = 40;
+      if (size > 220) size = 220;
       current.iconSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#icon-size-input-${productId}`) || studio?.querySelector("[data-custom-icon-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#icon-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size}%`;
-      studio.querySelectorAll("[data-custom-icon-size]").forEach(p => {
-        p.classList.toggle("is-selected", parseInt(p.dataset.customIconSize, 10) === size);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const iconSizePill = event.target.closest("[data-custom-icon-size]");
     if (iconSizePill) {
-      const studio = iconSizePill.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = iconSizePill.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const size = parseInt(iconSizePill.dataset.customIconSize, 10);
       if (isNaN(size)) return;
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       current.iconSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#icon-size-input-${productId}`) || studio?.querySelector("[data-custom-icon-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#icon-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size}%`;
-      studio.querySelectorAll("[data-custom-icon-size]").forEach(p => {
-        p.classList.toggle("is-selected", p === iconSizePill);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const logoStepBtn = event.target.closest("[data-custom-logo-size-step]");
     if (logoStepBtn) {
-      const studio = logoStepBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = logoStepBtn.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const delta = parseInt(logoStepBtn.dataset.customLogoSizeStep, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       let size = (current.logoSize || 100) + delta;
       if (size < 40) size = 40;
-      if (size > 200) size = 200;
+      if (size > 220) size = 220;
       current.logoSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#logo-size-input-${productId}`) || studio?.querySelector("[data-custom-logo-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#logo-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size}%`;
-      studio.querySelectorAll("[data-custom-logo-size]").forEach(p => {
-        p.classList.toggle("is-selected", parseInt(p.dataset.customLogoSize, 10) === size);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const logoSizePill = event.target.closest("[data-custom-logo-size]");
     if (logoSizePill) {
-      const studio = logoSizePill.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = logoSizePill.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const size = parseInt(logoSizePill.dataset.customLogoSize, 10);
       if (isNaN(size)) return;
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       current.logoSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#logo-size-input-${productId}`) || studio?.querySelector("[data-custom-logo-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#logo-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size}%`;
-      studio.querySelectorAll("[data-custom-logo-size]").forEach(p => {
-        p.classList.toggle("is-selected", p === logoSizePill);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const qrStepBtn = event.target.closest("[data-custom-qr-size-step]");
     if (qrStepBtn) {
-      const studio = qrStepBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = qrStepBtn.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const delta = parseInt(qrStepBtn.dataset.customQrSizeStep, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       let size = (current.qrSize || 100) + delta;
-      if (size < 50) size = 50;
-      if (size > 180) size = 180;
+      if (size < 40) size = 40;
+      if (size > 200) size = 200;
       current.qrSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#qr-size-input-${productId}`) || studio?.querySelector("[data-custom-qr-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#qr-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size}%`;
-      studio.querySelectorAll("[data-custom-qr-size]").forEach(p => {
-        p.classList.toggle("is-selected", parseInt(p.dataset.customQrSize, 10) === size);
-      });
       syncCustomCardPreview(productId);
       return;
     }
     const qrSizePill = event.target.closest("[data-custom-qr-size]");
     if (qrSizePill) {
-      const studio = qrSizePill.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = qrSizePill.closest(".card-customizer-studio, .card-quick-inspector, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
       if (!productId) return;
       const size = parseInt(qrSizePill.dataset.customQrSize, 10);
       if (isNaN(size)) return;
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
       current.qrSize = size;
       productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#qr-size-input-${productId}`) || studio?.querySelector("[data-custom-qr-size-input]");
+      if (inputEl) inputEl.value = String(size);
       const valEl = $(`#qr-size-val-${productId}`);
       if (valEl) valEl.textContent = `${size}%`;
-      studio.querySelectorAll("[data-custom-qr-size]").forEach(p => {
-        p.classList.toggle("is-selected", p === qrSizePill);
-      });
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const rotStepBtn = event.target.closest("[data-custom-rot-step]");
+    if (rotStepBtn) {
+      const container = rotStepBtn.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const delta = parseInt(rotStepBtn.dataset.customRotStep, 10) || 15;
+      const targetKey = rotStepBtn.dataset.rotTarget || selectedElementId || "name";
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      const oldRot = current.elementPositions[targetKey]?.rotate || (targetKey === "name" ? (current.customPos?.rotate || 0) : 0);
+      let newRot = Math.round((oldRot + delta) % 360);
+      if (newRot < 0) newRot += 360;
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: newRot };
+      } else {
+        current.elementPositions[targetKey].rotate = newRot;
+      }
+      productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#rot-input-${targetKey}-${productId}`);
+      if (inputEl) inputEl.value = String(newRot);
+      if (studio) {
+        studio.querySelectorAll(`[data-custom-rot-pill='${targetKey}']`).forEach(p => {
+          p.classList.toggle("is-selected", parseInt(p.dataset.rot, 10) === newRot);
+        });
+      }
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const rotPill = event.target.closest("[data-custom-rot-pill]");
+    if (rotPill) {
+      const container = rotPill.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
+      if (!productId) return;
+      const targetKey = rotPill.dataset.customRotPill;
+      const rotVal = parseInt(rotPill.dataset.rot, 10) || 0;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: rotVal };
+      } else {
+        current.elementPositions[targetKey].rotate = rotVal;
+      }
+      productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      const inputEl = studio?.querySelector(`#rot-input-${targetKey}-${productId}`);
+      if (inputEl) inputEl.value = String(rotVal);
+      if (studio) {
+        studio.querySelectorAll(`[data-custom-rot-pill='${targetKey}']`).forEach(p => {
+          p.classList.toggle("is-selected", p === rotPill);
+        });
+      }
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const rotateToolbarBtn = event.target.closest("[data-custom-rotate-btn]");
+    if (rotateToolbarBtn) {
+      const container = rotateToolbarBtn.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
+      if (!productId) return;
+      const elKey = rotateToolbarBtn.dataset.customRotateBtn;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      const oldRot = current.elementPositions[elKey]?.rotate || 0;
+      const nextRot = (oldRot + 90) % 360;
+      if (!current.elementPositions[elKey]) {
+        current.elementPositions[elKey] = { x: 50, y: 50, rotate: nextRot };
+      } else {
+        current.elementPositions[elKey].rotate = nextRot;
+      }
+      productCustomizations.set(productId, current);
       syncCustomCardPreview(productId);
       return;
     }
     const addDividerBtn = event.target.closest("[data-custom-action='add-divider-line']");
     if (addDividerBtn) {
-      const studio = addDividerBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = addDividerBtn.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
       if (!productId) return;
       const orient = addDividerBtn.dataset.dividerOrient === "vertical" ? "vertical" : "horizontal";
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
@@ -1682,8 +2140,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     }
     const removeDividerBtn = event.target.closest("[data-custom-action='remove-divider-line']");
     if (removeDividerBtn) {
-      const studio = removeDividerBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = removeDividerBtn.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
       if (!productId) return;
       const idx = parseInt(removeDividerBtn.dataset.dividerIndex, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
@@ -1700,8 +2158,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     }
     const toggleOrientBtn = event.target.closest("[data-custom-action='toggle-divider-orient']");
     if (toggleOrientBtn) {
-      const studio = toggleOrientBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = toggleOrientBtn.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
       if (!productId) return;
       const idx = parseInt(toggleOrientBtn.dataset.dividerIndex, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
@@ -1717,8 +2175,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     }
     const toggleStyleBtn = event.target.closest("[data-custom-action='toggle-divider-style']");
     if (toggleStyleBtn) {
-      const studio = toggleStyleBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = toggleStyleBtn.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
       if (!productId) return;
       const idx = parseInt(toggleStyleBtn.dataset.dividerIndex, 10);
       const current = productCustomizations.get(productId) ?? defaultCustomization("01");
@@ -1733,8 +2191,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     }
     const stepLenBtn = event.target.closest("[data-custom-action='step-divider-len']");
     if (stepLenBtn) {
-      const studio = stepLenBtn.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = stepLenBtn.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
       if (!productId) return;
       const idx = parseInt(stepLenBtn.dataset.dividerIndex, 10);
       const step = parseInt(stepLenBtn.dataset.step, 10);
@@ -1756,8 +2214,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     }
     const pill = event.target.closest("[data-custom-set]");
     if (pill) {
-      const studio = pill.closest(".card-customizer-studio");
-      const productId = studio?.dataset.productId;
+      const container = pill.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
       if (!productId) return;
       const prop = pill.dataset.customSet;
       const val = pill.dataset.value;
@@ -1768,7 +2226,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         current.customPos = null;
         current.elementPositions = {};
       }
-      if (prop === "surfaceMotif" || prop === "surfaceColor" || prop === "accentColor" || prop === "layout") {
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      if (studio && (prop === "surfaceMotif" || prop === "surfaceColor" || prop === "accentColor" || prop === "layout")) {
         current.presetId = undefined;
         studio.querySelectorAll(".preset-chip").forEach(chip => {
           chip.classList.remove("is-selected");
@@ -1777,10 +2236,11 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       }
       productCustomizations.set(productId, current);
 
-      const group = pill.closest(".customizer-pills, .color-swatches-grid");
-      group?.querySelectorAll(".customizer-pill, .palette-swatch").forEach(p => {
+      const group = pill.closest(".customizer-pills, .color-swatches-grid, .inspector-group");
+      group?.querySelectorAll(".customizer-pill, .palette-swatch, .inspector-btn").forEach(p => {
         const isMatch = p === pill;
         p.classList.toggle("is-selected", isMatch);
+        p.classList.toggle("is-active", isMatch);
         p.setAttribute("aria-checked", String(isMatch));
       });
 
@@ -1875,6 +2335,136 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
   $(".product-grid").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("input", event => {
+    const fontSelect = event.target.closest("[data-custom-font-select]");
+    if (fontSelect) {
+      const container = fontSelect.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = fontSelect.dataset.customFontSelect || selectedElementId || "name";
+      const fontVal = fontSelect.value;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, font: fontVal };
+      } else {
+        current.elementPositions[targetKey].font = fontVal;
+      }
+      if (targetKey === "name") {
+        current.font = fontVal;
+      }
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const elemSizeInput = event.target.closest("[data-custom-element-size-input]");
+    if (elemSizeInput) {
+      const container = elemSizeInput.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = elemSizeInput.dataset.customElementSizeInput;
+      let val = parseInt(elemSizeInput.value, 10);
+      if (isNaN(val)) return;
+      const isText = targetKey === "name" || targetKey === "title" || targetKey.startsWith("extra-");
+      const minVal = isText ? 6 : 20;
+      const maxVal = isText ? 36 : 300;
+      const clamped = Math.max(minVal, Math.min(maxVal, val));
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, size: clamped };
+      } else {
+        current.elementPositions[targetKey].size = clamped;
+      }
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const rotInput = event.target.closest("[data-custom-rot-input]");
+    if (rotInput) {
+      const container = rotInput.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = rotInput.dataset.customRotInput;
+      let val = parseInt(rotInput.value, 10);
+      if (isNaN(val)) val = 0;
+      val = ((val % 360) + 360) % 360;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: val };
+      } else {
+        current.elementPositions[targetKey].rotate = val;
+      }
+      productCustomizations.set(productId, current);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      if (studio) {
+        studio.querySelectorAll(`[data-custom-rot-pill='${targetKey}']`).forEach(p => {
+          p.classList.toggle("is-selected", parseInt(p.dataset.rot, 10) === val);
+        });
+      }
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const textSizeInput = event.target.closest("[data-custom-text-size-input]");
+    if (textSizeInput) {
+      const container = textSizeInput.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
+      if (!productId) return;
+      let val = parseInt(textSizeInput.value, 10);
+      if (isNaN(val)) val = 14;
+      if (val < 6) val = 6;
+      if (val > 48) val = 48;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.textSize = val;
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const logoSizeInput = event.target.closest("[data-custom-logo-size-input]");
+    if (logoSizeInput) {
+      const container = logoSizeInput.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
+      if (!productId) return;
+      let val = parseInt(logoSizeInput.value, 10);
+      if (isNaN(val)) val = 100;
+      if (val < 20) val = 20;
+      if (val > 300) val = 300;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.logoSize = val;
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const iconSizeInput = event.target.closest("[data-custom-icon-size-input]");
+    if (iconSizeInput) {
+      const container = iconSizeInput.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
+      if (!productId) return;
+      let val = parseInt(iconSizeInput.value, 10);
+      if (isNaN(val)) val = 100;
+      if (val < 20) val = 20;
+      if (val > 300) val = 300;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.iconSize = val;
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const qrSizeInput = event.target.closest("[data-custom-qr-size-input]");
+    if (qrSizeInput) {
+      const container = qrSizeInput.closest(".card-customizer-studio, .card-quick-inspector");
+      const productId = container?.dataset.productId;
+      if (!productId) return;
+      let val = parseInt(qrSizeInput.value, 10);
+      if (isNaN(val)) val = 100;
+      if (val < 20) val = 20;
+      if (val > 300) val = 300;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.qrSize = val;
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
     const colorInput = event.target.closest("[data-custom-color]");
     if (colorInput) {
       const studio = colorInput.closest(".card-customizer-studio");
@@ -1954,6 +2544,20 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     syncCustomCardPreview(productId);
   });
 
+  $("#product-detail").addEventListener("focusin", event => {
+    const pId = event.target.closest(".product")?.dataset.id;
+    if (!pId) return;
+    const nameInp = event.target.closest("[data-custom-input='name']");
+    const titleInp = event.target.closest("[data-custom-input='title']");
+    const extraInp = event.target.closest("[data-custom-extra-line]");
+    const toolbar = event.target.closest(".element-prop-toolbar");
+
+    if (nameInp) selectElement("name", pId);
+    else if (titleInp) selectElement("title", pId);
+    else if (extraInp) selectElement(`extra-${extraInp.dataset.customExtraLine}`, pId);
+    else if (toolbar?.dataset.toolbarElement) selectElement(toolbar.dataset.toolbarElement, pId);
+  });
+
   function processCustomLogoFile(file, productId) {
     if (!file || !productId) return;
     if (file.size > 5 * 1024 * 1024) {
@@ -1995,10 +2599,34 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
   $("#product-detail").addEventListener("change", event => {
     const fileInput = event.target.closest("[data-custom-file='logo']");
-    if (!fileInput || !fileInput.files || !fileInput.files[0]) return;
-    const studio = fileInput.closest(".card-customizer-studio");
-    const productId = studio?.dataset.productId;
-    if (productId) processCustomLogoFile(fileInput.files[0], productId);
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      const studio = fileInput.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (productId) processCustomLogoFile(fileInput.files[0], productId);
+      return;
+    }
+
+    const fontSelect = event.target.closest("[data-custom-font-select]");
+    if (fontSelect) {
+      const container = fontSelect.closest(".card-customizer-studio, .card-quick-inspector, .element-prop-toolbar, .product");
+      const productId = container?.dataset.productId || $("#product-detail .product")?.dataset.id;
+      if (!productId) return;
+      const targetKey = fontSelect.dataset.customFontSelect || selectedElementId || "name";
+      const fontVal = fontSelect.value;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[targetKey]) {
+        current.elementPositions[targetKey] = { x: 50, y: 50, rotate: 0, font: fontVal };
+      } else {
+        current.elementPositions[targetKey].font = fontVal;
+      }
+      if (targetKey === "name") {
+        current.font = fontVal;
+      }
+      productCustomizations.set(productId, current);
+      syncCustomCardPreview(productId);
+      return;
+    }
   });
 
   $("#product-detail").addEventListener("dragover", event => {
@@ -2024,20 +2652,110 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
   });
 
   let activeDragItem = null;
-  document.addEventListener("mousedown", event => {
-    const dragItem = event.target.closest("[data-drag-element]");
-    if (!dragItem) return;
-    const cardFace = dragItem.closest("[data-interactive-card]");
-    const productId = cardFace?.dataset.interactiveCard;
-    const elKey = dragItem.dataset.dragElement;
-    if (!cardFace || !productId || !elKey) return;
+  let activeRotateItem = null;
 
-    activeDragItem = { dragItem, cardFace, productId, elKey };
-    dragItem.classList.add("is-dragging");
-    event.preventDefault();
+  document.addEventListener("mousedown", event => {
+    const rotateHandle = event.target.closest("[data-rotate-handle]");
+    if (rotateHandle) {
+      const dragItem = rotateHandle.closest("[data-drag-element]");
+      const cardFace = dragItem?.closest("[data-interactive-card]");
+      const productId = cardFace?.dataset.interactiveCard;
+      const elKey = rotateHandle.dataset.rotateHandle || dragItem?.dataset.dragElement;
+      if (!dragItem || !cardFace || !productId || !elKey) return;
+
+      selectElement(elKey, productId);
+
+      const rect = dragItem.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      const startRot = current.elementPositions?.[elKey]?.rotate || 0;
+      const startMouseAngle = Math.atan2(event.clientY - centerY, event.clientX - centerX) * (180 / Math.PI);
+
+      activeRotateItem = {
+        dragItem,
+        cardFace,
+        productId,
+        elKey,
+        centerX,
+        centerY,
+        startRot,
+        startMouseAngle,
+        startX: event.clientX,
+        startY: event.clientY,
+        hasMoved: false,
+      };
+      dragItem.classList.add("is-rotating");
+      event.preventDefault();
+      return;
+    }
+
+    const dragItem = event.target.closest("[data-drag-element]");
+    if (dragItem) {
+      const cardFace = dragItem.closest("[data-interactive-card]");
+      const productId = cardFace?.dataset.interactiveCard;
+      const elKey = dragItem.dataset.dragElement;
+      if (cardFace && productId && elKey) {
+        selectElement(elKey, productId);
+        activeDragItem = { dragItem, cardFace, productId, elKey };
+        dragItem.classList.add("is-dragging");
+        event.preventDefault();
+        return;
+      }
+    }
+
+    const cardFace = event.target.closest("[data-interactive-card]");
+    if (cardFace && !event.target.closest(".card-quick-inspector") && !event.target.closest(".card-customizer-studio")) {
+      const productId = cardFace.dataset.interactiveCard;
+      if (productId) selectElement(null, productId);
+    }
   });
 
   document.addEventListener("mousemove", event => {
+    if (activeRotateItem) {
+      const { dragItem, productId, elKey, centerX, centerY, startRot, startMouseAngle, startX, startY } = activeRotateItem;
+      const dist = Math.hypot(event.clientX - startX, event.clientY - startY);
+      if (dist > 4) activeRotateItem.hasMoved = true;
+
+      const currentMouseAngle = Math.atan2(event.clientY - centerY, event.clientX - centerX) * (180 / Math.PI);
+      const angleDiff = currentMouseAngle - startMouseAngle;
+      let angle = Math.round((startRot + angleDiff) % 360);
+      if (angle < 0) angle += 360;
+
+      // 15° snap with 4° snap window
+      const snap = 15;
+      const rem = angle % snap;
+      if (rem < 4) angle -= rem;
+      else if (rem > snap - 4) angle += (snap - rem);
+      angle = (angle + 360) % 360;
+
+      dragItem.style.setProperty("--rot", `${angle}deg`);
+      const scale = dragItem.style.getPropertyValue("--scale");
+      const baseTransform = dragItem.classList.contains("pos-custom") ? "translate(-50%, -50%)" : "";
+      dragItem.style.transform = scale
+        ? `${baseTransform} scale(${scale}) rotate(${angle}deg)`.trim()
+        : `${baseTransform} rotate(${angle}deg)`.trim();
+
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[elKey]) {
+        current.elementPositions[elKey] = { x: 50, y: 50, rotate: angle };
+      } else {
+        current.elementPositions[elKey].rotate = angle;
+      }
+      productCustomizations.set(productId, current);
+
+      const inputEl = document.getElementById(`rot-input-${elKey}-${productId}`);
+      if (inputEl && document.activeElement !== inputEl) inputEl.value = String(angle);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      if (studio) {
+        studio.querySelectorAll(`[data-custom-rot-pill='${elKey}']`).forEach(p => {
+          p.classList.toggle("is-selected", parseInt(p.dataset.rot, 10) === angle);
+        });
+      }
+      return;
+    }
+
     if (!activeDragItem) return;
     const { dragItem, cardFace, productId, elKey } = activeDragItem;
     const rect = cardFace.getBoundingClientRect();
@@ -2060,33 +2778,157 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     dragItem.style.bottom = "auto";
     dragItem.style.right = "auto";
     const scale = dragItem.style.getPropertyValue("--scale");
-    dragItem.style.transform = scale ? `translate(-50%, -50%) scale(${scale})` : "translate(-50%, -50%)";
+    const rot = dragItem.style.getPropertyValue("--rot") || "0deg";
+    dragItem.style.transform = scale
+      ? `translate(-50%, -50%) scale(${scale}) rotate(${rot})`
+      : `translate(-50%, -50%) rotate(${rot})`;
 
     const current = productCustomizations.get(productId) ?? defaultCustomization("01");
     if (!current.elementPositions) current.elementPositions = {};
-    current.elementPositions[elKey] = { x: xPercent, y: yPercent };
+    const existingRot = current.elementPositions[elKey]?.rotate || 0;
+    current.elementPositions[elKey] = { x: xPercent, y: yPercent, rotate: existingRot };
     productCustomizations.set(productId, current);
   });
 
   document.addEventListener("mouseup", () => {
-    if (!activeDragItem) return;
-    activeDragItem.dragItem.classList.remove("is-dragging");
-    activeDragItem = null;
+    if (activeRotateItem) {
+      const { dragItem, productId, elKey, startRot, hasMoved } = activeRotateItem;
+      dragItem.classList.remove("is-rotating");
+      if (!hasMoved) {
+        const nextAngle = (startRot + 90) % 360;
+        dragItem.style.setProperty("--rot", `${nextAngle}deg`);
+        const scale = dragItem.style.getPropertyValue("--scale");
+        const baseTransform = dragItem.classList.contains("pos-custom") ? "translate(-50%, -50%)" : "";
+        dragItem.style.transform = scale
+          ? `${baseTransform} scale(${scale}) rotate(${nextAngle}deg)`.trim()
+          : `${baseTransform} rotate(${nextAngle}deg)`.trim();
+        const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+        if (!current.elementPositions) current.elementPositions = {};
+        if (!current.elementPositions[elKey]) {
+          current.elementPositions[elKey] = { x: 50, y: 50, rotate: nextAngle };
+        } else {
+          current.elementPositions[elKey].rotate = nextAngle;
+        }
+        productCustomizations.set(productId, current);
+
+        const inputEl = document.getElementById(`rot-input-${elKey}-${productId}`);
+        if (inputEl && document.activeElement !== inputEl) inputEl.value = String(nextAngle);
+        const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+        if (studio) {
+          studio.querySelectorAll(`[data-custom-rot-pill='${elKey}']`).forEach(p => {
+            p.classList.toggle("is-selected", parseInt(p.dataset.rot, 10) === nextAngle);
+          });
+        }
+      }
+      activeRotateItem = null;
+    }
+    if (activeDragItem) {
+      activeDragItem.dragItem.classList.remove("is-dragging");
+      activeDragItem = null;
+    }
   });
 
   document.addEventListener("touchstart", event => {
-    const dragItem = event.target.closest("[data-drag-element]");
-    if (!dragItem) return;
-    const cardFace = dragItem.closest("[data-interactive-card]");
-    const productId = cardFace?.dataset.interactiveCard;
-    const elKey = dragItem.dataset.dragElement;
-    if (!cardFace || !productId || !elKey) return;
+    const rotateHandle = event.target.closest("[data-rotate-handle]");
+    if (rotateHandle && event.touches[0]) {
+      const touch = event.touches[0];
+      const dragItem = rotateHandle.closest("[data-drag-element]");
+      const cardFace = dragItem?.closest("[data-interactive-card]");
+      const productId = cardFace?.dataset.interactiveCard;
+      const elKey = rotateHandle.dataset.rotateHandle || dragItem?.dataset.dragElement;
+      if (!dragItem || !cardFace || !productId || !elKey) return;
 
-    activeDragItem = { dragItem, cardFace, productId, elKey };
-    dragItem.classList.add("is-dragging");
+      selectElement(elKey, productId);
+
+      const rect = dragItem.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      const startRot = current.elementPositions?.[elKey]?.rotate || 0;
+      const startMouseAngle = Math.atan2(touch.clientY - centerY, touch.clientX - centerX) * (180 / Math.PI);
+
+      activeRotateItem = {
+        dragItem,
+        cardFace,
+        productId,
+        elKey,
+        centerX,
+        centerY,
+        startRot,
+        startMouseAngle,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        hasMoved: false,
+      };
+      dragItem.classList.add("is-rotating");
+      return;
+    }
+
+    const dragItem = event.target.closest("[data-drag-element]");
+    if (dragItem) {
+      const cardFace = dragItem.closest("[data-interactive-card]");
+      const productId = cardFace?.dataset.interactiveCard;
+      const elKey = dragItem.dataset.dragElement;
+      if (cardFace && productId && elKey) {
+        selectElement(elKey, productId);
+        activeDragItem = { dragItem, cardFace, productId, elKey };
+        dragItem.classList.add("is-dragging");
+        return;
+      }
+    }
+
+    const cardFace = event.target.closest("[data-interactive-card]");
+    if (cardFace && !event.target.closest(".card-quick-inspector") && !event.target.closest(".card-customizer-studio")) {
+      const productId = cardFace.dataset.interactiveCard;
+      if (productId) selectElement(null, productId);
+    }
   }, { passive: true });
 
   document.addEventListener("touchmove", event => {
+    if (activeRotateItem && event.touches[0]) {
+      const touch = event.touches[0];
+      const { dragItem, productId, elKey, centerX, centerY, startRot, startMouseAngle, startX, startY } = activeRotateItem;
+      const dist = Math.hypot(touch.clientX - startX, touch.clientY - startY);
+      if (dist > 4) activeRotateItem.hasMoved = true;
+
+      const currentMouseAngle = Math.atan2(touch.clientY - centerY, touch.clientX - centerX) * (180 / Math.PI);
+      const angleDiff = currentMouseAngle - startMouseAngle;
+      let angle = Math.round((startRot + angleDiff) % 360);
+      if (angle < 0) angle += 360;
+
+      const snap = 15;
+      const rem = angle % snap;
+      if (rem < 4) angle -= rem;
+      else if (rem > snap - 4) angle += (snap - rem);
+      angle = (angle + 360) % 360;
+
+      dragItem.style.setProperty("--rot", `${angle}deg`);
+      const scale = dragItem.style.getPropertyValue("--scale");
+      const baseTransform = dragItem.classList.contains("pos-custom") ? "translate(-50%, -50%)" : "";
+      dragItem.style.transform = scale
+        ? `${baseTransform} scale(${scale}) rotate(${angle}deg)`.trim()
+        : `${baseTransform} rotate(${angle}deg)`.trim();
+
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      if (!current.elementPositions) current.elementPositions = {};
+      if (!current.elementPositions[elKey]) {
+        current.elementPositions[elKey] = { x: 50, y: 50, rotate: angle };
+      } else {
+        current.elementPositions[elKey].rotate = angle;
+      }
+      productCustomizations.set(productId, current);
+
+      const inputEl = document.getElementById(`rot-input-${elKey}-${productId}`);
+      if (inputEl && document.activeElement !== inputEl) inputEl.value = String(angle);
+      const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+      if (studio) {
+        studio.querySelectorAll(`[data-custom-rot-pill='${elKey}']`).forEach(p => {
+          p.classList.toggle("is-selected", parseInt(p.dataset.rot, 10) === angle);
+        });
+      }
+      return;
+    }
+
     if (!activeDragItem || !event.touches[0]) return;
     const { dragItem, cardFace, productId, elKey } = activeDragItem;
     const touch = event.touches[0];
@@ -2110,15 +2952,50 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     dragItem.style.bottom = "auto";
     dragItem.style.right = "auto";
     const scale = dragItem.style.getPropertyValue("--scale");
-    dragItem.style.transform = scale ? `translate(-50%, -50%) scale(${scale})` : "translate(-50%, -50%)";
+    const rot = dragItem.style.getPropertyValue("--rot") || "0deg";
+    dragItem.style.transform = scale
+      ? `translate(-50%, -50%) scale(${scale}) rotate(${rot})`
+      : `translate(-50%, -50%) rotate(${rot})`;
 
     const current = productCustomizations.get(productId) ?? defaultCustomization("01");
     if (!current.elementPositions) current.elementPositions = {};
-    current.elementPositions[elKey] = { x: xPercent, y: yPercent };
+    const existingRot = current.elementPositions[elKey]?.rotate || 0;
+    current.elementPositions[elKey] = { x: xPercent, y: yPercent, rotate: existingRot };
     productCustomizations.set(productId, current);
   }, { passive: true });
 
   document.addEventListener("touchend", () => {
+    if (activeRotateItem) {
+      const { dragItem, productId, elKey, startRot, hasMoved } = activeRotateItem;
+      dragItem.classList.remove("is-rotating");
+      if (!hasMoved) {
+        const nextAngle = (startRot + 90) % 360;
+        dragItem.style.setProperty("--rot", `${nextAngle}deg`);
+        const scale = dragItem.style.getPropertyValue("--scale");
+        const baseTransform = dragItem.classList.contains("pos-custom") ? "translate(-50%, -50%)" : "";
+        dragItem.style.transform = scale
+          ? `${baseTransform} scale(${scale}) rotate(${nextAngle}deg)`.trim()
+          : `${baseTransform} rotate(${nextAngle}deg)`.trim();
+        const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+        if (!current.elementPositions) current.elementPositions = {};
+        if (!current.elementPositions[elKey]) {
+          current.elementPositions[elKey] = { x: 50, y: 50, rotate: nextAngle };
+        } else {
+          current.elementPositions[elKey].rotate = nextAngle;
+        }
+        productCustomizations.set(productId, current);
+
+        const inputEl = document.getElementById(`rot-input-${elKey}-${productId}`);
+        if (inputEl && document.activeElement !== inputEl) inputEl.value = String(nextAngle);
+        const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
+        if (studio) {
+          studio.querySelectorAll(`[data-custom-rot-pill='${elKey}']`).forEach(p => {
+            p.classList.toggle("is-selected", parseInt(p.dataset.rot, 10) === nextAngle);
+          });
+        }
+      }
+      activeRotateItem = null;
+    }
     if (!activeDragItem) return;
     activeDragItem.dragItem.classList.remove("is-dragging");
     activeDragItem = null;

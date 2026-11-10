@@ -399,6 +399,8 @@ export const ProductCustomizationSchema = z.object({
   surfaceColor: HexColorSchema.default("#0a0b0d"),
   accentColor: HexColorSchema.default("#d8b26e"),
   font: z.enum(["sans", "serif", "mono"]).default("sans"),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
   finish: z.enum(["matte", "brushed", "gloss"]).default("matte").optional(),
   position: z.string().optional(),
   presetId: z.string().max(30).optional(),
@@ -415,8 +417,27 @@ export const ProductCustomizationSchema = z.object({
   dividerLines: z.array(DividerLineSchema).max(4).default([]).optional(),
   brandingMode: z.enum(["with-logo", "without-logo"]).default("with-logo").optional(),
   hasOneinfoLogo: z.boolean().default(true).optional(),
-  customPos: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).optional(),
-  elementPositions: z.record(z.string(), z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) })).optional(),
+  customPos: z.object({
+    x: z.number().min(0).max(100),
+    y: z.number().min(0).max(100),
+    rotate: z.number().min(-360).max(360).default(0).optional(),
+  }).nullable().optional(),
+  elementPositions: z.record(z.string(), z.object({
+    x: z.number().min(0).max(100).optional(),
+    y: z.number().min(0).max(100).optional(),
+    rotate: z.number().min(-360).max(360).default(0).optional(),
+    font: z.enum(["sans", "serif", "mono"]).optional(),
+    size: z.number().min(6).max(300).optional(),
+    bold: z.boolean().optional(),
+    italic: z.boolean().optional(),
+  })).optional(),
+  elementStyles: z.record(z.string(), z.object({
+    font: z.enum(["sans", "serif", "mono"]).optional(),
+    size: z.number().min(6).max(300).optional(),
+    rotate: z.number().min(-360).max(360).optional(),
+    bold: z.boolean().optional(),
+    italic: z.boolean().optional(),
+  })).optional(),
 });
 export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
 

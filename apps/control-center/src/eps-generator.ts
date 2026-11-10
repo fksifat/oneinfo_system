@@ -45,59 +45,94 @@ export function generateCardFaceEps(
 ): string {
   const [bgR, bgG, bgB] = hexToRgb(custom.surfaceColor || "#0a0b0d");
   const [accentR, accentG, accentB] = hexToRgb(custom.accentColor || "#d8b26e");
-  const fontName = custom.font === "serif" ? "Times-Bold" : custom.font === "mono" ? "Courier-Bold" : "Helvetica-Bold";
-  const titleFont = custom.font === "serif" ? "Times-Roman" : custom.font === "mono" ? "Courier" : "Helvetica";
+  const resolvePsFont = (f?: string, bold?: boolean, italic?: boolean) => {
+    if (f === "serif") {
+      if (bold && italic) return "Times-BoldItalic";
+      if (bold) return "Times-Bold";
+      if (italic) return "Times-Italic";
+      return "Times-Roman";
+    }
+    if (f === "mono") {
+      if (bold && italic) return "Courier-BoldOblique";
+      if (bold) return "Courier-Bold";
+      if (italic) return "Courier-Oblique";
+      return "Courier";
+    }
+    if (bold && italic) return "Helvetica-BoldOblique";
+    if (bold) return "Helvetica-Bold";
+    if (italic) return "Helvetica-Oblique";
+    return "Helvetica";
+  };
 
   const txn = order.transactionId?.trim() || order.invoiceNumber?.trim() || order.id;
   const cardName = escapePs(custom.name || order.customerName || "Cardholder Name");
   const cardTitle = escapePs(custom.title || "Custom Edition");
   const layout = custom.layout || "left";
   const motif = custom.surfaceMotif || "facets";
-  const textScale = (custom.textSize || 14) / 14;
-  const logoScale = (custom.logoSize || 100) / 100;
-  const iconScale = (custom.iconSize || 100) / 100;
-  const qrScale = (custom.qrSize || 100) / 100;
-  const namePt = (12 * textScale).toFixed(1);
-  const titlePt = (6.5 * textScale).toFixed(1);
-  const logoPt = (11 * logoScale).toFixed(1);
-  const arcR1 = (5 * iconScale).toFixed(1);
-  const arcR2 = (9 * iconScale).toFixed(1);
-  const extraLines = (custom.extraLines || []).filter((l) => l && l.trim()).map(escapePs);
   const ep = custom.elementPositions || {};
 
   // Front element coordinates relative to 86x55 mm trim box
   const epLogo = ep.logo;
-  const logoX = epLogo
+  const epSign = ep.sign;
+  const epName = ep.name || custom.customPos;
+  const epTitle = ep.title || ep.details || (custom.customPos ? { x: custom.customPos.x, y: Math.min(90, custom.customPos.y + 10) } : null);
+  const epQr = ep["back-qr"];
+
+  const epNameTyped = epName as { size?: number; font?: "sans" | "serif" | "mono"; rotate?: number; bold?: boolean; italic?: boolean } | undefined;
+  const epTitleTyped = epTitle as { size?: number; font?: "sans" | "serif" | "mono"; rotate?: number; bold?: boolean; italic?: boolean } | undefined;
+
+  const isNameBold = epNameTyped?.bold !== undefined ? epNameTyped.bold : (custom.bold !== undefined ? custom.bold : true);
+  const isNameItalic = epNameTyped?.italic !== undefined ? epNameTyped.italic : Boolean(custom.italic);
+
+  const isTitleBold = epTitleTyped?.bold !== undefined ? epTitleTyped.bold : Boolean(custom.bold);
+  const isTitleItalic = epTitleTyped?.italic !== undefined ? epTitleTyped.italic : Boolean(custom.italic);
+
+  const nameScale = (epNameTyped?.size || custom.textSize || 14) / 14;
+  const titleScale = (epTitleTyped?.size || Math.round((custom.textSize || 14) * 0.75)) / 14;
+  const logoScale = (epLogo?.size || custom.logoSize || 100) / 100;
+  const iconScale = (epSign?.size || custom.iconSize || 100) / 100;
+  const qrScale = (epQr?.size || custom.qrSize || 100) / 100;
+
+  const namePt = (12 * nameScale).toFixed(1);
+  const titlePt = (6.5 * titleScale).toFixed(1);
+  const logoPt = (11 * logoScale).toFixed(1);
+  const arcR1 = (5 * iconScale).toFixed(1);
+  const arcR2 = (9 * iconScale).toFixed(1);
+  const extraLines = (custom.extraLines || []).filter((l) => l && l.trim()).map(escapePs);
+
+  const logoX = epLogo && epLogo.x != null
     ? Math.round((epLogo.x / 100) * EPS_SPEC.cardW)
     : (layout === "center" || layout === "header") ? 98 : (layout === "right" || layout === "reverse") ? 175 : 20;
-  const logoY = epLogo
+  const logoY = epLogo && epLogo.y != null
     ? Math.round(((100 - epLogo.y) / 100) * EPS_SPEC.cardH)
     : (layout === "reverse") ? 22 : 128;
 
-  const epSign = ep.sign;
-  const nfcX = epSign ? Math.round((epSign.x / 100) * EPS_SPEC.cardW) : 222;
-  const nfcY = epSign ? Math.round(((100 - epSign.y) / 100) * EPS_SPEC.cardH) : 132;
+  const nfcX = epSign && epSign.x != null ? Math.round((epSign.x / 100) * EPS_SPEC.cardW) : 222;
+  const nfcY = epSign && epSign.y != null ? Math.round(((100 - epSign.y) / 100) * EPS_SPEC.cardH) : 132;
 
-  const epName = ep.name || custom.customPos;
-  const nameX = epName
+  const nameX = epName && epName.x != null
     ? Math.round((epName.x / 100) * EPS_SPEC.cardW)
     : (layout === "center" || layout === "header") ? 90 : (layout === "right" || layout === "split-logo-left" || layout === "diagonal") ? 130 : 20;
-  const nameY = epName
+  const nameY = epName && epName.y != null
     ? Math.round(((100 - epName.y) / 100) * EPS_SPEC.cardH)
     : (layout === "center" || layout === "header") ? 52 : (layout === "reverse" || layout === "split-logo-right") ? 105 : 38;
 
-  const epTitle = ep.title || ep.details || (custom.customPos ? { x: custom.customPos.x, y: Math.min(90, custom.customPos.y + 10) } : null);
-  const titleX = epTitle
+  const titleX = epTitle && epTitle.x != null
     ? Math.round((epTitle.x / 100) * EPS_SPEC.cardW)
     : (layout === "center" || layout === "header") ? 90 : (layout === "right" || layout === "split-logo-left" || layout === "diagonal") ? 130 : 20;
-  const titleY = epTitle
+  const titleY = epTitle && epTitle.y != null
     ? Math.round(((100 - epTitle.y) / 100) * EPS_SPEC.cardH)
     : (layout === "center" || layout === "header") ? 40 : (layout === "reverse" || layout === "split-logo-right") ? 93 : 26;
 
   // Back QR coordinates relative to 86x55 mm trim box
-  const epQr = ep["back-qr"];
-  const qrX = epQr ? Math.round((epQr.x / 100) * EPS_SPEC.cardW) : Math.round((EPS_SPEC.cardW - 50) / 2);
-  const qrY = epQr ? Math.round(((100 - epQr.y) / 100) * EPS_SPEC.cardH) : Math.round((EPS_SPEC.cardH - 50) / 2);
+  const qrX = epQr && epQr.x != null ? Math.round((epQr.x / 100) * EPS_SPEC.cardW) : Math.round((EPS_SPEC.cardW - 50) / 2);
+  const qrY = epQr && epQr.y != null ? Math.round(((100 - epQr.y) / 100) * EPS_SPEC.cardH) : Math.round((EPS_SPEC.cardH - 50) / 2);
+
+  const logoRot = epLogo?.rotate || 0;
+  const signRot = epSign?.rotate || 0;
+  const nameRot = epNameTyped?.rotate || 0;
+  const titleRot = epTitleTyped?.rotate || 0;
+  const qrRot = epQr?.rotate || 0;
 
   const sideLabel = side === "front" ? "FRONT ARTWORK (LASER ENGRAVE & FOIL)" : "BACK ARTWORK (QR & NFC PRINT)";
 
@@ -239,6 +274,7 @@ newpath 0 64 moveto 64 0 lineto stroke
 }
 
 % Logo & NFC Glyph (Customer Logo / "YOUR LOGO" placeholder text)
+${logoRot ? `gsave ${logoX + 25} ${logoY + 6} translate -${logoRot} rotate -${logoX + 25} -${logoY + 6} translate` : ""}
 ${
   custom.companyName
     ? `${accentR} ${accentG} ${accentB} setrgbcolor
@@ -248,45 +284,64 @@ ${logoX} ${logoY} moveto (${escapePs(custom.companyName)}) show`
 /Helvetica-Bold findfont ${logoPt} scalefont setfont
 ${logoX} ${logoY} moveto (YOUR LOGO) show`
 }
+${logoRot ? "grestore" : ""}
 
 % NFC wave icon
+${signRot ? `gsave ${nfcX} ${nfcY} translate -${signRot} rotate -${nfcX} -${nfcY} translate` : ""}
 newpath
 ${nfcX} ${nfcY} ${arcR1} 45 135 arc stroke
 newpath
 ${nfcX} ${nfcY} ${arcR2} 45 135 arc stroke
+${signRot ? "grestore" : ""}
 
 % Divider Lines (HR & Vertical)
 ${(custom.dividerLines || [])
   .map((line, idx) => {
     const epLine = ep[`divider-${idx}`];
-    const cx = epLine ? Math.round((epLine.x / 100) * EPS_SPEC.cardW) : Math.round(EPS_SPEC.cardW / 2);
-    const cy = epLine ? Math.round(((100 - epLine.y) / 100) * EPS_SPEC.cardH) : Math.round(EPS_SPEC.cardH / 2);
+    const cx = epLine && epLine.x != null ? Math.round((epLine.x / 100) * EPS_SPEC.cardW) : Math.round(EPS_SPEC.cardW / 2);
+    const cy = epLine && epLine.y != null ? Math.round(((100 - epLine.y) / 100) * EPS_SPEC.cardH) : Math.round(EPS_SPEC.cardH / 2);
+    const divRot = epLine?.rotate || 0;
     const isVert = line.orientation === "vertical";
     const lenPt = Math.round(((line.length || (isVert ? 60 : 100)) / 340) * EPS_SPEC.cardW);
     const halfLen = Math.round(lenPt / 2);
     const dashCmd = line.style === "dashed" ? "[3 3] 0 setdash" : "[] 0 setdash";
+    const rotPrefix = divRot ? `gsave ${cx} ${cy} translate -${divRot} rotate -${cx} -${cy} translate ` : "";
+    const rotSuffix = divRot ? " grestore" : "";
     if (isVert) {
-      return `${accentR} ${accentG} ${accentB} setrgbcolor 1 setlinewidth ${dashCmd} newpath ${cx} ${cy - halfLen} moveto ${cx} ${cy + halfLen} lineto stroke [] 0 setdash`;
+      return `${rotPrefix}${accentR} ${accentG} ${accentB} setrgbcolor 1 setlinewidth ${dashCmd} newpath ${cx} ${cy - halfLen} moveto ${cx} ${cy + halfLen} lineto stroke [] 0 setdash${rotSuffix}`;
     } else {
-      return `${accentR} ${accentG} ${accentB} setrgbcolor 1 setlinewidth ${dashCmd} newpath ${cx - halfLen} ${cy} moveto ${cx + halfLen} ${cy} lineto stroke [] 0 setdash`;
+      return `${rotPrefix}${accentR} ${accentG} ${accentB} setrgbcolor 1 setlinewidth ${dashCmd} newpath ${cx - halfLen} ${cy} moveto ${cx + halfLen} ${cy} lineto stroke [] 0 setdash${rotSuffix}`;
     }
   })
   .join("\n")}
 
 % Cardholder Typography
-/${fontName} findfont ${namePt} scalefont setfont
+${nameRot ? `gsave ${nameX + 35} ${nameY + 6} translate -${nameRot} rotate -${nameX + 35} -${nameY + 6} translate` : ""}
+/${resolvePsFont(epNameTyped?.font || custom.font, isNameBold, isNameItalic)} findfont ${namePt} scalefont setfont
 1 1 1 setrgbcolor
 ${nameX} ${nameY} moveto (${cardName}) show
+${nameRot ? "grestore" : ""}
 
-/${titleFont} findfont ${titlePt} scalefont setfont
+${titleRot ? `gsave ${titleX + 35} ${titleY + 4} translate -${titleRot} rotate -${titleX + 35} -${titleY + 4} translate` : ""}
+/${resolvePsFont(epTitleTyped?.font || custom.font, isTitleBold, isTitleItalic)} findfont ${titlePt} scalefont setfont
 ${accentR} ${accentG} ${accentB} setrgbcolor
 ${titleX} ${titleY} moveto (${cardTitle}) show
+${titleRot ? "grestore" : ""}
+
 ${extraLines
   .map((line, idx) => {
-    const epLine = ep[`extra-${idx}`];
-    const lx = epLine ? Math.round((epLine.x / 100) * EPS_SPEC.cardW) : titleX;
-    const ly = epLine ? Math.round(((100 - epLine.y) / 100) * EPS_SPEC.cardH) : Math.round(titleY - (idx + 1) * (8 * textScale));
-    return `${lx} ${ly} moveto (${line}) show`;
+    const epLine = ep[`extra-${idx}`] as { x?: number; y?: number; rotate?: number; size?: number; font?: "sans" | "serif" | "mono"; bold?: boolean; italic?: boolean } | undefined;
+    const lx = epLine && epLine.x != null ? Math.round((epLine.x / 100) * EPS_SPEC.cardW) : titleX;
+    const ly = epLine && epLine.y != null ? Math.round(((100 - epLine.y) / 100) * EPS_SPEC.cardH) : Math.round(titleY - (idx + 1) * (8 * titleScale));
+    const extraRot = epLine?.rotate || 0;
+    const extraScale = (epLine?.size || Math.round((custom.textSize || 14) * 0.75)) / 14;
+    const extraPt = (6.5 * extraScale).toFixed(1);
+    const isExtraBold = epLine?.bold !== undefined ? epLine.bold : Boolean(custom.bold);
+    const isExtraItalic = epLine?.italic !== undefined ? epLine.italic : Boolean(custom.italic);
+    const extraFont = resolvePsFont(epLine?.font || custom.font, isExtraBold, isExtraItalic);
+    const rotPre = extraRot ? `gsave ${lx + 35} ${ly + 4} translate -${extraRot} rotate -${lx + 35} -${ly + 4} translate ` : "";
+    const rotPost = extraRot ? " grestore" : "";
+    return `${rotPre}/${extraFont} findfont ${extraPt} scalefont setfont ${lx} ${ly} moveto (${line}) show${rotPost}`;
   })
   .join("\n")}
 ` : `
@@ -314,6 +369,7 @@ newpath 0 84 moveto 84 0 lineto stroke
 }
 
 % Back QR Code Framing Box
+${qrRot ? `gsave ${Math.round(qrX + 25 * qrScale)} ${Math.round(qrY + 25 * qrScale)} translate -${qrRot} rotate -${Math.round(qrX + 25 * qrScale)} -${Math.round(qrY + 25 * qrScale)} translate` : ""}
 0.8 setlinewidth
 newpath ${qrX} ${qrY} ${(50 * qrScale).toFixed(1)} ${(50 * qrScale).toFixed(1)} ${(4 * qrScale).toFixed(1)} roundrect
 1 1 1 setrgbcolor fill
@@ -339,6 +395,7 @@ newpath ${qrX + Math.round(5 * qrScale)} ${qrY + Math.round(5 * qrScale)} ${(12 
 newpath ${qrX + Math.round(7 * qrScale)} ${qrY + Math.round(7 * qrScale)} ${(8 * qrScale).toFixed(1)} ${(8 * qrScale).toFixed(1)} ${(1 * qrScale).toFixed(1)} roundrect fill
 0 0 0 setrgbcolor
 newpath ${qrX + Math.round(9 * qrScale)} ${qrY + Math.round(9 * qrScale)} ${(4 * qrScale).toFixed(1)} ${(4 * qrScale).toFixed(1)} 0 roundrect fill
+${qrRot ? "grestore" : ""}
 
 % Footer Branding: Bottom-left Oneinfo branding & Bottom-right AriseStudio attribution (Omitted in Without Logo edition)
 ${
