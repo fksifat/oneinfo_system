@@ -299,6 +299,8 @@ export const ProductVariantSchema = z.object({
   colorHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex colour"),
   priceMinor: z.number().int().min(1).max(100_000_000),
   salePriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null),
+  withoutLogoPriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null).optional(),
+  withoutLogoSalePriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null).optional(),
   available: z.boolean().default(true),
   stockQuantity: z.number().int().min(0).max(1_000_000).optional(),
   finish: z.string().trim().max(80).default(""),
@@ -326,6 +328,34 @@ export function productGallery(variants: ProductVariant[], selected: ProductVari
 export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) => v.salePriceMinor ?? v.priceMinor;
 export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
   v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
+
+export const variantPriceForBranding = (
+  v: Pick<ProductVariant, "priceMinor" | "salePriceMinor" | "withoutLogoPriceMinor" | "withoutLogoSalePriceMinor">,
+  hasLogo: boolean = true
+): number => {
+  if (!hasLogo) {
+    if (v.withoutLogoPriceMinor) {
+      return v.withoutLogoSalePriceMinor ?? v.withoutLogoPriceMinor;
+    }
+    // Default surcharge of +500 BDT if withoutLogo price is unset by admin
+    const base = v.salePriceMinor ?? v.priceMinor;
+    return base + 50000;
+  }
+  return v.salePriceMinor ?? v.priceMinor;
+};
+
+export const variantRegularPriceForBranding = (
+  v: Pick<ProductVariant, "priceMinor" | "withoutLogoPriceMinor">,
+  hasLogo: boolean = true
+): number => {
+  if (!hasLogo) {
+    if (v.withoutLogoPriceMinor) {
+      return v.withoutLogoPriceMinor;
+    }
+    return v.priceMinor + 50000;
+  }
+  return v.priceMinor;
+};
 
 export const CardLayoutSchema = z.enum([
   "left",
@@ -383,6 +413,8 @@ export const ProductCustomizationSchema = z.object({
   iconSize: z.number().int().min(30).max(250).default(100).optional(),
   qrSize: z.number().int().min(30).max(250).default(100).optional(),
   dividerLines: z.array(DividerLineSchema).max(4).default([]).optional(),
+  brandingMode: z.enum(["with-logo", "without-logo"]).default("with-logo").optional(),
+  hasOneinfoLogo: z.boolean().default(true).optional(),
   customPos: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).optional(),
   elementPositions: z.record(z.string(), z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) })).optional(),
 });

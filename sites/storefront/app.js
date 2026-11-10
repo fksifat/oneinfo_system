@@ -1,4 +1,4 @@
-import { variantPrice, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
+import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
@@ -36,6 +36,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
   const selectedMedia = new Map();
   const selectedModels = new Map();
   const productCustomizations = new Map();
+  let activeStudioTab = "details";
   const quantities = new Map();
   let addingToCart = false;
   let catalogReady = false;
@@ -245,11 +246,18 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const imageUrl = !detail ? variantCover(v) : item?.type === "image" ? item.url : "";
       const drivePreview = detail && item?.type === "video" ? driveVideoPreview(item.url) : null;
       const hasMedia = imageUrl || (detail && item?.type === "video");
-      const percent = discountPercent(v);
-      const sale = v.salePriceMinor !== null;
       const quantity = quantities.get(p.id) ?? 1;
       const custom = productCustomizations.get(p.id) ?? defaultCustomization("01");
       const isCustomizable = detail && p.customizable;
+      const hasLogo = !p.customizable || (custom.hasOneinfoLogo !== false && custom.brandingMode !== "without-logo");
+      const activePrice = p.customizable ? variantPriceForBranding(v, hasLogo) : variantPrice(v);
+      const activeRegular = p.customizable ? variantRegularPriceForBranding(v, hasLogo) : v.priceMinor;
+      const sale = activePrice < activeRegular;
+      const percent = activeRegular > 0 && sale ? Math.floor((activeRegular - activePrice) * 100 / activeRegular) : 0;
+      const priceWithLogo = variantPriceForBranding(v, true);
+      const regWithLogo = variantRegularPriceForBranding(v, true);
+      const priceWithoutLogo = variantPriceForBranding(v, false);
+      const regWithoutLogo = variantRegularPriceForBranding(v, false);
       const isLight = isCustomizable ? isColorLight(custom.surfaceColor) : (v.appearance === "light");
       const surfaceBg = isCustomizable ? escapeHtml(custom.surfaceColor) : escapeHtml(v.colorHex);
       const cardAccent = isCustomizable ? escapeHtml(custom.accentColor) : 'var(--accent)';
@@ -305,7 +313,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           ${(custom.logoPreviewUrl || custom.logoUrl) ? `
             <img class="mini-product-logo custom-user-logo" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Custom logo" />
           ` : `
-            <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
+            <span class="card-logo-placeholder" style="color:${escapeHtml(custom.accentColor)};">YOUR LOGO</span>
           `}
         </div>
 
@@ -369,9 +377,11 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           </div>
           ${(custom.backSubtitle && custom.backSubtitle.trim()) ? `<span class="card-back-subtitle" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.backSubtitle.trim())}</span>` : ""}
         </div>
-        <div class="card-back-footer">
-          <img class="mini-product-logo card-back-oneinfo-logo" src="${logoUrl}" alt="Oneinfo logo" />
-          ${renderAriseLogoSvg()}
+        <div class="card-back-footer" style="${custom.hasOneinfoLogo !== false ? '' : 'display:none;'}">
+          ${custom.hasOneinfoLogo !== false ? `
+            <img class="mini-product-logo card-back-oneinfo-logo" src="${logoUrl}" alt="Oneinfo logo" />
+            ${renderAriseLogoSvg()}
+          ` : `<!-- Brand labeling omitted (Without Oneinfo Logo edition) -->`}
         </div>
       </div>`;
 
@@ -428,43 +438,55 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           ${models.length > 1 ? `<div class="gallery-model-actions" role="group" aria-label="3D views">${models.map(entry => `<button class="gallery-model-button" type="button" data-media="${entry.index}" data-media-variant="${escapeHtml(entry.variant.id)}" aria-pressed="${entry === model}">${escapeHtml(entry.media.label || entry.variant.name)}</button>`).join("")}</div>` : ""}
         </section>` : ""}
         ${detail ? `</div><div class="product-details-copy">` : ""}
-        <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(variantPrice(v) / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(v.priceMinor / 100)}">${money.format(v.priceMinor / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((v.priceMinor - variantPrice(v)) / 100)}</span>` : ''}</div></div>
+        <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(activePrice / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(activeRegular / 100)}">${money.format(activeRegular / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((activeRegular - activePrice) / 100)}</span>` : ''}</div></div>
         ${!isCustomizable ? `<div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>` : ""}
         ${detail && p.customizable ? `
         <section class="card-customizer-studio" data-product-id="${escapeHtml(p.id)}" aria-label="Card personalization">
           <div class="customizer-header">
-            <div>
-              <span class="customizer-kicker">BESPOKE CARD STUDIO</span>
-              <h3>Personalise your card</h3>
-            </div>
+            <h3>Personalise your card</h3>
             <span class="customizer-badge-free">Included free</span>
           </div>
-          <p class="customizer-desc">Choose from our 10 signature design editions or custom-configure your surface motif, base colour, foil inlay, and layout.</p>
-          <div class="customizer-form">
-            <div class="customizer-section">
-              <div class="customizer-section-title">
-                <span>1. Quick Presets (10 Premium Editions)</span>
-                <small>1-click apply matching design</small>
-              </div>
-              <div class="preset-chips-scroll" role="radiogroup" aria-label="10 Premium Presets">
-                ${PREMIUM_PRESETS.map(preset => `
-                  <button type="button" class="preset-chip ${custom.presetId === preset.id ? "is-selected" : ""}" data-custom-preset="${preset.id}" aria-checked="${custom.presetId === preset.id}" role="radio" title="${escapeHtml(preset.subtitle)}">
-                    <span class="preset-swatches">
-                      <span class="preset-swatch-base" style="background:${preset.surfaceColor};"></span>
-                      <span class="preset-swatch-accent" style="background:${preset.accentColor};"></span>
-                    </span>
-                    <span class="preset-chip-text">
-                      <strong>${escapeHtml(preset.name)}</strong>
-                      <small>${escapeHtml(preset.label)}</small>
-                    </span>
-                  </button>
-                `).join("")}
-              </div>
-            </div>
 
-            <div class="customizer-section">
+          <!-- Top Branding Selector (With Oneinfo Logo vs Without Oneinfo Logo) -->
+          <div class="branding-selector" role="radiogroup" aria-label="Card branding option">
+            <button type="button" class="branding-btn ${hasLogo ? 'is-selected' : ''}" data-custom-branding="with-logo" role="radio" aria-checked="${hasLogo}">
+              <span class="branding-btn-radio"></span>
+              <div class="branding-btn-content">
+                <span class="branding-btn-name">With Oneinfo Logo</span>
+                <span class="branding-btn-price">${priceWithLogo < regWithLogo ? `<del>${money.format(regWithLogo / 100)}</del>` : ''}<strong>${money.format(priceWithLogo / 100)}</strong></span>
+              </div>
+            </button>
+
+            <button type="button" class="branding-btn ${!hasLogo ? 'is-selected' : ''}" data-custom-branding="without-logo" role="radio" aria-checked="${!hasLogo}">
+              <span class="branding-btn-radio"></span>
+              <div class="branding-btn-content">
+                <span class="branding-btn-name">Without Oneinfo Logo</span>
+                <span class="branding-btn-price">${priceWithoutLogo < regWithoutLogo ? `<del>${money.format(regWithoutLogo / 100)}</del>` : ''}<strong>${money.format(priceWithoutLogo / 100)}</strong></span>
+              </div>
+            </button>
+          </div>
+
+          <!-- 2. Studio Tabs Navigation -->
+          <div class="studio-tabs-nav" role="tablist" aria-label="Studio Configuration Tabs">
+            <button type="button" class="studio-tab-btn ${activeStudioTab === 'details' ? 'is-active' : ''}" data-studio-tab="details" role="tab" aria-selected="${activeStudioTab === 'details'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>Details</span>
+            </button>
+            <button type="button" class="studio-tab-btn ${activeStudioTab === 'style' ? 'is-active' : ''}" data-studio-tab="style" role="tab" aria-selected="${activeStudioTab === 'style'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/></svg>
+              <span>Themes</span>
+            </button>
+            <button type="button" class="studio-tab-btn ${activeStudioTab === 'layout' ? 'is-active' : ''}" data-studio-tab="layout" role="tab" aria-selected="${activeStudioTab === 'layout'}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+              <span>Layout</span>
+            </button>
+          </div>
+
+          <!-- TAB 1: DETAILS & LOGO -->
+          <div class="studio-tab-pane" id="studio-pane-details" ${activeStudioTab !== 'details' ? 'hidden' : ''}>
+            <div class="customizer-section" style="padding-top:0; border-top:none;">
               <div class="customizer-section-title">
-                <span>2. Cardholder Details</span>
+                <span>Cardholder Details</span>
                 <small>Laser-engraved onto card</small>
               </div>
               <div class="custom-fields-stack">
@@ -492,11 +514,23 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                   <button type="button" class="add-extra-field-btn" data-custom-action="add-extra-line">+ Add Line (Company, Dept, etc.)</button>
                 ` : ""}
               </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>Typography & Text Size</span>
+                <small>Scale font or drag anywhere on card</small>
+              </div>
+              <div class="customizer-pills" role="radiogroup" aria-label="Typography style" style="margin-bottom: 12px;">
+                <button type="button" class="customizer-pill ${custom.font === 'sans' ? 'is-selected' : ''}" data-custom-set="font" data-value="sans" aria-checked="${custom.font === 'sans'}" role="radio"><span class="font-sample" style="font-family: inherit; font-weight: 700;">Aa</span> Modern Sans</button>
+                <button type="button" class="customizer-pill ${custom.font === 'serif' ? 'is-selected' : ''}" data-custom-set="font" data-value="serif" aria-checked="${custom.font === 'serif'}" role="radio"><span class="font-sample" style="font-family: Georgia, serif; font-style: italic; font-weight: 700;">Aa</span> Luxury Serif</button>
+                <button type="button" class="customizer-pill ${custom.font === 'mono' ? 'is-selected' : ''}" data-custom-set="font" data-value="mono" aria-checked="${custom.font === 'mono'}" role="radio"><span class="font-sample" style="font-family: monospace; font-weight: 700;">Aa</span> Minimal Mono</button>
+              </div>
               <div class="text-size-control-wrap">
                 <div class="text-size-toolbar-row">
                   <div class="toolbar-label-group">
-                    <strong>Text Size</strong>
-                    <span class="toolbar-hint">Scale text or drag anywhere on card</span>
+                    <strong>Text Size Scale</strong>
+                    <span class="toolbar-hint">Scale cardholder name and details</span>
                   </div>
                   <div class="font-size-stepper" role="group" aria-label="Text Size Stepper">
                     <button type="button" class="size-step-btn" data-custom-text-size-step="-2" title="Smaller text (A-)" aria-label="Smaller text">A-</button>
@@ -510,8 +544,155 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                   <button type="button" class="size-pill ${(custom.textSize || 14) === 18 ? 'is-selected' : ''}" data-custom-text-size="18">Large (18 pt)</button>
                 </div>
               </div>
+            </div>
 
-              <div class="text-size-control-wrap" style="margin-top: 10px;">
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>Upload Logo (Company or Personal)</span>
+                <small>Laser-engraved onto card front</small>
+              </div>
+              <div class="custom-logo-zone">
+                ${(custom.logoPreviewUrl || custom.logoUrl) ? `
+                  <div class="logo-preview-active">
+                    <img class="logo-thumb" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Uploaded logo" />
+                    <div class="logo-meta">
+                      <strong>${escapeHtml(custom.logoFileName || "Custom logo uploaded")}</strong>
+                      <small>Position or resize below</small>
+                    </div>
+                    <button type="button" class="remove-logo-btn" data-custom-action="remove-logo" aria-label="Remove custom logo">Remove ✕</button>
+                  </div>
+                ` : `
+                  <div class="logo-dropzone" data-custom-dropzone>
+                    <input type="file" id="logo-file-${escapeHtml(p.id)}" accept="image/png, image/jpeg, image/svg+xml, image/webp" data-custom-file="logo" class="logo-file-input visually-hidden" />
+                    <label for="logo-file-${escapeHtml(p.id)}" class="logo-dropzone-label">
+                      <svg class="logo-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <span class="logo-dropzone-cta"><strong>Upload Company or Personal Logo</strong></span>
+                      <small class="logo-dropzone-hint">SVG, transparent PNG, JPEG, WebP (up to 5 MB)</small>
+                    </label>
+                  </div>
+                `}
+                <div class="text-size-control-wrap" style="margin-top: 10px;">
+                  <div class="text-size-toolbar-row">
+                    <div class="toolbar-label-group">
+                      <strong>Logo Size</strong>
+                      <span class="toolbar-hint">Scale logo on card or drag to position</span>
+                    </div>
+                    <div class="font-size-stepper" role="group" aria-label="Logo Size Stepper">
+                      <button type="button" class="size-step-btn" data-custom-logo-size-step="-15" title="Smaller logo (-)" aria-label="Smaller logo">-</button>
+                      <span class="size-display-val" id="logo-size-val-${escapeHtml(p.id)}">${custom.logoSize || 100}%</span>
+                      <button type="button" class="size-step-btn" data-custom-logo-size-step="15" title="Larger logo (+)" aria-label="Larger logo">+</button>
+                    </div>
+                  </div>
+                  <div class="size-preset-pills" role="radiogroup" aria-label="Logo size presets">
+                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 75 ? 'is-selected' : ''}" data-custom-logo-size="75">Small (75%)</button>
+                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 100 ? 'is-selected' : ''}" data-custom-logo-size="100">Default (100%)</button>
+                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 130 ? 'is-selected' : ''}" data-custom-logo-size="130">Large (130%)</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 2: THEMES & COLORS -->
+          <div class="studio-tab-pane" id="studio-pane-style" ${activeStudioTab !== 'style' ? 'hidden' : ''}>
+            <div class="customizer-section" style="padding-top:0; border-top:none;">
+              <div class="customizer-section-title">
+                <span>Quick Presets (10 Premium Editions)</span>
+                <small>1-click apply matching design</small>
+              </div>
+              <div class="preset-chips-scroll" role="radiogroup" aria-label="10 Premium Presets">
+                ${PREMIUM_PRESETS.map(preset => `
+                  <button type="button" class="preset-chip ${custom.presetId === preset.id ? "is-selected" : ""}" data-custom-preset="${preset.id}" aria-checked="${custom.presetId === preset.id}" role="radio" title="${escapeHtml(preset.subtitle)}">
+                    <span class="preset-swatches">
+                      <span class="preset-swatch-base" style="background:${preset.surfaceColor};"></span>
+                      <span class="preset-swatch-accent" style="background:${preset.accentColor};"></span>
+                    </span>
+                    <span class="preset-chip-text">
+                      <strong>${escapeHtml(preset.name)}</strong>
+                      <small>${escapeHtml(preset.label)}</small>
+                    </span>
+                  </button>
+                `).join("")}
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>Surface Area & Texture Motif</span>
+                <small>Decorative vector inlay</small>
+              </div>
+              <div class="customizer-pills" role="radiogroup" aria-label="Surface motif">
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'facets' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="facets" role="radio" aria-checked="${custom.surfaceMotif === 'facets'}"><span class="motif-mini-icon facets-icon"></span> Layered Facets</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'contour' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="contour" role="radio" aria-checked="${custom.surfaceMotif === 'contour'}"><span class="motif-mini-icon contour-icon"></span> Contour Engraving</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'architectural' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="architectural" role="radio" aria-checked="${custom.surfaceMotif === 'architectural'}"><span class="motif-mini-icon architectural-icon"></span> Architectural Corner</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'inlay' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="inlay" role="radio" aria-checked="${custom.surfaceMotif === 'inlay'}"><span class="motif-mini-icon inlay-icon"></span> Diagonal Inlay</button>
+                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'minimal' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="minimal" role="radio" aria-checked="${custom.surfaceMotif === 'minimal'}"><span class="motif-mini-icon minimal-icon"></span> Clean Minimal</button>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="color-config-cols">
+                <div class="color-picker-group">
+                  <div class="customizer-section-title">
+                    <span>Surface Base Colour</span>
+                    <small id="surface-color-name-${escapeHtml(p.id)}">${escapeHtml(SURFACE_COLORS.find(c => c.hex.toLowerCase() === custom.surfaceColor.toLowerCase())?.name || custom.surfaceColor)}</small>
+                  </div>
+                  <div class="color-swatches-grid" role="radiogroup" aria-label="Surface base colour">
+                    ${SURFACE_COLORS.map(c => `
+                      <button type="button" class="palette-swatch ${custom.surfaceColor.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}" data-custom-set="surfaceColor" data-value="${c.hex}" style="--swatch-color:${c.hex};" title="${escapeHtml(c.name)} (${c.hex})" aria-label="${escapeHtml(c.name)}" role="radio" aria-checked="${custom.surfaceColor.toLowerCase() === c.hex.toLowerCase()}"><span class="swatch-indicator"></span></button>
+                    `).join("")}
+                    <label class="palette-swatch custom-hex-swatch" title="Pick custom base colour" style="--swatch-color:${escapeHtml(custom.surfaceColor)};">
+                      <input type="color" value="${escapeHtml(custom.surfaceColor)}" data-custom-color="surfaceColor" aria-label="Custom surface colour" />
+                      <span class="custom-icon" aria-hidden="true">+</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="color-picker-group">
+                  <div class="customizer-section-title">
+                    <span>Foil & Accent Colour</span>
+                    <small id="accent-color-name-${escapeHtml(p.id)}">${escapeHtml(ACCENT_COLORS.find(c => c.hex.toLowerCase() === custom.accentColor.toLowerCase())?.name || custom.accentColor)}</small>
+                  </div>
+                  <div class="color-swatches-grid" role="radiogroup" aria-label="Foil inlay accent colour">
+                    ${ACCENT_COLORS.map(c => `
+                      <button type="button" class="palette-swatch ${custom.accentColor.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}" data-custom-set="accentColor" data-value="${c.hex}" style="--swatch-color:${c.hex};" title="${escapeHtml(c.name)} (${c.hex})" aria-label="${escapeHtml(c.name)}" role="radio" aria-checked="${custom.accentColor.toLowerCase() === c.hex.toLowerCase()}"><span class="swatch-indicator"></span></button>
+                    `).join("")}
+                    <label class="palette-swatch custom-hex-swatch" title="Pick custom foil colour" style="--swatch-color:${escapeHtml(custom.accentColor)};">
+                      <input type="color" value="${escapeHtml(custom.accentColor)}" data-custom-color="accentColor" aria-label="Custom accent colour" />
+                      <span class="custom-icon" aria-hidden="true">+</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB 3: LAYOUT & EXTRAS -->
+          <div class="studio-tab-pane" id="studio-pane-layout" ${activeStudioTab !== 'layout' ? 'hidden' : ''}>
+            <div class="customizer-section" style="padding-top:0; border-top:none;">
+              <div class="customizer-section-title">
+                <span>Layout & Placement</span>
+                <small>10 Design Layouts</small>
+              </div>
+              <div class="customizer-pills" role="radiogroup" aria-label="Layout placement">
+                <button type="button" class="customizer-pill ${custom.layout === 'left' ? 'is-selected' : ''}" data-custom-set="layout" data-value="left" role="radio" aria-checked="${custom.layout === 'left'}"><span class="pill-dot"></span> Classic Left</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'center' ? 'is-selected' : ''}" data-custom-set="layout" data-value="center" role="radio" aria-checked="${custom.layout === 'center'}"><span class="pill-dot"></span> Centered Stack</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'right' ? 'is-selected' : ''}" data-custom-set="layout" data-value="right" role="radio" aria-checked="${custom.layout === 'right'}"><span class="pill-dot"></span> Right Aligned</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'reverse' ? 'is-selected' : ''}" data-custom-set="layout" data-value="reverse" role="radio" aria-checked="${custom.layout === 'reverse'}"><span class="pill-dot"></span> Reverse Stack</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'split-logo-left' ? 'is-selected' : ''}" data-custom-set="layout" data-value="split-logo-left" role="radio" aria-checked="${custom.layout === 'split-logo-left'}"><span class="pill-dot"></span> Logo Left / Name Right</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'split-logo-right' ? 'is-selected' : ''}" data-custom-set="layout" data-value="split-logo-right" role="radio" aria-checked="${custom.layout === 'split-logo-right'}"><span class="pill-dot"></span> Name Left / Logo Right</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'diagonal' ? 'is-selected' : ''}" data-custom-set="layout" data-value="diagonal" role="radio" aria-checked="${custom.layout === 'diagonal'}"><span class="pill-dot"></span> Diagonal Corners</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'column' ? 'is-selected' : ''}" data-custom-set="layout" data-value="column" role="radio" aria-checked="${custom.layout === 'column'}"><span class="pill-dot"></span> Side Column</button>
+                <button type="button" class="customizer-pill ${custom.layout === 'header' ? 'is-selected' : ''}" data-custom-set="layout" data-value="header" role="radio" aria-checked="${custom.layout === 'header'}"><span class="pill-dot"></span> Header Bar</button>
+              </div>
+            </div>
+
+            <div class="customizer-section">
+              <div class="customizer-section-title">
+                <span>NFC Contactless Wave Icon</span>
+                <small>Contactless indicator sizing</small>
+              </div>
+              <div class="text-size-control-wrap">
                 <div class="text-size-toolbar-row">
                   <div class="toolbar-label-group">
                     <strong>NFC Icon Size</strong>
@@ -529,7 +710,9 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
                   <button type="button" class="size-pill ${(custom.iconSize || 100) === 125 ? 'is-selected' : ''}" data-custom-icon-size="125">Large (125%)</button>
                 </div>
               </div>
+            </div>
 
+            <div class="customizer-section">
               <div class="divider-manager-wrap">
                 <div class="toolbar-label-group">
                   <strong>Divider Lines (HR & Vertical)</strong>
@@ -559,138 +742,9 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
               </div>
             </div>
 
-            <div class="customizer-section customizer-logo-section">
-              <div class="customizer-section-title">
-                <span>3. Upload Logo <small>(Company or Personal)</small></span>
-                <small>Laser-engraved onto card front</small>
-              </div>
-              <div class="customizer-logo-studio">
-                ${(custom.logoPreviewUrl || custom.logoUrl) ? `
-                  <div class="logo-preview-badge">
-                    <div class="logo-preview-thumb-wrap">
-                      <img class="logo-preview-thumb" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Custom logo preview" />
-                    </div>
-                    <div class="logo-preview-meta">
-                      <strong>${escapeHtml(custom.logoFileName || 'Custom Logo Attached')}</strong>
-                      <small>Visible on front card</small>
-                    </div>
-                    <button type="button" class="logo-action-btn remove-logo-btn" data-custom-action="remove-logo" title="Remove custom logo" aria-label="Remove custom logo">✕</button>
-                  </div>
-                ` : `
-                  <div class="logo-dropzone" data-custom-dropzone>
-                    <input type="file" id="logo-file-${escapeHtml(p.id)}" accept="image/png, image/jpeg, image/svg+xml, image/webp" data-custom-file="logo" class="logo-file-input visually-hidden" />
-                    <label for="logo-file-${escapeHtml(p.id)}" class="logo-dropzone-label">
-                      <svg class="logo-upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      <span class="logo-dropzone-cta"><strong>Upload Company or Personal Logo</strong></span>
-                      <small class="logo-dropzone-hint">SVG, transparent PNG, JPEG, WebP (up to 5 MB)</small>
-                    </label>
-                  </div>
-                `}
-
-                <div class="text-size-control-wrap" style="margin-top: 10px;">
-                  <div class="text-size-toolbar-row">
-                    <div class="toolbar-label-group">
-                      <strong>Logo Size</strong>
-                      <span class="toolbar-hint">Scale logo on card or drag to position</span>
-                    </div>
-                    <div class="font-size-stepper" role="group" aria-label="Logo Size Stepper">
-                      <button type="button" class="size-step-btn" data-custom-logo-size-step="-15" title="Smaller logo (-)" aria-label="Smaller logo">-</button>
-                      <span class="size-display-val" id="logo-size-val-${escapeHtml(p.id)}">${custom.logoSize || 100}%</span>
-                      <button type="button" class="size-step-btn" data-custom-logo-size-step="15" title="Larger logo (+)" aria-label="Larger logo">+</button>
-                    </div>
-                  </div>
-                  <div class="size-preset-pills" role="radiogroup" aria-label="Logo size presets">
-                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 75 ? 'is-selected' : ''}" data-custom-logo-size="75">Small (75%)</button>
-                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 100 ? 'is-selected' : ''}" data-custom-logo-size="100">Default (100%)</button>
-                    <button type="button" class="size-pill ${(custom.logoSize || 100) === 130 ? 'is-selected' : ''}" data-custom-logo-size="130">Large (130%)</button>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             <div class="customizer-section">
               <div class="customizer-section-title">
-                <span>4. Surface Area & Texture Motif</span>
-                <small>Decorative vector inlay</small>
-              </div>
-              <div class="customizer-pills" role="radiogroup" aria-label="Surface motif">
-                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'facets' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="facets" role="radio" aria-checked="${custom.surfaceMotif === 'facets'}"><span class="motif-mini-icon facets-icon"></span> Layered Facets</button>
-                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'contour' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="contour" role="radio" aria-checked="${custom.surfaceMotif === 'contour'}"><span class="motif-mini-icon contour-icon"></span> Contour Engraving</button>
-                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'architectural' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="architectural" role="radio" aria-checked="${custom.surfaceMotif === 'architectural'}"><span class="motif-mini-icon architectural-icon"></span> Architectural Corner</button>
-                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'inlay' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="inlay" role="radio" aria-checked="${custom.surfaceMotif === 'inlay'}"><span class="motif-mini-icon inlay-icon"></span> Diagonal Inlay</button>
-                <button type="button" class="customizer-pill ${custom.surfaceMotif === 'minimal' ? 'is-selected' : ''}" data-custom-set="surfaceMotif" data-value="minimal" role="radio" aria-checked="${custom.surfaceMotif === 'minimal'}"><span class="motif-mini-icon minimal-icon"></span> Clean Minimal</button>
-              </div>
-            </div>
-
-            <div class="customizer-section">
-              <div class="color-config-cols">
-                <div class="color-picker-group">
-                  <div class="customizer-section-title">
-                    <span>5a. Surface Base Colour</span>
-                    <small id="surface-color-name-${escapeHtml(p.id)}">${escapeHtml(SURFACE_COLORS.find(c => c.hex.toLowerCase() === custom.surfaceColor.toLowerCase())?.name || custom.surfaceColor)}</small>
-                  </div>
-                  <div class="color-swatches-grid" role="radiogroup" aria-label="Surface base colour">
-                    ${SURFACE_COLORS.map(c => `
-                      <button type="button" class="palette-swatch ${custom.surfaceColor.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}" data-custom-set="surfaceColor" data-value="${c.hex}" style="--swatch-color:${c.hex};" title="${escapeHtml(c.name)} (${c.hex})" aria-label="${escapeHtml(c.name)}" role="radio" aria-checked="${custom.surfaceColor.toLowerCase() === c.hex.toLowerCase()}"><span class="swatch-indicator"></span></button>
-                    `).join("")}
-                    <label class="palette-swatch custom-hex-swatch" title="Pick custom base colour" style="--swatch-color:${escapeHtml(custom.surfaceColor)};">
-                      <input type="color" value="${escapeHtml(custom.surfaceColor)}" data-custom-color="surfaceColor" aria-label="Custom surface colour" />
-                      <span class="custom-icon" aria-hidden="true">+</span>
-                    </label>
-                  </div>
-                </div>
-
-                <div class="color-picker-group">
-                  <div class="customizer-section-title">
-                    <span>5b. Foil & Accent Colour</span>
-                    <small id="accent-color-name-${escapeHtml(p.id)}">${escapeHtml(ACCENT_COLORS.find(c => c.hex.toLowerCase() === custom.accentColor.toLowerCase())?.name || custom.accentColor)}</small>
-                  </div>
-                  <div class="color-swatches-grid" role="radiogroup" aria-label="Foil inlay accent colour">
-                    ${ACCENT_COLORS.map(c => `
-                      <button type="button" class="palette-swatch ${custom.accentColor.toLowerCase() === c.hex.toLowerCase() ? 'is-selected' : ''}" data-custom-set="accentColor" data-value="${c.hex}" style="--swatch-color:${c.hex};" title="${escapeHtml(c.name)} (${c.hex})" aria-label="${escapeHtml(c.name)}" role="radio" aria-checked="${custom.accentColor.toLowerCase() === c.hex.toLowerCase()}"><span class="swatch-indicator"></span></button>
-                    `).join("")}
-                    <label class="palette-swatch custom-hex-swatch" title="Pick custom foil colour" style="--swatch-color:${escapeHtml(custom.accentColor)};">
-                      <input type="color" value="${escapeHtml(custom.accentColor)}" data-custom-color="accentColor" aria-label="Custom accent colour" />
-                      <span class="custom-icon" aria-hidden="true">+</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div class="customizer-section">
-              <div class="customizer-section-title">
-                <span>6. Layout & Placement</span>
-                <small>10 Design Layouts</small>
-              </div>
-              <div class="customizer-pills" role="radiogroup" aria-label="Layout placement">
-                <button type="button" class="customizer-pill ${custom.layout === 'left' ? 'is-selected' : ''}" data-custom-set="layout" data-value="left" role="radio" aria-checked="${custom.layout === 'left'}"><span class="pill-dot"></span> Classic Left</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'center' ? 'is-selected' : ''}" data-custom-set="layout" data-value="center" role="radio" aria-checked="${custom.layout === 'center'}"><span class="pill-dot"></span> Centered Stack</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'right' ? 'is-selected' : ''}" data-custom-set="layout" data-value="right" role="radio" aria-checked="${custom.layout === 'right'}"><span class="pill-dot"></span> Right Aligned</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'reverse' ? 'is-selected' : ''}" data-custom-set="layout" data-value="reverse" role="radio" aria-checked="${custom.layout === 'reverse'}"><span class="pill-dot"></span> Reverse Stack</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'split-logo-left' ? 'is-selected' : ''}" data-custom-set="layout" data-value="split-logo-left" role="radio" aria-checked="${custom.layout === 'split-logo-left'}"><span class="pill-dot"></span> Logo Left / Name Right</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'split-logo-right' ? 'is-selected' : ''}" data-custom-set="layout" data-value="split-logo-right" role="radio" aria-checked="${custom.layout === 'split-logo-right'}"><span class="pill-dot"></span> Name Left / Logo Right</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'diagonal' ? 'is-selected' : ''}" data-custom-set="layout" data-value="diagonal" role="radio" aria-checked="${custom.layout === 'diagonal'}"><span class="pill-dot"></span> Diagonal Corners</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'column' ? 'is-selected' : ''}" data-custom-set="layout" data-value="column" role="radio" aria-checked="${custom.layout === 'column'}"><span class="pill-dot"></span> Side Column</button>
-                <button type="button" class="customizer-pill ${custom.layout === 'header' ? 'is-selected' : ''}" data-custom-set="layout" data-value="header" role="radio" aria-checked="${custom.layout === 'header'}"><span class="pill-dot"></span> Header Bar</button>
-              </div>
-            </div>
-
-            <div class="customizer-section">
-              <div class="customizer-section-title">
-                <span>7. Typography Style</span>
-                <small>Precision typography</small>
-              </div>
-              <div class="customizer-pills" role="radiogroup" aria-label="Typography style">
-                <button type="button" class="customizer-pill ${custom.font === 'sans' ? 'is-selected' : ''}" data-custom-set="font" data-value="sans" aria-checked="${custom.font === 'sans'}" role="radio"><span class="font-sample" style="font-family: inherit; font-weight: 700;">Aa</span> Modern Sans</button>
-                <button type="button" class="customizer-pill ${custom.font === 'serif' ? 'is-selected' : ''}" data-custom-set="font" data-value="serif" aria-checked="${custom.font === 'serif'}" role="radio"><span class="font-sample" style="font-family: Georgia, serif; font-style: italic; font-weight: 700;">Aa</span> Luxury Serif</button>
-                <button type="button" class="customizer-pill ${custom.font === 'mono' ? 'is-selected' : ''}" data-custom-set="font" data-value="mono" aria-checked="${custom.font === 'mono'}" role="radio"><span class="font-sample" style="font-family: monospace; font-weight: 700;">Aa</span> Minimal Mono</button>
-              </div>
-            </div>
-
-            <div class="customizer-section">
-              <div class="customizer-section-title">
-                <span>8. Back Side Configuration (NFC & QR)</span>
+                <span>Back Side Configuration (NFC & QR)</span>
                 <small>Reverse face details & QR inlay</small>
               </div>
               <div class="custom-fields-stack">
@@ -728,7 +782,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
             </div>
           </div>
         </section>` : ""}
-        ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(variantPrice(v) * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
+        ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
         <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
@@ -1015,12 +1069,16 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const nameSize = `${(1.125 * scale).toFixed(3)}rem`;
       const subSize = `${(0.65 * scale).toFixed(3)}rem`;
 
-      // 1. Logo element
+      // 1. Logo element (Customer Logo or "YOUR LOGO" text placeholder)
       const logoEl = frontCard.querySelector(".card-element-logo");
       if (logoEl) {
-        let logoImg = logoEl.querySelector(".mini-product-logo");
+        logoEl.style.display = "";
         const activeLogo = custom.logoPreviewUrl || custom.logoUrl;
+        let logoImg = logoEl.querySelector(".mini-product-logo");
+        let logoPlaceholder = logoEl.querySelector(".card-logo-placeholder");
+
         if (activeLogo) {
+          if (logoPlaceholder) logoPlaceholder.remove();
           if (!logoImg) {
             logoImg = document.createElement("img");
             logoEl.appendChild(logoImg);
@@ -1028,10 +1086,17 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           logoImg.className = "mini-product-logo custom-user-logo";
           logoImg.src = mediaUrl(activeLogo);
           logoImg.alt = "Custom logo";
-        } else if (logoImg) {
-          logoImg.className = "mini-product-logo";
-          logoImg.src = logoUrl;
-          logoImg.alt = "Oneinfo logo";
+          logoImg.style.display = "";
+        } else {
+          if (logoImg) logoImg.remove();
+          if (!logoPlaceholder) {
+            logoPlaceholder = document.createElement("span");
+            logoPlaceholder.className = "card-logo-placeholder";
+            logoPlaceholder.textContent = "YOUR LOGO";
+            logoEl.appendChild(logoPlaceholder);
+          }
+          logoPlaceholder.style.display = "";
+          logoPlaceholder.style.color = custom.accentColor;
         }
         const logoScale = ((custom.logoSize || 100) / 100).toFixed(2);
         logoEl.style.setProperty("--scale", logoScale);
@@ -1258,6 +1323,11 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         qrWrap.className = `card-qr-wrap ${custom.backQrStyle || 'minimal'}`;
         qrWrap.innerHTML = renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal');
       }
+
+      const backFooter = backCard.querySelector(".card-back-footer");
+      if (backFooter) {
+        backFooter.style.display = custom.hasOneinfoLogo !== false ? "flex" : "none";
+      }
     }
   }
 
@@ -1347,6 +1417,37 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       history.replaceState(null, "", `#product/${encodeURIComponent(product.slug)}?colour=${encodeURIComponent(variantId)}`);
       selectedMedia.set(variantId, Number(mediaButton.dataset.media));
       renderRoute(); return;
+    }
+    const brandingBtn = event.target.closest("[data-custom-branding]");
+    if (brandingBtn) {
+      const studio = brandingBtn.closest(".card-customizer-studio");
+      const productId = studio?.dataset.productId;
+      if (!productId) return;
+      const mode = brandingBtn.dataset.customBranding;
+      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+      current.brandingMode = mode;
+      current.hasOneinfoLogo = (mode !== "without-logo");
+      productCustomizations.set(productId, current);
+      renderRoute();
+      syncCustomCardPreview(productId);
+      return;
+    }
+    const tabBtn = event.target.closest("[data-studio-tab]");
+    if (tabBtn) {
+      const studio = tabBtn.closest(".card-customizer-studio");
+      const tabName = tabBtn.dataset.studioTab;
+      activeStudioTab = tabName;
+      if (studio) {
+        studio.querySelectorAll(".studio-tab-btn").forEach(b => {
+          const isAct = b.dataset.studioTab === tabName;
+          b.classList.toggle("is-active", isAct);
+          b.setAttribute("aria-selected", String(isAct));
+        });
+        studio.querySelectorAll(".studio-tab-pane").forEach(pane => {
+          pane.hidden = (pane.id !== `studio-pane-${tabName}`);
+        });
+      }
+      return;
     }
     const presetBtn = event.target.closest("[data-custom-preset]");
     if (presetBtn) {
@@ -1719,11 +1820,14 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       const product = products.find(p => p.id === productId);
       const variant = product?.variants.find(v => v.id === variantId);
       if (!variant?.available) { toast("This colour is no longer available."); return; }
-      if (!before || variantPrice(before) !== variantPrice(variant)) { toast("The price changed. Please review it before adding to cart."); return; }
+      const draft = productCustomizations.get(productId) ?? defaultCustomization("01");
+      const hasLogo = !product.customizable || (draft.hasOneinfoLogo !== false && draft.brandingMode !== "without-logo");
+      const expectedBefore = product.customizable ? variantPriceForBranding(before, hasLogo) : variantPrice(before);
+      const expectedVariant = product.customizable ? variantPriceForBranding(variant, hasLogo) : variantPrice(variant);
+      if (!before || expectedBefore !== expectedVariant) { toast("The price changed. Please review it before adding to cart."); return; }
 
       let customization = null;
       if (product.customizable) {
-        const draft = productCustomizations.get(productId) ?? defaultCustomization("01");
         if (!draft.name || !draft.name.trim()) {
           toast("Please enter your cardholder name to personalize your card.");
           $(`#custom-name-${productId}`)?.focus();
@@ -1742,6 +1846,8 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
           iconSize: draft.iconSize || 100,
           qrSize: draft.qrSize || 100,
           dividerLines: (draft.dividerLines || []),
+          brandingMode: draft.brandingMode || "with-logo",
+          hasOneinfoLogo: hasLogo,
           ...(draft.customPos ? { customPos: draft.customPos } : {}),
           ...(draft.elementPositions && Object.keys(draft.elementPositions).length ? { elementPositions: draft.elementPositions } : {}),
           layout: draft.layout || "left",

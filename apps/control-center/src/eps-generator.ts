@@ -238,10 +238,16 @@ newpath 0 64 moveto 64 0 lineto stroke
     : "% Minimal - Clean finish"
 }
 
-% Logo & NFC Glyph
-${accentR} ${accentG} ${accentB} setrgbcolor
+% Logo & NFC Glyph (Customer Logo / "YOUR LOGO" placeholder text)
+${
+  custom.companyName
+    ? `${accentR} ${accentG} ${accentB} setrgbcolor
 /Helvetica-Bold findfont ${logoPt} scalefont setfont
-${logoX} ${logoY} moveto (${custom.companyName ? escapePs(custom.companyName) : "ONEINFO"}) show
+${logoX} ${logoY} moveto (${escapePs(custom.companyName)}) show`
+    : `${accentR} ${accentG} ${accentB} setrgbcolor
+/Helvetica-Bold findfont ${logoPt} scalefont setfont
+${logoX} ${logoY} moveto (YOUR LOGO) show`
+}
 
 % NFC wave icon
 newpath
@@ -334,14 +340,18 @@ newpath ${qrX + Math.round(7 * qrScale)} ${qrY + Math.round(7 * qrScale)} ${(8 *
 0 0 0 setrgbcolor
 newpath ${qrX + Math.round(9 * qrScale)} ${qrY + Math.round(9 * qrScale)} ${(4 * qrScale).toFixed(1)} ${(4 * qrScale).toFixed(1)} 0 roundrect fill
 
-% Footer Branding: Bottom-left Oneinfo branding & Bottom-right AriseStudio attribution
-${accentR} ${accentG} ${accentB} setrgbcolor
+% Footer Branding: Bottom-left Oneinfo branding & Bottom-right AriseStudio attribution (Omitted in Without Logo edition)
+${
+  custom.hasOneinfoLogo !== false
+    ? `${accentR} ${accentG} ${accentB} setrgbcolor
 /Helvetica-Bold findfont 8 scalefont setfont
 20 16 moveto (ONEINFO) show
 
 /Helvetica findfont 6.5 scalefont setfont
 0.7 0.7 0.7 setrgbcolor
-170 16 moveto (By AriseStudio) show
+170 16 moveto (By AriseStudio) show`
+    : "% Brand labeling omitted (Without Oneinfo Logo edition)"
+}
 
 ${
   custom.backSubtitle && custom.backSubtitle.trim()
