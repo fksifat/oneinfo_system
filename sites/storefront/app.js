@@ -607,15 +607,31 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         </div>
       </div>`;
 
-      const standardIllustration = `<div class="mini-product-card ${v.appearance}-card" style="background:${surfaceBg};">
-        <div class="card-header-row">
-          <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
-          <span class="card-nfc-wave" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
-          </span>
+      const standardIllustration = p.customizable ? `
+        <div class="mini-product-card ${v.appearance}-card is-catalog-card" style="background:#0a0b0d; --card-accent:#d8b26e;" aria-label="${escapeHtml(p.name)} bespoke preview">
+          ${renderSurfaceMotifSvg("facets", "#d8b26e")}
+          <div class="card-header-row">
+            <span class="card-logo-placeholder" style="color:#d8b26e; font-size:0.72rem; letter-spacing:0.12em; font-weight:700;">YOUR LOGO</span>
+            <span class="card-nfc-wave" aria-hidden="true" style="color:#d8b26e;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
+            </span>
+          </div>
+          <div class="card-catalog-holder-details">
+            <strong class="card-custom-name" style="color:#f7eed8; font-size:0.95rem; font-weight:700; letter-spacing:-0.015em;">Your Name</strong>
+            <span class="card-custom-title" style="color:#d8b26e; font-size:0.56rem; font-weight:600; letter-spacing:0.08em; text-transform:uppercase;">Custom Edition</span>
+          </div>
         </div>
-        <strong>${escapeHtml(p.name)}</strong>
-      </div>`;
+      ` : `
+        <div class="mini-product-card ${v.appearance}-card" style="background:${surfaceBg};">
+          <div class="card-header-row">
+            <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
+            <span class="card-nfc-wave" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
+            </span>
+          </div>
+          <strong>${escapeHtml(p.name)}</strong>
+        </div>
+      `;
 
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}
@@ -665,7 +681,32 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
         </section>` : ""}
         ${detail ? `</div><div class="product-details-copy">` : ""}
         <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(activePrice / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(activeRegular / 100)}">${money.format(activeRegular / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((activeRegular - activePrice) / 100)}</span>` : ''}</div></div>
-        ${!isCustomizable ? `<div class="product-colours"><div class="colour-caption"><span>${detail ? 'Colour. <span>Choose your finish.</span>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`}</span>${detail ? "" : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`}</div><div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div></div>` : ""}
+        ${!isCustomizable ? `
+          <div class="product-colours">
+            <div class="colour-caption">
+              <span>${detail ? 'Colour. <span>Choose your finish.</span>' : (p.customizable ? 'Colour: <strong>Limitless</strong>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`)}</span>
+              ${detail ? "" : (p.customizable ? `
+                <span class="infinity-option-wrap" title="Limitless customizable themes & finishes">
+                  ${icon("infinity")}
+                  <span>options</span>
+                </span>
+              ` : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`)}
+            </div>
+            ${p.customizable && !detail ? `
+              <div class="colour-options is-limitless-palette" role="group" aria-label="${escapeHtml(p.name)} customizable themes">
+                <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-limitless-swatch" aria-label="Limitless finishes — customize your own" title="Limitless Themes & Finishes">
+                  <span class="swatch-conic-glow" aria-hidden="true"></span>
+                </a>
+                <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#0a0b0d" title="Obsidian Black"></a>
+                <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#d8b26e" title="Champagne Gold"></a>
+                <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#f4efe6" title="Satin Frost"></a>
+                <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#182232" title="Royal Navy"></a>
+              </div>
+            ` : `
+              <div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div>
+            `}
+          </div>
+        ` : ""}
         ${detail && p.customizable ? `
         <section class="card-customizer-studio" data-product-id="${escapeHtml(p.id)}" aria-label="Card personalization">
           <div class="customizer-header">
@@ -1673,6 +1714,15 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
 
   async function handleProductClick(event) {
     if (event.target.closest(".detail-retry")) { void loadProducts(); return; }
+    const artItem = event.target.closest(".product-grid .product-art");
+    if (artItem && !event.target.closest("button, a")) {
+      const pEl = artItem.closest(".product");
+      const link = pEl?.querySelector(".product-link");
+      if (link) {
+        link.click();
+        return;
+      }
+    }
     const quantityButton = event.target.closest("[data-quantity-step]");
     if (quantityButton && !quantityButton.disabled) {
       const id = quantityButton.closest(".product").dataset.id;

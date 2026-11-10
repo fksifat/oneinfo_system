@@ -491,3 +491,21 @@ test("customization quick inspector supports font dropdown, bold and italic text
   assert.match(epsSrc, /Helvetica-BoldOblique/);
   assert.match(epsSrc, /Courier-BoldOblique/);
 });
+
+test("customizable product in catalog grid shows Limitless color, infinity options icon, and signature card preview", () => {
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /Colour: <strong>Limitless<\/strong>/);
+  assert.match(appSrc, /infinity-option-wrap/);
+  assert.match(appSrc, /is-limitless-palette/);
+  assert.match(appSrc, /is-limitless-swatch/);
+  assert.match(appSrc, /is-catalog-card/);
+
+  const cssSrc = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(cssSrc, /\.infinity-option-wrap/);
+  assert.match(cssSrc, /\.is-limitless-palette/);
+  assert.match(cssSrc, /\.is-limitless-swatch/);
+  assert.match(cssSrc, /\.is-catalog-card/);
+
+  const iconsSrc = readFileSync("sites/storefront/public/assets/icons.svg", "utf8");
+  assert.match(iconsSrc, /id="infinity"/);
+});
