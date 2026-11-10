@@ -390,3 +390,104 @@ test("customization supports With Oneinfo Logo vs Without Oneinfo Logo with admi
   assert.match(epsSrc, /\(YOUR LOGO\) show/);
   assert.match(epsSrc, /custom\.hasOneinfoLogo !== false[\s\S]*\(ONEINFO\) show[\s\S]*\(By AriseStudio\) show/);
 });
+
+test("draggable card elements support rotation interactively, in admin preview, and in EPS vector export", () => {
+  const customWithRotation = {
+    ...defaultCustomization("01"),
+    name: "Avery Morgan",
+    elementPositions: {
+      logo: { x: 25, y: 20, rotate: 90 },
+      sign: { x: 85, y: 18, rotate: 180 },
+      name: { x: 30, y: 65, rotate: 45 },
+      "divider-0": { x: 50, y: 50, rotate: 270 },
+      "back-qr": { x: 50, y: 50, rotate: 90 },
+    },
+  };
+
+  const parsed = ProductCustomizationSchema.parse(customWithRotation);
+  assert.equal(parsed.elementPositions.logo.rotate, 90);
+  assert.equal(parsed.elementPositions.sign.rotate, 180);
+  assert.equal(parsed.elementPositions.name.rotate, 45);
+  assert.equal(parsed.elementPositions["divider-0"].rotate, 270);
+  assert.equal(parsed.elementPositions["back-qr"].rotate, 90);
+
+  // Storefront UI contains rotate handles, compact dual bars, and editable inputs
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /data-rotate-handle/);
+  assert.match(appSrc, /data-custom-rot-step/);
+  assert.match(appSrc, /data-custom-rot-input/);
+  assert.match(appSrc, /data-custom-text-size-input/);
+  assert.match(appSrc, /compact-prop-row/);
+  assert.match(appSrc, /activeRotateItem/);
+
+  // CSS contains rotation transform, rotate handle styling, and compact property row
+  const cssSrc = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(cssSrc, /\.element-rotate-handle/);
+  assert.match(cssSrc, /\.compact-prop-row/);
+  assert.match(cssSrc, /rotate\(var\(--rot, 0deg\)\)/);
+
+  // Admin Card Preview contains rotation in styles
+  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
+  assert.match(adminSrc, /rotate\(\$\{logoRot\}deg\)/);
+  assert.match(adminSrc, /rotate\(\$\{signRot\}deg\)/);
+  assert.match(adminSrc, /rotate\(\$\{nameRot\}deg\)/);
+  assert.match(adminSrc, /rotate\(\$\{qrRot\}deg\)/);
+
+  // EPS generator contains PostScript rotation transformations
+  const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
+  assert.match(epsSrc, /-\$\{logoRot\} rotate/);
+  assert.match(epsSrc, /-\$\{signRot\} rotate/);
+  assert.match(epsSrc, /-\$\{nameRot\} rotate/);
+  assert.match(epsSrc, /-\$\{qrRot\} rotate/);
+});
+
+test("customization quick inspector supports font dropdown, bold and italic text styles across storefront, admin and EPS generator", () => {
+  // Contract schema supports bold and italic flags
+  const parsed = ProductCustomizationSchema.parse({
+    presetId: "01",
+    name: "Avery Morgan",
+    bold: false,
+    italic: true,
+    elementPositions: {
+      name: { x: 45, y: 55, size: 16, font: "serif", bold: true, italic: false },
+      title: { x: 45, y: 68, size: 10, font: "mono", bold: false, italic: true },
+      "extra-0": { x: 45, y: 78, size: 9, font: "sans", bold: true, italic: true },
+    },
+  });
+  assert.equal(parsed.bold, false);
+  assert.equal(parsed.italic, true);
+  assert.equal(parsed.elementPositions.name.bold, true);
+  assert.equal(parsed.elementPositions.title.italic, true);
+  assert.equal(parsed.elementPositions["extra-0"].bold, true);
+  assert.equal(parsed.elementPositions["extra-0"].italic, true);
+
+  // Storefront UI contains font dropdown, B/I toggles, and proper event handling
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /data-custom-font-select/);
+  assert.match(appSrc, /data-custom-toggle-style/);
+  assert.match(appSrc, /inspector-font-select/);
+  assert.match(appSrc, /inspector-style-group/);
+  assert.match(appSrc, /inspector-style-btn/);
+
+  // CSS contains styles for font dropdown, B/I buttons, and font weight/style overrides
+  const cssSrc = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(cssSrc, /\.inspector-font-select-wrap/);
+  assert.match(cssSrc, /\.inspector-style-group/);
+  assert.match(cssSrc, /\.inspector-style-btn/);
+  assert.match(cssSrc, /\.card-custom-name\.is-not-bold/);
+  assert.match(cssSrc, /\.card-custom-name\.is-bold/);
+  assert.match(cssSrc, /\.is-italic/);
+
+  // Admin Card Preview supports bold and italic font rendering
+  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
+  assert.match(adminSrc, /isNameBold \? 700 : 400/);
+  assert.match(adminSrc, /isNameItalic \? "italic" : "normal"/);
+  assert.match(adminSrc, /isTitleBold \? 700 : 400/);
+  assert.match(adminSrc, /isTitleItalic \? "italic" : "normal"/);
+
+  // EPS generator supports PostScript font variants (Bold, Oblique, Italic)
+  const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
+  assert.match(epsSrc, /Times-BoldItalic/);
+  assert.match(epsSrc, /Helvetica-BoldOblique/);
+  assert.match(epsSrc, /Courier-BoldOblique/);
+});

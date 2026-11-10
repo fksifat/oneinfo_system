@@ -223,19 +223,18 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
   const layout = custom.layout || "left";
   const textScale = (custom.textSize || 14) / 14;
 
-  const fontStyle =
-    custom.font === "serif"
+  const resolveFontFamily = (f?: string) =>
+    f === "serif"
       ? "'Playfair Display', Georgia, serif"
-      : custom.font === "mono"
+      : f === "mono"
       ? "'SF Mono', Menlo, Consolas, monospace"
       : "'Inter', -apple-system, BlinkMacSystemFont, sans-serif";
+
+  const fontStyle = resolveFontFamily(custom.font);
 
   const ep = custom.elementPositions || {};
   const activeExtras = (custom.extraLines || []).filter((l) => l && l.trim());
   const numExtras = activeExtras.length;
-  const logoScale = ((custom.logoSize || 100) / 100).toFixed(2);
-  const iconScale = ((custom.iconSize || 100) / 100).toFixed(2);
-  const qrScale = ((custom.qrSize || 100) / 100).toFixed(2);
 
   // Front Drag Positions
   const epLogo = ep.logo;
@@ -243,45 +242,67 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
   const epName = ep.name || custom.customPos;
   const epTitle = ep.title;
 
+  const epNameTyped = epName as { size?: number; font?: "sans" | "serif" | "mono"; rotate?: number; bold?: boolean; italic?: boolean } | undefined;
+  const epTitleTyped = epTitle as { size?: number; font?: "sans" | "serif" | "mono"; rotate?: number; bold?: boolean; italic?: boolean } | undefined;
+  const epQr = ep["back-qr"];
+
+  const isNameBold = epNameTyped?.bold !== undefined ? epNameTyped.bold : (custom.bold !== undefined ? custom.bold : true);
+  const isNameItalic = epNameTyped?.italic !== undefined ? epNameTyped.italic : Boolean(custom.italic);
+
+  const isTitleBold = epTitleTyped?.bold !== undefined ? epTitleTyped.bold : Boolean(custom.bold);
+  const isTitleItalic = epTitleTyped?.italic !== undefined ? epTitleTyped.italic : Boolean(custom.italic);
+
+  const logoScale = (((epLogo?.size || custom.logoSize || 100) / 100)).toFixed(2);
+  const iconScale = (((epSign?.size || custom.iconSize || 100) / 100)).toFixed(2);
+  const qrScale = (((epQr?.size || custom.qrSize || 100) / 100)).toFixed(2);
+
+  const nameScale = ((epNameTyped?.size || custom.textSize || 14) / 14);
+  const titleScale = ((epTitleTyped?.size || Math.round((custom.textSize || 14) * 0.75)) / 14);
+
+  const logoRot = epLogo?.rotate || 0;
+  const signRot = epSign?.rotate || 0;
+  const nameRot = epNameTyped?.rotate || 0;
+  const titleRot = epTitleTyped?.rotate || 0;
+
   const logoStyle: React.CSSProperties = epLogo
-    ? { position: "absolute", left: `${epLogo.x}%`, top: `${epLogo.y}%`, transform: `translate(-50%, -50%) scale(${logoScale})`, transformOrigin: "center center", zIndex: 3 }
+    ? { position: "absolute", left: `${epLogo.x}%`, top: `${epLogo.y}%`, transform: `translate(-50%, -50%) scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "center center", zIndex: 3 }
     : layout === "center" || layout === "header"
-    ? { position: "absolute", left: "50%", top: "18px", transform: `translateX(-50%) scale(${logoScale})`, transformOrigin: "top center", zIndex: 3 }
+    ? { position: "absolute", left: "50%", top: "18px", transform: `translateX(-50%) scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top center", zIndex: 3 }
     : layout === "right"
-    ? { position: "absolute", right: "20px", top: "18px", transform: `scale(${logoScale})`, transformOrigin: "top right", zIndex: 3 }
+    ? { position: "absolute", right: "20px", top: "18px", transform: `scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top right", zIndex: 3 }
     : layout === "reverse"
-    ? { position: "absolute", left: "20px", bottom: "18px", transform: `scale(${logoScale})`, transformOrigin: "bottom left", zIndex: 3 }
-    : { position: "absolute", left: "20px", top: "18px", transform: `scale(${logoScale})`, transformOrigin: "top left", zIndex: 3 };
+    ? { position: "absolute", left: "20px", bottom: "18px", transform: `scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "bottom left", zIndex: 3 }
+    : { position: "absolute", left: "20px", top: "18px", transform: `scale(${logoScale}) rotate(${logoRot}deg)`, transformOrigin: "top left", zIndex: 3 };
 
   const signStyle: React.CSSProperties = epSign
-    ? { position: "absolute", left: `${epSign.x}%`, top: `${epSign.y}%`, transform: `translate(-50%, -50%) scale(${iconScale})`, transformOrigin: "center center", zIndex: 3 }
-    : { position: "absolute", right: "20px", top: "18px", transform: `scale(${iconScale})`, transformOrigin: "top right", zIndex: 3 };
+    ? { position: "absolute", left: `${epSign.x}%`, top: `${epSign.y}%`, transform: `translate(-50%, -50%) scale(${iconScale}) rotate(${signRot}deg)`, transformOrigin: "center center", zIndex: 3 }
+    : { position: "absolute", right: "20px", top: "18px", transform: `scale(${iconScale}) rotate(${signRot}deg)`, transformOrigin: "top right", zIndex: 3 };
 
   const nameStyle: React.CSSProperties = epName
-    ? { position: "absolute", left: `${epName.x}%`, top: `${epName.y}%`, transform: "translate(-50%, -50%)", zIndex: 3 }
+    ? { position: "absolute", left: `${epName.x}%`, top: `${epName.y}%`, transform: `translate(-50%, -50%) rotate(${nameRot}deg)`, zIndex: 3 }
     : layout === "center" || layout === "header"
-    ? { position: "absolute", left: "50%", bottom: "46px", transform: "translateX(-50%)", textAlign: "center", zIndex: 3 }
+    ? { position: "absolute", left: "50%", bottom: "46px", transform: `translateX(-50%) rotate(${nameRot}deg)`, textAlign: "center", zIndex: 3 }
     : layout === "right"
-    ? { position: "absolute", right: "22px", bottom: `${40 + numExtras * 16}px`, textAlign: "right", zIndex: 3 }
+    ? { position: "absolute", right: "22px", bottom: `${40 + numExtras * 16}px`, transform: `rotate(${nameRot}deg)`, textAlign: "right", zIndex: 3 }
     : layout === "reverse"
-    ? { position: "absolute", left: "22px", top: "20px", zIndex: 3 }
-    : { position: "absolute", left: "22px", bottom: `${40 + numExtras * 16}px`, zIndex: 3 };
+    ? { position: "absolute", left: "22px", top: "20px", transform: `rotate(${nameRot}deg)`, zIndex: 3 }
+    : { position: "absolute", left: "22px", bottom: `${40 + numExtras * 16}px`, transform: `rotate(${nameRot}deg)`, zIndex: 3 };
 
   const titleStyle: React.CSSProperties = epTitle
-    ? { position: "absolute", left: `${epTitle.x}%`, top: `${epTitle.y}%`, transform: "translate(-50%, -50%)", zIndex: 3 }
+    ? { position: "absolute", left: `${epTitle.x}%`, top: `${epTitle.y}%`, transform: `translate(-50%, -50%) rotate(${titleRot}deg)`, zIndex: 3 }
     : layout === "center" || layout === "header"
-    ? { position: "absolute", left: "50%", bottom: "26px", transform: "translateX(-50%)", textAlign: "center", zIndex: 3 }
+    ? { position: "absolute", left: "50%", bottom: "26px", transform: `translateX(-50%) rotate(${titleRot}deg)`, textAlign: "center", zIndex: 3 }
     : layout === "right"
-    ? { position: "absolute", right: "22px", bottom: `${22 + numExtras * 16}px`, textAlign: "right", zIndex: 3 }
+    ? { position: "absolute", right: "22px", bottom: `${22 + numExtras * 16}px`, transform: `rotate(${titleRot}deg)`, textAlign: "right", zIndex: 3 }
     : layout === "reverse"
-    ? { position: "absolute", left: "22px", top: "44px", zIndex: 3 }
-    : { position: "absolute", left: "22px", bottom: `${22 + numExtras * 16}px`, zIndex: 3 };
+    ? { position: "absolute", left: "22px", top: "44px", transform: `rotate(${titleRot}deg)`, zIndex: 3 }
+    : { position: "absolute", left: "22px", bottom: `${22 + numExtras * 16}px`, transform: `rotate(${titleRot}deg)`, zIndex: 3 };
 
   // Back Drag Positions
-  const epQr = ep["back-qr"];
+  const qrRot = epQr?.rotate || 0;
   const qrStyle: React.CSSProperties = epQr
-    ? { position: "absolute", left: `${epQr.x}%`, top: `${epQr.y}%`, transform: `translate(-50%, -50%) scale(${qrScale})`, transformOrigin: "center center", zIndex: 3 }
-    : { position: "absolute", left: "50%", top: "48%", transform: `translate(-50%, -50%) scale(${qrScale})`, transformOrigin: "center center", zIndex: 3 };
+    ? { position: "absolute", left: `${epQr.x}%`, top: `${epQr.y}%`, transform: `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`, transformOrigin: "center center", zIndex: 3 }
+    : { position: "absolute", left: "50%", top: "48%", transform: `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`, transformOrigin: "center center", zIndex: 3 };
 
   const cardMaxWidth = isZoomed ? "500px" : "340px";
 
@@ -562,8 +583,10 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                 <strong
                   style={{
                     display: "block",
-                    fontSize: `calc(1.08rem * ${textScale})`,
-                    fontWeight: 700,
+                    fontFamily: resolveFontFamily(epNameTyped?.font || custom.font),
+                    fontSize: `calc(1.08rem * ${nameScale})`,
+                    fontWeight: isNameBold ? 700 : 400,
+                    fontStyle: isNameItalic ? "italic" : "normal",
                     letterSpacing: "-0.015em",
                     lineHeight: 1.2,
                     color: isLight ? "#121316" : "#f7eed8",
@@ -580,8 +603,10 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                 <span
                   style={{
                     display: "block",
-                    fontSize: `calc(0.62rem * ${textScale})`,
-                    fontWeight: 600,
+                    fontFamily: resolveFontFamily(epTitleTyped?.font || custom.font),
+                    fontSize: `calc(0.62rem * ${titleScale})`,
+                    fontWeight: isTitleBold ? 700 : 400,
+                    fontStyle: isTitleItalic ? "italic" : "normal",
                     letterSpacing: "0.08em",
                     textTransform: "uppercase",
                     color: accentColor,
@@ -595,18 +620,25 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
 
               {/* Extra Lines */}
               {activeExtras.map((line, idx) => {
-                const epExtra = ep[`extra-${idx}`];
+                const epExtra = ep[`extra-${idx}`] as { x?: number; y?: number; rotate?: number; size?: number; font?: "sans" | "serif" | "mono"; bold?: boolean; italic?: boolean } | undefined;
+                const extraRot = epExtra?.rotate || 0;
+                const extraScale = ((epExtra?.size || Math.round((custom.textSize || 14) * 0.75)) / 14);
+                const extraFont = resolveFontFamily(epExtra?.font || custom.font);
+                const isExtraBold = epExtra?.bold !== undefined ? epExtra.bold : Boolean(custom.bold);
+                const isExtraItalic = epExtra?.italic !== undefined ? epExtra.italic : Boolean(custom.italic);
                 const extraStyle: React.CSSProperties = epExtra
-                  ? { position: "absolute", left: `${epExtra.x}%`, top: `${epExtra.y}%`, transform: "translate(-50%, -50%)", zIndex: 3 }
-                  : { position: "absolute", left: "22px", bottom: `${22 + (numExtras - 1 - idx) * 15}px`, zIndex: 3 };
+                  ? { position: "absolute", left: `${epExtra.x}%`, top: `${epExtra.y}%`, transform: `translate(-50%, -50%) rotate(${extraRot}deg)`, zIndex: 3 }
+                  : { position: "absolute", left: "22px", bottom: `${22 + (numExtras - 1 - idx) * 15}px`, transform: `rotate(${extraRot}deg)`, zIndex: 3 };
 
                 return (
                   <div key={idx} style={extraStyle}>
                     <span
                       style={{
                         display: "block",
-                        fontSize: `calc(0.62rem * ${textScale})`,
-                        fontWeight: 500,
+                        fontFamily: extraFont,
+                        fontSize: `calc(0.62rem * ${extraScale})`,
+                        fontWeight: isExtraBold ? 700 : 400,
+                        fontStyle: isExtraItalic ? "italic" : "normal",
                         letterSpacing: "0.08em",
                         textTransform: "uppercase",
                         color: accentColor,
@@ -623,6 +655,7 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
               {(custom.dividerLines || []).map((line, idx) => {
                 const dividerKey = `divider-${idx}`;
                 const dividerPos = ep[dividerKey];
+                const divRot = dividerPos?.rotate || 0;
                 const isVert = line.orientation === "vertical";
                 const len = line.length || (isVert ? 60 : 100);
                 const isDashed = line.style === "dashed";
@@ -631,14 +664,14 @@ export function AdminCardPreview({ custom, customerName, className }: AdminCardP
                       position: "absolute",
                       left: `${dividerPos.x}%`,
                       top: `${dividerPos.y}%`,
-                      transform: "translate(-50%, -50%)",
+                      transform: `translate(-50%, -50%) rotate(${divRot}deg)`,
                       zIndex: 3,
                     }
                   : {
                       position: "absolute",
                       left: "50%",
                       top: `${50 + idx * 12}%`,
-                      transform: "translate(-50%, -50%)",
+                      transform: `translate(-50%, -50%) rotate(${divRot}deg)`,
                       zIndex: 3,
                     };
                 return (

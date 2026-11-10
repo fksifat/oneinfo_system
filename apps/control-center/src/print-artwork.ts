@@ -41,15 +41,15 @@ export function generateCustomCardBackSvg(custom: ProductCustomization, qrImageD
   const motif = custom.surfaceMotif || "facets";
   const qrStyle = custom.backQrStyle || "minimal";
   const ep = custom.elementPositions || {};
-  const epQr = ep["back-qr"];
+  const epQr = ep["back-qr"] as { x?: number; y?: number; rotate?: number; size?: number } | undefined;
 
   // 94x63 mm canvas (266.46 x 178.58 pt)
   // 86x55 mm trim card (243.78 x 155.91 pt) offset by 11.34 pt
-  const qrScale = (custom.qrSize || 100) / 100;
+  const qrScale = ((epQr && epQr.size != null ? epQr.size : custom.qrSize) || 100) / 100;
   const qrW = 50 * qrScale;
   const qrH = 50 * qrScale;
-  const qrX = epQr ? (epQr.x / 100) * 243.78 - qrW / 2 : (243.78 - qrW) / 2;
-  const qrY = epQr ? (epQr.y / 100) * 155.91 - qrH / 2 : (155.91 - qrH) / 2 - 4;
+  const qrX = epQr && epQr.x != null ? (epQr.x / 100) * 243.78 - qrW / 2 : (243.78 - qrW) / 2;
+  const qrY = epQr && epQr.y != null ? (epQr.y / 100) * 155.91 - qrH / 2 : (155.91 - qrH) / 2 - 4;
 
   const frameBorder =
     qrStyle === "framed"
