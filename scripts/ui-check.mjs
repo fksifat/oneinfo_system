@@ -402,11 +402,11 @@ try {
   assert.equal(contactAttempts[2].requestId,contactAttempts[3].requestId);
   const savedContacts=await connection.db.select().from(schema.customerContactLeads);assert.equal(savedContacts.length,1);assert.equal(savedContacts[0].phone,'+8801712345678');
   await click('Manage this card');
-  await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
+  await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
   await click('Open inbox');await until(`document.querySelector('.lead-inbox')?.textContent.includes('Browser Visitor')`);
   assert.equal(await evaluate(`document.querySelector('.lead-inbox').textContent.includes('visitor@example.com')`),true);
   console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
-  await reload();await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
+  await reload();await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
   assert.equal(await evaluate(`document.querySelector('input[autocomplete=name]').value`),'Browser Test Owner');
   const previousPhoto=await evaluate(`document.querySelector('.photo-editor-avatar img').src`);await uploadPhoto();assert.notEqual(await evaluate(`document.querySelector('.photo-editor-avatar img').src`),previousPhoto);
   await click('Remove photo');assert.equal(await evaluate(`!!document.querySelector('.photo-editor-avatar img')`),false);

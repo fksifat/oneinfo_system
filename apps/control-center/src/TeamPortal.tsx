@@ -1,7 +1,8 @@
 import { AccountAccess, AccountSettings } from "./AccountAccess.js";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api } from "./api.js";
-import { customerApi, LeadInbox, ProfileAnalytics } from "./CardPortal.js";
+import { customerApi } from "./customer-api.js";
+import { LeadInbox, ProfileAnalytics } from "./CardPortal.js";
 import { ProfileView, type PublicProfileData } from "./ProfileView.js";
 import { readEmployeeCsv } from "./company-csv.js";
 

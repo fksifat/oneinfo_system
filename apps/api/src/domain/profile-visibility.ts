@@ -14,5 +14,5 @@ export function publicProfileAvailable() {
     and (not exists (select 1 from ${cards} c where c.profile_id = ${customerProfiles.id})
       or exists (select 1 from ${cards} c join ${cardBatches} b on b.id = c.batch_id
         where c.profile_id = ${customerProfiles.id} and c.lifecycle_status = 'ACTIVATED'
-          and c.qc_status = 'PASSED' and b.print_confirmed_at is not null))`;
+          and (c.qc_status = 'PASSED' or b.print_confirmed_at is not null)))`;
 }
