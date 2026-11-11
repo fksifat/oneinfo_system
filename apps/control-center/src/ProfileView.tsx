@@ -724,7 +724,7 @@ export function ShareContact({
 
       <div className="share-contact-body">
         {sent ? (
-          <div className="share-contact-success">
+          <div className="share-contact-success" role="status">
             <div className="success-icon">
               <SuccessCheckIcon />
             </div>

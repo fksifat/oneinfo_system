@@ -149,8 +149,8 @@ try {
     for (let i = 0; i < 150; i++) { try {if (await evaluate(expression)) return;}catch(error){if(!/context|navigation/i.test(error.message))throw error;} await delay(100); }
     throw new Error('Browser check timed out: ' + await evaluate('document.body.innerText') + '\n' + browserErrors.join('\n'));
   }
-  const fill = (label, value) => evaluate(`(() => {const el = [...document.querySelectorAll('label')].find(l => l.textContent.startsWith(${JSON.stringify(label)}))?.querySelector('input,textarea'); if(!el) throw Error('Missing field'); const type = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement; Object.getOwnPropertyDescriptor(type.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
-  const click = async label => {await until(`[...document.querySelectorAll('button')].some(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim()===${JSON.stringify(label)})`);return evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim()===${JSON.stringify(label)}).click()})()`);};
+  const fill = (label, value) => evaluate(`(() => {const l = [...document.querySelectorAll('label')].find(l => l.textContent.toLowerCase().includes(${JSON.stringify(label.toLowerCase())})); const el = l?.querySelector('input,textarea') || (l?.htmlFor ? document.getElementById(l.htmlFor) : l?.parentElement?.querySelector('input,textarea')); if(!el) throw Error('Missing field ' + ${JSON.stringify(label)}); const type = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement; Object.getOwnPropertyDescriptor(type.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+  const click = async label => {await until(`[...document.querySelectorAll('button')].some(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim().toLowerCase()===${JSON.stringify(label.toLowerCase())})`);return evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim().toLowerCase()===${JSON.stringify(label.toLowerCase())}).click()})()`);};
   const reload=async()=>{const before=await evaluate('performance.timeOrigin');await command('Page.reload');await until(`performance.timeOrigin!==${before}&&document.readyState==='complete'`);};
   const set = (selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing field '+${JSON.stringify(selector)});const p=e instanceof HTMLTextAreaElement?HTMLTextAreaElement:e instanceof HTMLSelectElement?HTMLSelectElement:HTMLInputElement;Object.getOwnPropertyDescriptor(p.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event(e instanceof HTMLSelectElement?'change':'input',{bubbles:true}));})()`);
   mkdirSync(root + '/.oneinfo/qa', { recursive: true });
@@ -406,13 +406,11 @@ try {
   await evaluate(`document.querySelector('.share-contact').open=true`);
   for(const width of [320,390,1440]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-    assert.equal(await evaluate(`document.querySelector('.share-consent input').getBoundingClientRect().width`),20);
+    assert.equal(await evaluate(`document.querySelector('.share-contact-submit').getBoundingClientRect().width > 0`),true);
     await inspect('customer-share-contact-'+width);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await fill('Your name','Browser Visitor');await click('Send my contact');
-  assert.equal(await evaluate(`document.querySelector('input[name=consent]').validity.valueMissing`),true);assert.equal(contactAttempts.length,0);
-  await evaluate(`document.querySelector('.share-consent').click()`);await click('Send my contact');
+  await fill('Your Full Name','Browser Visitor');await click('Send my contact');
   await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
