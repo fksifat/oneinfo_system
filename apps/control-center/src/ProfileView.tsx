@@ -781,9 +781,9 @@ export function ShareContact({
               />
             </div>
 
-            {error && <p className="form-error-alert" role="alert">{error}</p>}
+            {error && <p className="form-error-alert share-contact-error" role="alert">{error}</p>}
 
-            <button type="submit" className="submit-lead-btn" disabled={busy}>
+            <button type="submit" className="submit-lead-btn share-contact-submit" disabled={busy}>
               {busy ? "Sending..." : "Send My Contact"}
             </button>
           </form>

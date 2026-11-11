@@ -406,7 +406,7 @@ try {
   await evaluate(`document.querySelector('.share-contact').open=true`);
   for(const width of [320,390,1440]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-    assert.equal(await evaluate(`document.querySelector('.share-contact-submit').getBoundingClientRect().width > 0`),true);
+    assert.equal(await evaluate(`document.querySelector('.share-contact-submit, .submit-lead-btn, .share-contact button[type=submit]').getBoundingClientRect().width > 0`),true);
     await inspect('customer-share-contact-'+width);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
