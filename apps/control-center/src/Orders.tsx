@@ -2,8 +2,10 @@ import { OrderPrint } from "./OrderPrint.js";
 import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
-import { api } from "./api.js";
+import { api, productMediaUrl } from "./api.js";
 import { OrderTrackingPipeline } from "./OrderTrackingPipeline.js";
+import { downloadOrderEps } from "./eps-generator.js";
+import { AdminCardPreview } from "./AdminCardPreview.js";
 
 const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
@@ -22,12 +24,17 @@ function getInitials(name: string) {
   }
   return name.trim().slice(0, 2).toUpperCase() || "CU";
 }
-export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void }) {
+export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: initialCustomOnly = false }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void; customOnly?: boolean }) {
   const params = new URLSearchParams(location.search);
   const requestedOrder = params.get("order");
   const requestedTask = params.get("task");
   const settingsDialog = useRef<HTMLDialogElement>(null);
   const [items, setItems] = useState<StoreOrder[]>([]);
+  const [showCustomOnly, setShowCustomOnly] = useState(initialCustomOnly);
+
+  useEffect(() => {
+    setShowCustomOnly(initialCustomOnly);
+  }, [initialCustomOnly]);
   const [hasMore, setHasMore] = useState(false);
   const [supportsSearch, setSupportsSearch] = useState(false);
   const [rates, setRates] = useState<Record<ShippingZone, string>>();
@@ -257,13 +264,54 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     finally { setDelivering(undefined); }
   }
 
+  const customOrdersCount = items.filter(o => o.items.some(i => Boolean(i.customization))).length;
+  const displayedItems = showCustomOnly ? items.filter(o => o.items.some(i => Boolean(i.customization))) : items;
+
   return <div className="store-orders">
     <section className="panel store-orders-list">
       <div className="panel-head orders-panel-head">
         <div>
-          <span className="eyebrow">ORDER FULFILLMENT</span>
-          <h2>Received orders</h2>
-          <p>Review customer orders, manage bKash verification, and track hardware dispatch.</p>
+          <span className="eyebrow">{showCustomOnly ? "BESPOKE CARD PRODUCTION" : "ORDER FULFILLMENT"}</span>
+          <h2>{showCustomOnly ? "Custom card orders" : "Received orders"}</h2>
+          <p>{showCustomOnly ? "Review custom card designs and export production vector EPS files." : "Review customer orders, manage bKash verification, and track hardware dispatch."}</p>
+          <div className="orders-scope-tabs" style={{ display: "inline-flex", gap: "6px", marginTop: "10px", background: "rgba(255,255,255,0.04)", padding: "4px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)" }}>
+            <button
+              type="button"
+              className={`button-tab ${!showCustomOnly ? "is-active" : ""}`}
+              onClick={() => setShowCustomOnly(false)}
+              style={{
+                padding: "6px 14px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                borderRadius: "6px",
+                border: "none",
+                cursor: "pointer",
+                background: !showCustomOnly ? "var(--accent, #c9933e)" : "transparent",
+                color: !showCustomOnly ? "#090d16" : "inherit",
+                transition: "all 0.15s ease",
+              }}
+            >
+              All orders ({items.length})
+            </button>
+            <button
+              type="button"
+              className={`button-tab ${showCustomOnly ? "is-active" : ""}`}
+              onClick={() => setShowCustomOnly(true)}
+              style={{
+                padding: "6px 14px",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                borderRadius: "6px",
+                border: "none",
+                cursor: "pointer",
+                background: showCustomOnly ? "var(--accent, #c9933e)" : "transparent",
+                color: showCustomOnly ? "#090d16" : "inherit",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Custom orders ({customOrdersCount})
+            </button>
+          </div>
         </div>
         <button type="button" className="quiet" disabled={loading} onClick={() => void loadOrders()}>
           {loading ? "Refreshing…" : "Refresh"}
@@ -314,9 +362,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       {orderError && <p className="store-order-notice is-error" role="alert">{orderError}</p>}
       {orderMessage && <p className="store-order-notice" role="status">{orderMessage}</p>}
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
+      {Boolean(items.length) && showCustomOnly && !displayedItems.length && (
+        <p className="empty">No bespoke custom card orders found. Regular standard orders appear under &ldquo;All orders&rdquo;.</p>
+      )}
 
       <div className="store-orders-stack">
-        {items.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
+        {displayedItems.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || showCustomOnly || undefined}>
           <summary>
             <div className="store-order-summary-left">
               <span className="store-order-avatar" aria-hidden="true">{getInitials(order.customer.name)}</span>
@@ -414,11 +465,157 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               </div>
               <ul className="order-items-list">
                 {order.items.map(item => (
-                  <li key={`${item.productId}:${item.variantId}`} className="order-item-row">
+                  <li key={`${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : ""}`} className="order-item-row">
                     <span className="order-item-qty">{item.quantity}×</span>
                     <div className="order-item-details">
                       <strong className="order-item-title">{item.name}</strong>
                       <span className="order-item-variant">{item.variantName}</span>
+                      {item.customization && (
+                        <div className="order-item-custom-card-panel" style={{ marginTop: "10px", padding: "12px 14px", background: "rgba(201, 147, 62, 0.05)", border: "1px solid rgba(201, 147, 62, 0.28)", borderRadius: "10px" }}>
+                          {/* Visual Card Preview matching customer storefront personalization */}
+                          <AdminCardPreview custom={item.customization} customerName={order.customer.name} />
+
+                          <span className="order-item-customization" style={{ display: "block", fontSize: "0.82rem", color: "var(--accent, #c9933e)", lineHeight: 1.45, marginTop: "8px" }}>
+                            <strong>Bespoke Edition</strong>: <strong>{item.customization.name}</strong>{item.customization.title ? ` · ${item.customization.title}` : ""}
+                            {item.customization.extraLines && item.customization.extraLines.length > 0 && (
+                              <span style={{ display: "block", marginTop: "3px", fontSize: "0.78rem", color: "var(--text-secondary, #d4d4d8)" }}>
+                                {item.customization.extraLines.map((line: string, idx: number) => (
+                                  <span key={idx} style={{ display: "inline-block", marginRight: "8px" }}>Line {idx + 3}: <strong>{line}</strong></span>
+                                ))}
+                              </span>
+                            )}
+                            <br />
+                            <small style={{ opacity: 0.9, color: "var(--text-secondary, #a1a1aa)" }}>
+                              Motif: <strong>{item.customization.surfaceMotif || "facets"}</strong> · Layout: <strong>{String(item.customization.layout || item.customization.position || "left").replace("-", " ")}</strong> · Foil: <strong>{item.customization.accentColor || "#d4af37"}</strong> · Font: <strong>{item.customization.font || "sans"}</strong>{item.customization.textSize && item.customization.textSize !== 14 ? ` · Size: ${item.customization.textSize}pt` : ""}{item.customization.backSubtitle ? ` · Back: "${item.customization.backSubtitle}"` : ""}
+                            </small>
+                            {item.customization.logoUrl && (
+                              <div style={{ marginTop: "6px", display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "0.78rem", color: "var(--text-secondary, #a1a1aa)" }}>Custom Logo:</span>
+                                <img
+                                  src={productMediaUrl(item.customization.logoUrl)}
+                                  alt="Customer logo"
+                                  style={{ maxHeight: "24px", maxWidth: "64px", objectFit: "contain", background: "rgba(255,255,255,0.08)", borderRadius: "4px", padding: "2px" }}
+                                />
+                                <a
+                                  href={productMediaUrl(item.customization.logoUrl)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ fontSize: "0.76rem", color: "var(--accent, #c9933e)", textDecoration: "underline" }}
+                                >
+                                  View logo
+                                </a>
+                                {item.customization.companyName && (
+                                  <span style={{ fontSize: "0.76rem", color: "var(--text-secondary, #a1a1aa)" }}>({item.customization.companyName})</span>
+                                )}
+                              </div>
+                            )}
+                          </span>
+                          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", marginTop: "10px" }}>
+                            <button
+                              type="button"
+                              className="button-download-eps"
+                              title="Download Front Vector EPS (94×63 mm canvas with 4mm bleed around 86×55 mm cut)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOrderEps(item.customization!, {
+                                  id: order.id,
+                                  transactionId: order.transactionId,
+                                  invoiceNumber: order.invoiceNumber,
+                                  customerName: order.customer.name,
+                                }, "front");
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "6px 12px",
+                                fontSize: "0.78rem",
+                                fontWeight: 600,
+                                background: "#090d16",
+                                color: "#f59e0b",
+                                border: "1px solid #d97706",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              <span>Front EPS (94×63 mm)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="button-download-eps"
+                              title="Download Back Vector EPS (94×63 mm canvas with 4mm bleed around 86×55 mm cut)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOrderEps(item.customization!, {
+                                  id: order.id,
+                                  transactionId: order.transactionId,
+                                  invoiceNumber: order.invoiceNumber,
+                                  customerName: order.customer.name,
+                                }, "back");
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                padding: "6px 12px",
+                                fontSize: "0.78rem",
+                                fontWeight: 600,
+                                background: "#090d16",
+                                color: "#f59e0b",
+                                border: "1px solid #d97706",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                <polyline points="7 10 12 15 17 10" />
+                                <line x1="12" y1="15" x2="12" y2="3" />
+                              </svg>
+                              <span>Back EPS (94×63 mm)</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              className="button-download-eps-all"
+                              title="Download both Front and Back production EPS files (94×63 mm each)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                downloadOrderEps(item.customization!, {
+                                  id: order.id,
+                                  transactionId: order.transactionId,
+                                  invoiceNumber: order.invoiceNumber,
+                                  customerName: order.customer.name,
+                                }, "both");
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                padding: "6px 10px",
+                                fontSize: "0.74rem",
+                                fontWeight: 500,
+                                background: "rgba(217, 119, 6, 0.12)",
+                                color: "#fbbf24",
+                                border: "1px dashed #d97706",
+                                borderRadius: "6px",
+                                cursor: "pointer",
+                                transition: "all 0.15s ease",
+                              }}
+                            >
+                              <span>Both (Front + Back)</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <span className="order-item-amount">{bdt(item.unitPriceMinor * item.quantity)}</span>
                   </li>

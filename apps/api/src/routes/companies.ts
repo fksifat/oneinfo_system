@@ -6,7 +6,7 @@ import { createAccountLink, sendAccountLink } from "../domain/account-tokens.js"
 import { randomBytes } from "node:crypto";
 import type { FastifyPluginAsync } from "fastify";
 import { and, asc, desc, sql, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
-import { CreateProfileSchema } from "@oneinfo/contracts";
+import { CreateProfileSchema, ProfileLinkSchema } from "@oneinfo/contracts";
 import { z } from "zod";
 import { requireOperator } from "../auth.js";
 import { isManagedCardUrl } from "../domain/card-urls.js";
@@ -23,7 +23,7 @@ const domain = z.string().trim().toLowerCase().max(253).regex(/^(?:[a-z0-9](?:[a
 const companyParams = z.object({ companyId: z.uuid() });
 const employeeParams = companyParams.extend({ employeeId: z.uuid() });
 const token = z.string().regex(/^[a-zA-Z0-9_-]{43}$/);
-const profileEdit = CreateProfileSchema.pick({ displayName: true, headline: true, bio: true, phone: true, email: true, website: true, avatarUrl: true });
+const profileEdit = CreateProfileSchema.pick({ displayName: true, headline: true, bio: true, phone: true, email: true, website: true, avatarUrl: true }).extend({ links: z.array(ProfileLinkSchema).max(12).optional() });
 const settings = CreateProfileSchema.pick({ headline: true, bio: true, theme: true }).extend({ name, logoUrl: z.union([z.literal(""), z.url({ protocol: /^https$/ })]).default(""), allowEmployeeEdits: z.boolean() });
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 function fail(message: string, statusCode = 409): never { throw Object.assign(new Error(message), { statusCode }); }
@@ -118,7 +118,8 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     if (!company) fail("Company workspace not found.", 404);
     const employees = await db.select({ id: companyEmployees.id, email: companyEmployees.email, active: companyEmployees.active,
       inviteEmailStatus: companyEmployees.inviteEmailStatus,
-      profileId: companyEmployees.profileId, name: customerProfiles.displayName, publicSlug: customerProfiles.publicSlug })
+      profileId: companyEmployees.profileId, name: customerProfiles.displayName, publicSlug: customerProfiles.publicSlug,
+      headline: customerProfiles.headline, avatarUrl: customerProfiles.avatarUrl, phone: customerProfiles.phone })
       .from(companyEmployees).innerJoin(customerProfiles, eq(companyEmployees.profileId, customerProfiles.id))
       .where(eq(companyEmployees.companyId, companyId)).orderBy(asc(customerProfiles.displayName));
     const stock = await db.select({ id: cards.id, profileId: cards.profileId, publicSlug: cards.publicSlug, lifecycleStatus: cards.lifecycleStatus })
@@ -246,13 +247,22 @@ export const companyRoutes: FastifyPluginAsync = async app => {
     return employee;
   }
 
-  app.post("/employee/profile", { bodyLimit: 8192 }, async request => {
+  app.post("/employee/profile", { bodyLimit: 16384 }, async request => {
     const input = parseBody(z.object({ token, profile: profileEdit.optional() }), request.body);
     return db.transaction(async tx => {
       const employee = await editable(tx, input.token);
-      if (input.profile) await tx.update(customerProfiles).set({ ...input.profile, updatedAt: new Date() }).where(eq(customerProfiles.id, employee.profileId));
+      if (input.profile) {
+        const { links, ...fields } = input.profile;
+        await tx.update(customerProfiles).set({ ...fields, updatedAt: new Date() }).where(eq(customerProfiles.id, employee.profileId));
+        if (links !== undefined) {
+          await tx.delete(profileLinks).where(eq(profileLinks.profileId, employee.profileId));
+          if (links.length) await tx.insert(profileLinks).values(links.map((link, idx) => ({ ...link, profileId: employee.profileId, sortOrder: idx })));
+        }
+      }
       const [profile] = await tx.select(publicProfileFields).from(customerProfiles).where(eq(customerProfiles.id, employee.profileId));
-      return { profile };
+      const links = await tx.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url })
+        .from(profileLinks).where(and(eq(profileLinks.profileId, employee.profileId), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
+      return { profile, links };
     });
   });
 

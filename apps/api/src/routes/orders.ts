@@ -5,7 +5,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
   bkashNumber, CodAdvanceSchema, defaultCodAdvanceTaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
-  ShippingRatesSchema, StoreCouponSchema, variantPrice, AdminOrderSearchSchema, OrderFulfillmentSchema,
+  ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
   type AdminOrderSearch, type OrderReceipt,
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
@@ -343,7 +343,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   } });
 
-  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 32 * 1024 }, async (request, reply) => {
+  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 512 * 1024 }, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const reserving = route === "/reserve";
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
@@ -390,7 +390,8 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         const variant = product?.variants.find(item => item.id === line.variantId);
         if (!product || !variant?.available) conflict("An item in your cart is no longer available.");
         if (variant.stockQuantity !== undefined && line.quantity > variant.stockQuantity) conflict("There are not enough units of an item in your cart.");
-        const unitPriceMinor = variantPrice(variant);
+        const hasLogo = line.customization?.hasOneinfoLogo !== false && line.customization?.brandingMode !== "without-logo";
+        const unitPriceMinor = variantPriceForBranding(variant, hasLogo);
         if (unitPriceMinor !== line.unitPriceMinor) conflict("An item price changed. Review your updated cart and try again.");
         return { ...line, unitPriceMinor, name: product.name, variantName: variant.name };
       });

@@ -73,7 +73,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .auth-card small { color: var(--text-caption); max-width: 500px; }
 .auth-visual { background: var(--ink-surface); display: grid; place-items: center; overflow: hidden; position: relative; }
 .auth-visual::before { content: ""; position: absolute; width: 680px; height: 680px; border: 1px solid rgba(185,245,106,.18); border-radius: 50%; box-shadow: 0 0 0 85px rgba(185,245,106,.025), 0 0 0 170px rgba(185,245,106,.018); }
-.auth-card-art { position: relative; z-index: 2; width: min(510px, 75%); aspect-ratio: 1.585; padding: 34px; border-radius: 24px; color: white; background: linear-gradient(135deg, #071c29, #24566a); box-shadow: 0 50px 100px rgba(0,0,0,.35); transform: rotate(-8deg); display: flex; flex-direction: column; }
+.auth-card-art { position: relative; z-index: 2; width: min(510px, 75%); aspect-ratio: 86 / 55; padding: 34px; border-radius: 24px; color: white; background: linear-gradient(135deg, #071c29, #24566a); box-shadow: 0 50px 100px rgba(0,0,0,.35); transform: rotate(-8deg); display: flex; flex-direction: column; }
 .auth-card-art span { font-size: .75rem; letter-spacing: .15em; font-weight: 900; }
 .auth-card-art strong { margin: auto 0; font-size: clamp(2.2rem, 4vw, 4rem); line-height: .95; }
 .auth-card-art small { letter-spacing: .12em; opacity: .65; }
@@ -5943,3 +5943,169 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .production-lookup summary { cursor:pointer; padding:10px 0; font-weight:600; }
 .production-setup-steps { padding-left:22px; line-height:1.7; }
 .reprint-fieldset .operation-actions { margin:10px 0; }
+
+
+/* Employee Profile Enhancements & Links */
+.employee-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 9999px;
+}
+
+.employee-headline-tag {
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.employee-qr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.employee-qr-link:hover {
+  background: var(--surface);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.employee-wa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 6px;
+  padding: 2px 8px;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.employee-wa-badge:hover {
+  background: #dcfce7;
+}
+
+.employee-links-box {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.links-header-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 10px;
+}
+
+.links-header-row strong {
+  font-size: 0.875rem;
+  color: var(--ink);
+}
+
+.links-sub-tip {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.quick-add-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.employee-link-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.link-title-input {
+  flex: 0 0 140px;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+
+.link-url-input {
+  flex: 1;
+  font-size: 0.8125rem;
+  padding: 6px 10px;
+}
+
+.link-del-btn {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  padding: 6px;
+  cursor: pointer;
+}
+
+.link-del-btn:hover {
+  color: #e11d48;
+}
+
+.mockup-quick-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.contact-mini-badge {
+  font-size: 0.6875rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.preview-theme-midnight .contact-mini-badge {
+  background: rgba(255, 255, 255, 0.1);
+  color: #f8fafc;
+}
+
+.mockup-links-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.mockup-link-pill {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.preview-theme-midnight .mockup-link-pill {
+  background: rgba(255, 255, 255, 0.08);
+  color: #f8fafc;
+}
+
+@media (max-width: 640px) {
+  .employee-link-input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .link-title-input {
+    flex: auto;
+    width: 100%;
+  }
+}
+
