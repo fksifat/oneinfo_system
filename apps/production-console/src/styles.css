@@ -245,3 +245,13 @@ footer { min-height: 50px; padding: 12px var(--page-inset); background: white; b
 .stock-delete-dialog .actions { display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; }
 .stock-delete-dialog .stock-delete-error { color:#a13b2c; }
 @media print { .stock-delete-dialog { display:none !important; } }
+
+.database-backups { display:grid; gap:14px; }
+.database-backups[hidden] { display:none; }
+.database-backups p { margin:0; line-height:1.6; }
+.backup-notice { padding:12px; background:var(--surface-alt,#f4f7fa); border:1px solid #d5e1e8; border-radius:8px; }
+.backup-list { display:grid; gap:12px; }
+.backup-record { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; padding:16px; border:1px solid #d5e1e8; border-radius:10px; }
+.backup-record > div { flex:1 1 240px; min-width:0; overflow-wrap:anywhere; }
+.database-backups summary { cursor:pointer; padding:8px 0; font-weight:600; }
+.database-backups code { overflow-wrap:anywhere; }
