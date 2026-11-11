@@ -78,6 +78,33 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
 
+  it("limits database backup listing to a local administrator with a valid station", async () => {
+    const path = "/api/v1/production/backups";
+    const original = process.env.ONEINFO_BACKUP_DIR;
+    const directory = mkdtempSync(join(tmpdir(), "oneinfo-backup-access-"));
+    process.env.ONEINFO_BACKUP_DIR = directory;
+    try {
+      expect((await app.inject({ url: path })).statusCode).toBe(401);
+      expect((await app.inject({ url: path, headers: { authorization: headers.authorization! } })).statusCode).toBe(401);
+      expect((await app.inject({ url: path, headers, remoteAddress: "192.0.2.10" })).statusCode).toBe(403);
+      expect((await app.inject({ url: path, headers })).json().items).toEqual([]);
+      const [auditor] = await client.db.insert(schema.operators).values({ email: `backup-auditor-${randomUUID()}@example.com`, displayName: "Backup auditor", role: "AUDITOR" }).returning();
+      const { issueOperatorToken } = await import("../src/auth.js");
+      const accessToken = await issueOperatorToken({ operatorId: auditor!.id, email: auditor!.email, role: "AUDITOR" });
+      expect((await app.inject({ url: path, headers: { ...headers, authorization: `Bearer ${accessToken}` } })).statusCode).toBe(403);
+      const { config } = await import("../src/config.js");
+      const enabled = config.WORKSTATION_NFC_ENABLED;
+      config.WORKSTATION_NFC_ENABLED = false;
+      const cloudApp = (await import("../src/app.js")).buildApp();
+      try { expect((await cloudApp.inject({ url: path, headers })).statusCode).toBe(404); }
+      finally { await cloudApp.close(); config.WORKSTATION_NFC_ENABLED = enabled; }
+
+    } finally {
+      if (original === undefined) delete process.env.ONEINFO_BACKUP_DIR; else process.env.ONEINFO_BACKUP_DIR = original;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("creates the maximum batch with unique cards, all jobs and complete creation history", async () => {
     const created = await batch(1000, false);
     const rows = await client.db.select().from(schema.cards).where(eq(schema.cards.batchId, created.id));

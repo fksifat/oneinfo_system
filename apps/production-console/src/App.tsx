@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type Credentials } from "./api.js";
+import { DatabaseBackups } from "./DatabaseBackups.js";
 import { NfcTools } from "./NfcTools.js";
 import { ProductionDesk } from "./ProductionDesk.js";
 
@@ -48,7 +49,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [setupError, setSetupError] = useState("");
   const [pairing, setPairing] = useState<PhonePairing | null>(null);
-  const [activeTab, setActiveTab] = useState(() => ["tools", "connection"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "production");
+  const [activeTab, setActiveTab] = useState(() => ["tools", "connection", "backups"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "production");
   const [devices, setDevices] = useState<{ id: string; name: string; online: boolean; lastSeenAt: string }[]>([]);
   const [connectionError, setConnectionError] = useState("");
 
@@ -60,7 +61,7 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [pairing?.expiresAt]);
   useEffect(() => {
-    const changed = () => { const tab = window.location.hash.slice(1); setActiveTab(["tools", "connection"].includes(tab) ? tab : "production"); window.scrollTo(0, 0); };
+    const changed = () => { const tab = window.location.hash.slice(1); setActiveTab(["tools", "connection", "backups"].includes(tab) ? tab : "production"); window.scrollTo(0, 0); };
     window.addEventListener("hashchange", changed);
     return () => window.removeEventListener("hashchange", changed);
   }, []);
@@ -191,7 +192,7 @@ export function App() {
         <div className="header-links"><a href={import.meta.env.VITE_ADMIN_URL ?? "http://127.0.0.1:5174"} target="_blank" rel="noreferrer">Admin panel ↗</a><span className={configured ? "status online" : "status"}>{configured ? "Station ready" : "Setup required"}</span></div>
       </header>
 
-      {configured ? <nav className="workspace-nav" aria-label="Workspace">{([["production", "01", "Production"], ["tools", "02", "NFC tools"], ["connection", "03", "Connection"]] as const).map(([id, number, label]) => <button key={id} aria-pressed={activeTab === id} onClick={() => { window.location.hash = id; }}><span>{number}</span>{label}</button>)}<span className="connection-indicator">{connectionError ? "API unavailable" : devices.some((device) => device.online) ? "NFC device connected" : "No NFC device online"}</span></nav> : null}
+      {configured ? <nav className="workspace-nav" aria-label="Workspace">{([["production", "01", "Production"], ["tools", "02", "NFC tools"], ["connection", "03", "Connection"], ["backups", "04", "Backups"]] as const).map(([id, number, label]) => <button key={id} aria-pressed={activeTab === id} onClick={() => { window.location.hash = id; }}><span>{number}</span>{label}</button>)}<span className="connection-indicator">{connectionError ? "API unavailable" : devices.some((device) => device.online) ? "NFC device connected" : "No NFC device online"}</span></nav> : null}
       <main>
         {!configured ? (
           <section className="panel setup-panel">
@@ -209,6 +210,7 @@ export function App() {
           <>
             <ProductionDesk visible={activeTab === "production"} credentials={credentials} busy={busy} onBusy={setBusy} onMessage={setMessage} onChanged={refreshJobs} onPhoneScan={showPhoneScan} />
 
+            <DatabaseBackups credentials={credentials} visible={activeTab === "backups"} onMessage={setMessage} />
             <div hidden={activeTab !== "tools"}><NfcTools credentials={credentials} connected={devices.some(device => device.online)} onMessage={setMessage} /></div>
             <section hidden={activeTab !== "connection"} className="panel desktop-nfc-panel lan-connection-panel">
               <div><p className="section-label">SECURE WI-FI / LAN</p><h2>Connect your phone to this PC</h2><p>Keep the phone and PC on the same network. In the phone app, open Connect → Scan workstation connection QR. Pair once; your phone stays paired after Oneinfo restarts.</p>
