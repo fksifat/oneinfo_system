@@ -422,8 +422,8 @@ try {
   const savedContacts=await connection.db.select().from(schema.customerContactLeads);assert.equal(savedContacts.length,1);assert.equal(savedContacts[0].phone,'+8801712345678');
   await click('Manage this card');
   await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
-  const hasContactsTab = await evaluate(`!![...document.querySelectorAll('button')].find(b => b.textContent.trim().toLowerCase() === 'contacts')`);
-  if (hasContactsTab) await click('Contacts');
+  await until(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('Contacts'))`);
+  await evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Contacts')).click()})()`);
   await click('Open inbox');await until(`document.querySelector('.lead-inbox')?.textContent.includes('Browser Visitor')`);
   assert.equal(await evaluate(`document.querySelector('.lead-inbox').textContent.includes('visitor@example.com')`),true);
   console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
