@@ -63,6 +63,8 @@ try {
   const secret = await api(`/api/v1/customer/cards/${card.id}/activation-code`, {}, headers);
   const catalog = await fetch('http://127.0.0.1:3001/api/v1/products/public').then(r => r.json());
   assert.ok(catalog.items.length, 'Published storefront products needed for UI audit');
+  // This is the guarded disposable database: replace migration seed IDs with the read-only catalog fixture.
+  await connection.db.delete(schema.products);
   for(const {createdAt,updatedAt,...product} of catalog.items)await connection.db.insert(schema.products).values(product).onConflictDoUpdate({target:schema.products.id,set:product});
   await connection.db.insert(schema.storeShippingSettings).values({id:'default',rates:{insideDhaka:6000,subDhaka:10000,outsideDhaka:12000},codAdvanceTaka:0}).onConflictDoUpdate({target:schema.storeShippingSettings.id,set:{codAdvanceTaka:0}});
   const nativeFetch=globalThis.fetch;
@@ -91,6 +93,10 @@ try {
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let seq = 0, requestedWidth = 390; const waiting = new Map(); const browserErrors = []; const adminReads = [];
   let failProfileSave=false,failOverview=false,expirePairingSoon=false;
+  const backupBytes=Buffer.from('PGDMP browser-only backup fixture');
+  const backupId=crypto.randomUUID();
+  const backupFixture={id:backupId,fileName:`oneinfo-database-2026-11-11T00-00-00-000Z-${backupId}.dump`,createdAt:'2026-11-11T00:00:00.000Z',database:'browser_fixture',source:'Docker',bytes:backupBytes.length,sha256:require('node:crypto').createHash('sha256').update(backupBytes).digest('hex')};
+  let backupSaved=false,backupFailure=false,backupCorrupt=false;
   let contactFailure='none';const contactAttempts=[];
   function command(method, params = {}) {
     if(method==='Emulation.setDeviceMetricsOverride')requestedWidth=params.width;
@@ -109,12 +115,18 @@ try {
         const contactShare=paused.request.method==='POST'&&url.pathname.endsWith('/contact-leads');
         if(contactShare)contactAttempts.push(JSON.parse(paused.request.postData));
         const failed=(contactShare&&contactFailure==='before-save')||(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
-        const result = failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
-          ...(paused.request.postDataEntries?.some(entry=>entry.bytes) ? {payload:Buffer.concat(paused.request.postDataEntries.map(entry=>Buffer.from(entry.bytes??'','base64')))} : paused.request.postData ? { payload: paused.request.postData } : {}) });
+        let backupResponse;
+        if(url.pathname==='/api/v1/production/backups'){
+          if(paused.request.method==='POST'&&backupFailure)backupResponse={statusCode:503,headers:{'content-type':'application/json'},body:JSON.stringify({message:'Backup tools unavailable; previous backups retained.'})};
+          else {if(paused.request.method==='POST')backupSaved=true;backupResponse={statusCode:200,headers:{'content-type':'application/json'},body:JSON.stringify(paused.request.method==='POST'?backupFixture:{directory:'/private/oneinfo-ui/backups/database',items:backupSaved?[backupFixture]:[]})};}
+        }else if(url.pathname===`/api/v1/production/backups/${backupId}/download`){const bytes=backupCorrupt?Buffer.from('damaged'):backupBytes;backupResponse={statusCode:200,headers:{'content-type':'application/octet-stream'},rawPayload:bytes,body:bytes.toString()};}
+        if(backupResponse)backupResponse.headers={...backupResponse.headers,'access-control-allow-origin':paused.request.headers.origin??'http://127.0.0.1:5173','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'authorization,x-station-key,x-request-id,content-type'};
+        const result = backupResponse??(failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
+          ...(paused.request.postDataEntries?.some(entry=>entry.bytes) ? {payload:Buffer.concat(paused.request.postDataEntries.map(entry=>Buffer.from(entry.bytes??'','base64')))} : paused.request.postData ? { payload: paused.request.postData } : {}) }));
         if(contactShare&&contactFailure==='after-save'){result.statusCode=503;result.body=JSON.stringify({message:'Saved response interrupted; retry your contact.'});result.headers['content-length']=String(Buffer.byteLength(result.body));}
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
-          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (/^(image\/|application\/zip)/.test(String(result.headers['content-type'])) ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
+          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (/^(image\/|application\/(zip|octet-stream))/.test(String(result.headers['content-type'])) ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
       } catch (error) {
         if(closing||/Invalid InterceptionId/i.test(error.message))return;
         browserErrors.push(error.message);
@@ -241,7 +253,7 @@ try {
       await set('.batch-toolbar select',batch.id);await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
       console.log('Phone QR auto-selects batch/card, clears filters, opens Production, and preserves later manual selection PASS');
     }
-    for(const label of ['Production','NFC tools','Connection']){
+    for(const label of ['Production','NFC tools','Connection','Backups']){
       await evaluate(`(()=>{const b=[...document.querySelectorAll('.workspace-nav button')].find(b=>b.textContent.endsWith(${JSON.stringify(label)}));b.click();})()`);await inspect('production-'+label.replaceAll(' ','-')+'-'+width);
       if(label==='Production'){
         await evaluate(`[...document.querySelectorAll('.batch-toolbar button')].find(b=>b.textContent==='Delete batch').focus()`);
@@ -310,6 +322,15 @@ try {
         assert.equal(await evaluate(`document.querySelector('.lan-pairing img').getAttribute('src').startsWith('data:image/png;base64,')`),true);
         assert.equal(await evaluate(`document.querySelector('.connection-details details').open`),false);
         if(width===1440){await until(`document.querySelector('.lan-pairing').textContent.includes('QR expired')&&!document.querySelector('.lan-pairing img')`);await click('New connection QR');await until(`!!document.querySelector('.lan-pairing img')`);console.log('Connection QR expiry and refresh PASS');}
+      }
+      if(label==='Backups'&&width===1440){
+        await until(`![...document.querySelectorAll('button')].find(b=>b.textContent==='Back up database & download').disabled`);
+        backupFailure=true;await click('Back up database & download');await until(`document.querySelector('.database-backups [role=alert]')?.textContent.includes('Backup tools unavailable')`);await delay(600);assert.equal(await evaluate(`!!document.querySelector('.database-backups [role=alert]')`),true);
+        backupFailure=false;await evaluate(`window.__backupBlob=null;window.__backupFilename='';const create=URL.createObjectURL.bind(URL);URL.createObjectURL=blob=>{window.__backupBlob=blob;return create(blob)};const click=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){window.__backupFilename=this.download;return click.call(this)}`);
+        await click('Back up database & download');await until(`!!window.__backupBlob&&!!document.querySelector('.backup-record')&&!document.querySelector('.database-backups button').disabled`);assert.equal(await evaluate(`window.__backupFilename`),backupFixture.fileName);assert.equal(await evaluate(`window.__backupBlob.size`),backupFixture.bytes);
+        await click('Refresh backups');await until(`!!document.querySelector('.backup-record')&&!document.querySelector('.database-backups button').disabled`);
+        backupCorrupt=true;await click('Download backup');await until(`document.querySelector('.database-backups [role=alert]')?.textContent.includes('integrity check')`);assert.equal(await evaluate(`document.querySelectorAll('.backup-record').length`),1);backupCorrupt=false;
+        console.log('Database backup create/download/history, persistent errors and corrupt download rejection PASS (browser fixture; no production dump invoked)');
       }
       if(label==='NFC tools'&&width===1440){
         const complete=async(operation,value)=>{const task=await api('/api/v1/local-nfc/device/read-tasks/next',undefined,deviceHeaders);assert.equal(task.utility.operation,operation);const records=operation==='ERASE'?[{tnf:0,type:'',payloadHex:''}]:[{tnf:1,type:'U',payloadHex:'00',uri:value}];await api(`/api/v1/local-nfc/device/read-tasks/${task.sessionId}/result`,{uid:'AABBCCDD',techList:['Ndef'],ndefFormatted:true,writable:true,maxSize:888,messageSize:42,records},deviceHeaders);await until(`!!document.querySelector('.tag-facts')&&document.querySelector('.tag-facts').textContent.includes('AABBCCDD')`);};
@@ -480,7 +501,7 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width:320,height:844,deviceScaleFactor:1,mobile:true});await inspect('company-public-profile-320');
   assert.equal(browserErrors.length,0,browserErrors.join('\n'));
   console.log('PASS: company setup, employee welcome email and edit link, card assignment, contact search, analytics, security, and public directory.');
-} catch(error) { console.log('UI AUDIT FAILED:',error.stack??error.message); process.exitCode=1; } finally {
+} catch(error) { console.log('UI AUDIT FAILED:',error.cause?.code ? `Database error ${error.cause.code}: ${error.cause.message}` : error.stack??error.message); process.exitCode=1; } finally {
   closing=true;
   clearInterval(globalThis.uiHeartbeat);
   if(socket)socket.onmessage=null;
