@@ -8,8 +8,8 @@ import { db } from "../db/client.js";
 import { auditLogs } from "../db/schema.js";
 import { backupDirectory, backupPath, createDatabaseBackup, listDatabaseBackups, readDatabaseBackup } from "../domain/database-backup.js";
 
+let running = false;
 export const databaseBackupRoutes: FastifyPluginAsync = async app => {
-  let running = false;
   app.addHook("preHandler", async request => {
     // Use the socket, not forwarded headers: phone/LAN callers cannot export the database.
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.raw.socket.remoteAddress ?? "")) throw Object.assign(new Error("Database backups are available only on this PC"), { statusCode: 403 });

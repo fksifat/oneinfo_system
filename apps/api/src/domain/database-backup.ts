@@ -28,7 +28,7 @@ export function databaseDumpCommand(databaseUrl: string, env = process.env) {
   if (["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) && url.port === (env.ONEINFO_POSTGRES_PORT ?? "55432")) {
     return { command: "docker", args: ["compose", "-f", join(root, "compose.yaml"), "exec", "-T", "postgres", "pg_dump", ...args], source: "Docker" as const, database, env };
   }
-  return { command: "pg_dump", args: [...args, `--host=${url.hostname}`, `--port=${url.port || "5432"}`], source: "PostgreSQL" as const, database,
+  return { command: "pg_dump", args: [...args, `--host=${url.hostname.replace(/^\[|\]$/g, "")}`, `--port=${url.port || "5432"}`], source: "PostgreSQL" as const, database,
     env: { ...env, PGPASSWORD: decodeURIComponent(url.password), ...(url.searchParams.has("sslmode") ? { PGSSLMODE: url.searchParams.get("sslmode")! } : {}) } };
 }
 
@@ -64,6 +64,7 @@ export async function createDatabaseBackup(databaseUrl: string): Promise<Databas
   } finally {
     if (child.exitCode === null && !child.killed) child.kill();
     await rm(partial, { force: true });
+    await rm(join(backupDirectory(), `${id}.json.partial`), { force: true });
   }
 }
 

@@ -26,6 +26,7 @@ it("uses the configured database with safely quoted SSH arguments and no passwor
   const native = databaseDumpCommand("postgresql://user:private-password@db.example:5432/database?sslmode=require", {});
   expect(native.command).toBe("pg_dump");expect(native.args.join(" ")).not.toContain("private-password");expect(native.env).toMatchObject({ PGPASSWORD: "private-password", PGSSLMODE: "require" });
   expect(databaseDumpCommand("postgresql://oneinfo:oneinfo@localhost:55432/test", {}).source).toBe("Docker");
+  expect(databaseDumpCommand("postgresql://user:pass@[::1]:5432/test", {}).args).toContain("--host=::1");
 });
 it("retains complete archives and checksums, and rejects corrupt downloads without changing a previous backup", async () => {
   directory = await mkdtemp(join(tmpdir(), "oneinfo-backup-test-"));vi.stubEnv("ONEINFO_BACKUP_DIR", directory);vi.stubEnv("ONEINFO_DATABASE_SSH", "");
