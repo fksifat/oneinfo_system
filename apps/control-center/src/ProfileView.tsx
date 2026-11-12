@@ -835,3 +835,105 @@ export function ShareContact({
     </details>
   );
 }
+
+export function ProfileSkeleton({
+  error,
+  onRetry,
+}: {
+  error?: string | undefined;
+  onRetry?: (() => void) | undefined;
+}) {
+  if (error) {
+    return (
+      <div className="profile-page profile-loading-canvas">
+        <main className="public-profile profile-skeleton-card is-error">
+          <div className="profile-skeleton-brand">
+            <img src={oneinfoLogo} alt="Oneinfo" className="profile-skeleton-logo" />
+          </div>
+          <div className="profile-error-content">
+            <span className="profile-error-badge">PROFILE UNAVAILABLE</span>
+            <h1 className="profile-error-heading">{error}</h1>
+            <p className="profile-error-sub">This profile could not be loaded. Please check your link or try again.</p>
+            <div className="profile-error-actions">
+              {onRetry && (
+                <button type="button" onClick={onRetry} className="profile-error-btn retry">
+                  Try Again
+                </button>
+              )}
+              <a href="/" className="profile-error-btn home">
+                Oneinfo Home
+              </a>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  return (
+    <div className="profile-page profile-loading-canvas" aria-busy="true" aria-label="Loading Oneinfo Profile">
+      <main className="public-profile profile-skeleton-card">
+        {/* Cover Banner Skeleton */}
+        <div className="profile-cover-banner profile-skeleton-cover">
+          <div className="banner-top-bar">
+            <div className="banner-logo-pill">
+              <img src={oneinfoLogo} alt="Oneinfo" height={16} />
+            </div>
+          </div>
+        </div>
+
+        {/* Avatar Skeleton */}
+        <div className="profile-avatar-container">
+          <div className="profile-avatar-frame profile-skeleton-avatar profile-shimmer" />
+        </div>
+
+        {/* Identity Skeleton */}
+        <div className="profile-identity-section profile-skeleton-identity">
+          <div className="profile-skeleton-line name profile-shimmer" />
+          <div className="profile-skeleton-line designation profile-shimmer" />
+          <div className="profile-skeleton-line company profile-shimmer" />
+        </div>
+
+        {/* Quick Connect Row Skeleton (4 buttons) */}
+        <div className="profile-quick-actions profile-skeleton-quick-actions">
+          <div className="profile-skeleton-action-col">
+            <div className="profile-skeleton-circle profile-shimmer" />
+            <div className="profile-skeleton-text-line profile-shimmer" />
+          </div>
+          <div className="profile-skeleton-action-col">
+            <div className="profile-skeleton-circle profile-shimmer" />
+            <div className="profile-skeleton-text-line profile-shimmer" />
+          </div>
+          <div className="profile-skeleton-action-col">
+            <div className="profile-skeleton-circle profile-shimmer" />
+            <div className="profile-skeleton-text-line profile-shimmer" />
+          </div>
+          <div className="profile-skeleton-action-col">
+            <div className="profile-skeleton-circle profile-shimmer" />
+            <div className="profile-skeleton-text-line profile-shimmer" />
+          </div>
+        </div>
+
+        {/* Primary CTA Row Skeleton */}
+        <div className="profile-save-cta-wrapper profile-skeleton-cta-wrap">
+          <div className="profile-skeleton-pill cta-main profile-shimmer" />
+          <div className="profile-skeleton-pill cta-share profile-shimmer" />
+        </div>
+
+        {/* Body Cards Skeleton */}
+        <div className="profile-skeleton-cards">
+          <div className="profile-skeleton-block profile-shimmer" />
+          <div className="profile-skeleton-block profile-shimmer" />
+        </div>
+
+        {/* Footer */}
+        <footer className="profile-minimal-footer">
+          <span className="footer-line profile-powered-by">
+            <span>Powered by</span>
+            <AriseStudioLogo height={12} />
+          </span>
+        </footer>
+      </main>
+    </div>
+  );
+}
