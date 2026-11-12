@@ -546,7 +546,7 @@ export function ProfileView({
           )}
         </section>
 
-        {/* Quick Connect Row (Call, Email, WhatsApp, Share) */}
+        {/* Quick Connect Row (Call, Email, WhatsApp, Map) */}
         <section className="profile-quick-actions" aria-label="Quick Connect Actions">
           {profile.phone && (
             <a href={`tel:${profile.phone}`} className="quick-action-btn" title="Call">
@@ -583,16 +583,9 @@ export function ProfileView({
               <span className="action-text">Map</span>
             </a>
           )}
-
-          <button type="button" className="quick-action-btn" onClick={handleShare} title="Share Profile">
-            <div className={`action-icon action-share ${copyFeedback ? "is-copied" : ""}`}>
-              <ShareIcon />
-            </div>
-            <span className="action-text">{copyFeedback ? "Copied!" : "Share"}</span>
-          </button>
         </section>
 
-        {/* Primary CTA: Save to Contacts (.vcf) */}
+        {/* Primary CTA Row: Save to Contacts (.vcf) + Share Button on the right */}
         <div className="profile-save-cta-wrapper">
           <a
             className="save-contact-cta"
@@ -608,6 +601,19 @@ export function ProfileView({
               <span className="cta-secondary">Direct download to phone address book</span>
             </div>
           </a>
+
+          <button
+            type="button"
+            className={`save-cta-share-btn ${copyFeedback ? "is-copied" : ""}`}
+            onClick={handleShare}
+            title={copyFeedback ? "Link Copied!" : "Share Profile"}
+            aria-label={copyFeedback ? "Link Copied" : "Share Profile"}
+          >
+            <div className="share-btn-icon">
+              <ShareIcon />
+            </div>
+            <span className="share-btn-text">{copyFeedback ? "Copied!" : "Share"}</span>
+          </button>
         </div>
 
         {/* Detailed Professional Description / About Section */}

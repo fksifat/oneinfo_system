@@ -2790,12 +2790,12 @@ button.banner-action-btn,
   color: var(--profile-muted);
 }
 
-/* Quick Action Row (Call, Email, WhatsApp, Map, Share) */
+/* Quick Action Row (Call, Email, WhatsApp, Map) */
 .profile-quick-actions {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  gap: clamp(8px, 2.2vw, 14px);
+  gap: clamp(12px, 3.8vw, 22px);
   margin: 20px 14px 18px;
   flex-wrap: nowrap;
 }
@@ -2890,19 +2890,23 @@ a.quick-action-btn,
   letter-spacing: 0.02em;
 }
 
-/* Primary CTA: Save to Contacts (.vcf) */
+/* Primary CTA Row: Save to Contacts (.vcf) + Share Button */
 .profile-save-cta-wrapper {
   padding: 0 24px;
   margin-bottom: 20px;
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
 }
 
 .save-contact-cta {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   min-height: 52px;
-  padding: 12px 20px;
+  padding: 10px 18px;
   border-radius: 16px;
   background: var(--profile-accent);
   color: var(--profile-accent-ink);
@@ -2920,6 +2924,89 @@ a.quick-action-btn,
 
 .save-contact-cta:active {
   transform: translateY(0);
+}
+
+.card-portal button.save-cta-share-btn,
+button.save-cta-share-btn,
+.save-cta-share-btn {
+  flex: 0 0 auto;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 3px !important;
+  min-width: 66px;
+  min-height: 52px !important;
+  margin: 0 !important;
+  padding: 6px 12px !important;
+  border-radius: 16px !important;
+  background: var(--profile-link-bg) !important;
+  border: 1.5px solid rgba(223, 184, 119, 0.45) !important;
+  color: var(--profile-text) !important;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+
+.theme-midnight .save-cta-share-btn {
+  background: rgba(14, 28, 42, 0.9) !important;
+  border: 1.5px solid rgba(223, 184, 119, 0.45) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.theme-ivory .save-cta-share-btn {
+  background: #ffffff !important;
+  border: 1.5px solid rgba(201, 156, 77, 0.45) !important;
+  color: #1e242b !important;
+}
+
+.theme-mint .save-cta-share-btn {
+  background: rgba(14, 40, 34, 0.9) !important;
+  border: 1.5px solid rgba(16, 185, 129, 0.45) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.save-cta-share-btn:hover {
+  border-color: #dfb877 !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(223, 184, 119, 0.38);
+  background: var(--profile-link-hover) !important;
+}
+
+.theme-ivory .save-cta-share-btn:hover {
+  border-color: #c99c4d !important;
+  box-shadow: 0 6px 18px rgba(201, 156, 77, 0.35);
+}
+
+.theme-mint .save-cta-share-btn:hover {
+  border-color: #34d399 !important;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.save-cta-share-btn:active {
+  transform: translateY(0);
+}
+
+.save-cta-share-btn.is-copied {
+  background: #10b981 !important;
+  border-color: #10b981 !important;
+  color: #ffffff !important;
+}
+
+.share-btn-icon {
+  display: grid;
+  place-items: center;
+}
+
+.share-btn-icon svg {
+  width: 19px;
+  height: 19px;
+}
+
+.share-btn-text {
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.02em;
 }
 
 .cta-icon {
@@ -3673,7 +3760,7 @@ button.submit-lead-btn:disabled {
   .profile-quick-actions {
     margin-left: 8px;
     margin-right: 8px;
-    gap: clamp(5px, 1.8vw, 9px);
+    gap: clamp(10px, 3.2vw, 18px);
     flex-wrap: nowrap;
   }
   .banner-logo {
