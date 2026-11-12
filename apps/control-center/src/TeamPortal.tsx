@@ -201,7 +201,7 @@ function CompanyWorkspace() {
     return matchesSearch && matchesStatus;
   }) ?? [];
 
-  return <main className="card-portal card-portal-studio"><section className="studio-container">
+  return <main className="card-portal card-portal-studio team-workspace-studio"><section className="studio-container">
     <header className="studio-header">
       <div className="studio-header-main">
         <div className="studio-badge-row">
@@ -691,7 +691,7 @@ function EmployeeEditor({ secret }: { secret: string }) {
     else setLinks(prev => [...prev, { label: "Portfolio", url: "https://" }]);
   }
 
-  return <main className="card-portal card-portal-studio"><section className="studio-container">
+  return <main className="card-portal card-portal-studio team-workspace-studio"><section className="studio-container">
     <header className="studio-header">
       <div className="studio-header-main">
         <div className="studio-badge-row">

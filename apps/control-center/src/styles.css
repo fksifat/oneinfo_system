@@ -6104,7 +6104,7 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
     gap: 20px !important;
   }
 
-  .card-portal-studio .studio-sidebar-column {
+  .card-portal-studio:not(.team-workspace-studio) .studio-sidebar-column {
     display: none !important;
   }
 }
