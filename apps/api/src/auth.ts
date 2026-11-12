@@ -72,6 +72,16 @@ export async function requireOperator(
   return identity;
 }
 
+export async function optionalOperator(request: FastifyRequest): Promise<OperatorIdentity | null> {
+  const authorization = request.headers.authorization;
+  if (!authorization?.startsWith("Bearer ")) return null;
+  try {
+    return await requireOperator(request);
+  } catch {
+    return null;
+  }
+}
+
 export async function requireStation(request: FastifyRequest): Promise<StationIdentity> {
   const rawCredential = request.headers["x-station-key"];
   if (typeof rawCredential !== "string") {

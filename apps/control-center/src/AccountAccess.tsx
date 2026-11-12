@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { customerApi } from "./CardPortal.js";
+import { customerApi } from "./customer-api.js";
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Could not complete the request. Try again.";
 

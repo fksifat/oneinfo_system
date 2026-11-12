@@ -152,7 +152,8 @@ function PublicProfile({ slug }: { slug: string }) {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api<{ profile: Profile; links: ProfileLink[] }>(`/api/v1/profiles/public/${encodeURIComponent(slug)}`)
+    const token = localStorage.getItem("oneinfo.admin.token") ?? undefined;
+    api<{ profile: Profile; links: ProfileLink[] }>(`/api/v1/profiles/public/${encodeURIComponent(slug)}`, token)
       .then(setData)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Profile unavailable"));
   }, [slug]);
@@ -167,8 +168,9 @@ function NamedProfile({ handle }: { handle: string }) {
   const [error, setError] = useState("");
   useEffect(() => {
     let current = true;
-    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`).then(result => { if (current) setData(result); })
-      .catch(() => { if (current) setError("This profile is unavailable. Check the link or contact the card owner."); });
+    const token = localStorage.getItem("oneinfo.admin.token") ?? undefined;
+    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`, token).then(result => { if (current) setData(result); })
+      .catch((err: unknown) => { if (current) setError(err instanceof Error ? err.message : "This profile is unavailable. Check the link or contact the card owner."); });
     return () => { current = false; };
   }, [handle]);
   if (!data) return <main className="card-portal"><section><h1>{error ? "Profile unavailable" : "Opening profile…"}</h1>{error && <p role="alert">{error}</p>}<a href="/">Oneinfo home</a></section></main>;
@@ -495,15 +497,13 @@ export function App() {
                   </div>
                   <div className="tile-actions">
                     <button type="button" onClick={() => void editProfile(profile)}>Edit</button>
-                    {profile.published ? (
-                      <a
-                        href={profile.handle ? "/" + profile.handle : "?profile=" + profile.publicSlug}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open profile ↗
-                      </a>
-                    ) : null}
+                    <a
+                      href={profile.handle ? "/" + profile.handle : "?profile=" + profile.publicSlug}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {profile.published ? "Open profile ↗" : "Preview profile ↗"}
+                    </a>
                   </div>
                 </article>
               ))}
