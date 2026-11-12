@@ -9,7 +9,7 @@ import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.js";
 import { ProfilePhoto } from "./ProfilePhoto.js";
-import { ProfileView } from "./ProfileView.js";
+import { ProfileView, ProfileSkeleton } from "./ProfileView.js";
 import { CardPassport } from "./CardPassport.js";
 import { CardPortal } from "./CardPortal.js";
 import { TeamAdmin, TeamPortal } from "./TeamPortal.js";
@@ -151,30 +151,57 @@ function PublicProfile({ slug }: { slug: string }) {
   const [data, setData] = useState<{ profile: Profile; links: ProfileLink[] } | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadPublic = useCallback(() => {
+    setError("");
     const token = localStorage.getItem("oneinfo.admin.token") ?? undefined;
     api<{ profile: Profile; links: ProfileLink[] }>(`/api/v1/profiles/public/${encodeURIComponent(slug)}`, token)
       .then(setData)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Profile unavailable"));
   }, [slug]);
 
-  if (error) return <div className="profile-page"><div className="profile-error"><span>ONEINFO</span><h1>Profile unavailable</h1><p>{error}</p></div></div>;
-  if (!data) return <div className="profile-page"><div className="profile-loader">Loading Oneinfo profile…</div></div>;
+  useEffect(() => {
+    loadPublic();
+  }, [loadPublic]);
+
+  if (!data) return <ProfileSkeleton error={error} onRetry={loadPublic} />;
   return <ProfileView data={data} />;
 }
 
 function NamedProfile({ handle }: { handle: string }) {
-  const [data, setData] = useState<(import("./ProfileView.js").PublicProfileData & { cardSlug: string | null })>();
+  const [data, setData] = useState<(import("./ProfileView.js").PublicProfileData & {
+    cardSlug: string | null;
+    canShareContact?: boolean;
+    crmEnabled?: boolean;
+  })>();
   const [error, setError] = useState("");
-  useEffect(() => {
-    let current = true;
+
+  const loadNamed = useCallback(() => {
+    setError("");
     const token = localStorage.getItem("oneinfo.admin.token") ?? undefined;
-    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`, token).then(result => { if (current) setData(result); })
-      .catch((err: unknown) => { if (current) setError(err instanceof Error ? err.message : "This profile is unavailable. Check the link or contact the card owner."); });
-    return () => { current = false; };
+    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`, token)
+      .then(result => setData(result))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "This profile is unavailable. Check the link or contact the card owner."));
   }, [handle]);
-  if (!data) return <main className="card-portal"><section><h1>{error ? "Profile unavailable" : "Opening profile…"}</h1>{error && <p role="alert">{error}</p>}<a href="/">Oneinfo home</a></section></main>;
-  return data.cardSlug ? <CardPortal slug={data.cardSlug} /> : <ProfileView data={data} />;
+
+  useEffect(() => {
+    loadNamed();
+  }, [loadNamed]);
+
+  if (!data) return <ProfileSkeleton error={error} onRetry={loadNamed} />;
+  return data.cardSlug ? (
+    <CardPortal
+      slug={data.cardSlug}
+      initialCard={{
+        status: "PROFILE",
+        profile: data.profile,
+        links: data.links,
+        canShareContact: data.canShareContact,
+        crmEnabled: data.crmEnabled,
+      }}
+    />
+  ) : (
+    <ProfileView data={data} />
+  );
 }
 
 export function App() {

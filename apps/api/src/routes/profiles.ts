@@ -6,10 +6,11 @@ import { ensureProfileHandle } from "../domain/profile-handles.js";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
-import { and, asc, eq, getTableColumns, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, asc, eq, getTableColumns, isNull, isNotNull, or, sql } from "drizzle-orm";
 import { requireOperator, optionalOperator } from "../auth.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardBatches, customerAccounts, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, orderActivationProfiles, profileLinks } from "../db/schema.js";
+import { auditLogs, cardBatches, customerAccounts, companies, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, orderActivationProfiles, profileLinks } from "../db/schema.js";
 import { parseBody, sendCreated } from "../http.js";
 
 export const publicProfileFields = {
@@ -47,7 +48,22 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && (card.qcStatus === "PASSED" || card.confirmed));
     const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder }).from(profileLinks)
       .where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
-    return { profile, links, cardSlug: active?.publicSlug ?? null };
+    const [cardOwner] = active
+      ? await db.select({ active: customerAccounts.active })
+          .from(cards)
+          .leftJoin(companies, eq(cards.companyId, companies.id))
+          .leftJoin(customerAccounts, or(eq(cards.customerAccountId, customerAccounts.id), eq(companies.ownerAccountId, customerAccounts.id)))
+          .where(eq(cards.publicSlug, active.publicSlug))
+          .limit(1)
+      : [];
+    return {
+      status: "PROFILE" as const,
+      profile,
+      links,
+      cardSlug: active?.publicSlug ?? null,
+      canShareContact: active ? cardOwner?.active === true : false,
+      crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL),
+    };
   });
 
   app.get("/public/:slug/contact.vcf", async (request, reply) => {

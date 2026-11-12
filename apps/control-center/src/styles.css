@@ -2577,6 +2577,228 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   box-sizing: border-box;
 }
 
+/* Luxury Profile Skeleton & Loading Canvas */
+.profile-page.profile-loading-canvas {
+  background: radial-gradient(circle at 50% 12%, #0d1a26 0%, #050a0f 85%) !important;
+  min-height: 100vh;
+  min-height: 100dvh;
+  box-sizing: border-box;
+}
+
+.profile-skeleton-card {
+  background: linear-gradient(180deg, #0e1823 0%, #070d13 100%) !important;
+  border: 1px solid rgba(223, 184, 119, 0.16) !important;
+  box-shadow: 0 24px 60px -10px rgba(0, 0, 0, 0.75) !important;
+  box-sizing: border-box;
+}
+
+@keyframes profileShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.profile-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 20%,
+    rgba(223, 184, 119, 0.14) 50%,
+    rgba(255, 255, 255, 0.03) 80%
+  ) !important;
+  background-size: 200% 100% !important;
+  animation: profileShimmer 1.8s ease-in-out infinite !important;
+}
+
+.profile-skeleton-cover {
+  background: linear-gradient(135deg, rgba(223, 184, 119, 0.15) 0%, rgba(20, 36, 52, 0.6) 100%) !important;
+  position: relative;
+}
+
+.profile-skeleton-avatar {
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 4px solid #0e1823 !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.5) !important;
+}
+
+.profile-skeleton-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding-top: 14px;
+}
+
+.profile-skeleton-line {
+  border-radius: 999px;
+}
+
+.profile-skeleton-line.name {
+  width: 180px;
+  height: 22px;
+}
+
+.profile-skeleton-line.designation {
+  width: 130px;
+  height: 14px;
+}
+
+.profile-skeleton-line.company {
+  width: 100px;
+  height: 22px;
+}
+
+.profile-skeleton-quick-actions {
+  display: flex;
+  justify-content: center;
+  gap: clamp(10px, 3.2vw, 18px);
+  width: 100%;
+  padding: 18px 16px 12px;
+  box-sizing: border-box;
+}
+
+.profile-skeleton-action-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-skeleton-circle {
+  width: clamp(48px, 11vw, 56px);
+  height: clamp(48px, 11vw, 56px);
+  border-radius: 50%;
+  border: 1px solid rgba(223, 184, 119, 0.12);
+}
+
+.profile-skeleton-text-line {
+  width: 32px;
+  height: 9px;
+  border-radius: 4px;
+}
+
+.profile-skeleton-cta-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  padding: 8px clamp(16px, 4vw, 24px) 14px;
+  box-sizing: border-box;
+}
+
+.profile-skeleton-pill.cta-main {
+  flex: 1;
+  height: 52px;
+  border-radius: 16px;
+  border: 1px solid rgba(223, 184, 119, 0.15);
+}
+
+.profile-skeleton-pill.cta-share {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  border: 1px solid rgba(223, 184, 119, 0.15);
+}
+
+.profile-skeleton-cards {
+  width: 100%;
+  padding: 0 clamp(16px, 4vw, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-sizing: border-box;
+}
+
+.profile-skeleton-block {
+  width: 100%;
+  height: 64px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Skeleton Error State */
+.profile-skeleton-card.is-error {
+  padding: 48px 24px 36px;
+  text-align: center;
+}
+
+.profile-skeleton-brand {
+  margin-bottom: 24px;
+}
+
+.profile-skeleton-logo {
+  height: 24px;
+  width: auto;
+  opacity: 0.9;
+}
+
+.profile-error-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.profile-error-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #dfb877;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(223, 184, 119, 0.1);
+  border: 1px solid rgba(223, 184, 119, 0.25);
+}
+
+.profile-error-heading {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 6px 0 0;
+  line-height: 1.3;
+}
+
+.profile-error-sub {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  line-height: 1.5;
+  max-width: 320px;
+}
+
+.profile-error-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.profile-error-btn {
+  padding: 10px 20px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile-error-btn.retry {
+  background: linear-gradient(135deg, #dfb877 0%, #b89355 100%);
+  color: #0d1720;
+  border: none;
+}
+
+.profile-error-btn.home {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
 /* Luxury Back Image / Cover Header */
 .profile-cover-banner {
   position: relative;

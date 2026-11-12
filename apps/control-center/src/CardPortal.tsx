@@ -1,7 +1,7 @@
 import { AccountSettings } from "./AccountAccess.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ActivateCardSchema, CustomerProfileSchema, type ContactLead } from "@oneinfo/contracts";
-import { ProfileView, ShareContact, SocialBrandIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
+import { ProfileView, ProfileSkeleton, ShareContact, SocialBrandIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
 import { customerApi } from "./customer-api.js";
 import type { z } from "zod";
 
@@ -9,7 +9,7 @@ import { ProfilePhoto } from "./ProfilePhoto.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 
 type Draft = z.infer<typeof CustomerProfileSchema>;
-type CardResponse = { status: "PROFILE"; canShareContact?: boolean; crmEnabled?: boolean; profile: PublicProfileData["profile"]; links: PublicProfileData["links"] } |
+type CardResponse = { status: "PROFILE"; canShareContact?: boolean | undefined; crmEnabled?: boolean | undefined; profile: PublicProfileData["profile"]; links: PublicProfileData["links"] } |
   { status: "ACTIVATION_REQUIRED"; activationMethod?: "SECRET" | "INVOICE" } | { status: "UNAVAILABLE" };
 const emptyProfile: Draft = { displayName: "", headline: "", company: "", bio: "", phone: "", email: "", website: "", avatarUrl: "", theme: "MIDNIGHT", links: [], profileMode: "BUSINESS", modeContent: {} };
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
@@ -165,14 +165,20 @@ function SvgCloseIcon({ size = 12 }: { size?: number }) {
   );
 }
 
-export function CardPortal({ slug }: { slug: string }) {
+export function CardPortal({
+  slug,
+  initialCard,
+}: {
+  slug: string;
+  initialCard?: CardResponse | undefined;
+}) {
   const claimKey = `oneinfo.card-claim.${slug}`;
   const [claimToken, setClaimToken] = useState(() => sessionStorage.getItem(claimKey) ?? "");
   const [token, setToken] = useState(() => sessionStorage.getItem("oneinfo.customer.token") ?? "");
   const initialMode = () => window.location.pathname.endsWith("/edit") && sessionStorage.getItem("oneinfo.customer.token") ? "loading-owner" : window.location.pathname.endsWith("/signup") && sessionStorage.getItem(claimKey) ? "signup" :
     window.location.pathname.endsWith("/login") || window.location.pathname.endsWith("/edit") ? "login" : "public";
   const [mode, setMode] = useState(initialMode);
-  const [card, setCard] = useState<CardResponse>();
+  const [card, setCard] = useState<CardResponse | undefined>(initialCard);
   const [secretCode, setSecretCode] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [activationMessage, setActivationMessage] = useState("");
@@ -241,12 +247,14 @@ export function CardPortal({ slug }: { slug: string }) {
   };
   useEffect(() => {
     let disposed = false;
-    customerApi<CardResponse>(`/cards/${encodeURIComponent(slug)}`).then(result => { if (!disposed) setCard(result); })
-      .catch(error => { if (!disposed) setError(error.message); });
+    if (!initialCard) {
+      customerApi<CardResponse>(`/cards/${encodeURIComponent(slug)}`).then(result => { if (!disposed) setCard(result); })
+        .catch(error => { if (!disposed) setError(error.message); });
+    }
     const pop = () => setMode(initialMode());
     window.addEventListener("popstate", pop);
     return () => { disposed = true; window.removeEventListener("popstate", pop); };
-  }, [slug]);
+  }, [slug, initialCard]);
 
   useEffect(() => {
     function openInvoiceLink() {
@@ -334,9 +342,12 @@ export function CardPortal({ slug }: { slug: string }) {
   const save = (event: FormEvent) => { event.preventDefault(); executeSave(); };
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setProfile(previous => ({ ...previous, [key]: value }));
 
-  if (!card) return <div className="card-portal"><section><h1>Oneinfo</h1><p role={error ? "alert" : "status"}>{error || "Opening your card…"}</p><button onClick={() => void run(refresh)} disabled={busy}>Try again</button></section></div>;
-  if (mode === "loading-owner") return <div className="card-portal"><section><p role="status">Loading your profile…</p></section></div>;
-  if (card.status === "UNAVAILABLE") return <div className="card-portal"><section><p className="eyebrow">ONEINFO CARD</p><h1>Card unavailable</h1><p>This card is not ready yet, or its profile is unavailable. Please contact Oneinfo.</p></section></div>;
+  if (!card) {
+    if (mode === "public") return <ProfileSkeleton error={error} onRetry={() => void run(refresh)} />;
+    return <div className="card-portal"><section><h1>Oneinfo</h1><p role={error ? "alert" : "status"}>{error || "Opening your card…"}</p><button onClick={() => void run(refresh)} disabled={busy}>Try again</button></section></div>;
+  }
+  if (mode === "loading-owner") return <ProfileSkeleton />;
+  if (card.status === "UNAVAILABLE") return <ProfileSkeleton error="This card is not ready yet, or its profile is unavailable. Please contact Oneinfo." />;
   if (mode === "public" && card.status === "PROFILE") {
     return (
       <ProfileView
