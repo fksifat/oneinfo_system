@@ -3028,98 +3028,208 @@ a.quick-action-btn,
 
 .social-links-grid {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 16px 14px;
+  margin: 0 auto;
+  padding: 4px 0 10px;
 }
 
 .social-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding: 12px 16px;
-  border-radius: 15px;
-  background: var(--profile-link-bg);
-  border: 1px solid var(--profile-link-border);
+  justify-content: flex-start;
+  gap: 8px;
+  width: clamp(74px, 21vw, 86px);
+  padding: 4px 2px;
+  border-radius: 18px;
+  background: transparent;
+  border: none;
   color: var(--profile-text);
   text-decoration: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: center;
 }
 
 .social-card:hover {
-  background: var(--profile-link-hover);
-  border-color: var(--profile-card-border);
-  transform: translateX(3px);
+  background: transparent;
+  border-color: transparent;
+  transform: translateY(-3px);
+  text-decoration: none;
+}
+
+.social-card:active {
+  transform: translateY(-1px) scale(0.97);
 }
 
 .social-card-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: clamp(52px, 13.5vw, 58px);
+  height: clamp(52px, 13.5vw, 58px);
+  border-radius: 18px;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(223, 184, 119, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25), 0 0 10px rgba(223, 184, 119, 0.08);
   flex-shrink: 0;
   color: var(--profile-text);
-  transition: background 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.theme-midnight .social-card-icon {
+  background: rgba(14, 28, 42, 0.85);
+  border: 1.5px solid rgba(223, 184, 119, 0.35);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 10px rgba(223, 184, 119, 0.1);
 }
 
 .theme-ivory .social-card-icon {
-  background: #eae6df;
+  background: #ffffff;
+  border: 1.5px solid rgba(201, 156, 77, 0.45);
+  box-shadow: 0 4px 14px rgba(60, 50, 40, 0.08);
+  color: #1e242b;
 }
 
-.social-card:hover .social-card-icon.is-linkedin { background: #0077b5; color: #fff; }
-.social-card:hover .social-card-icon.is-instagram { background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); color: #fff; }
-.social-card:hover .social-card-icon.is-twitter { background: #000000; color: #fff; }
-.social-card:hover .social-card-icon.is-github { background: #24292e; color: #fff; }
-.social-card:hover .social-card-icon.is-facebook { background: #1877f2; color: #fff; }
-.social-card:hover .social-card-icon.is-youtube { background: #ff0000; color: #fff; }
-.social-card:hover .social-card-icon.is-telegram { background: #0088cc; color: #fff; }
-.social-card:hover .social-card-icon.is-whatsapp { background: #25d366; color: #fff; }
-.social-card:hover .social-card-icon.is-tiktok { background: #000000; color: #fff; }
-.social-card:hover .social-card-icon.is-portfolio { background: #dfb877; color: #080f16; }
-.social-card:hover .social-card-icon.is-design { background: #ea4c89; color: #fff; }
-.social-card:hover .social-card-icon.is-shop { background: #10b981; color: #fff; }
-.social-card:hover .social-card-icon.is-calendar { background: #0284c7; color: #fff; }
-.social-card:hover .social-card-icon.is-document { background: #64748b; color: #fff; }
-.social-card:hover .social-card-icon.is-music { background: #1db954; color: #fff; }
-.social-card:hover .social-card-icon.is-map { background: #ea4335; color: #fff; }
+.theme-mint .social-card-icon {
+  background: rgba(14, 40, 34, 0.85);
+  border: 1.5px solid rgba(16, 185, 129, 0.45);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35), 0 0 10px rgba(16, 185, 129, 0.12);
+}
+
+.social-card:hover .social-card-icon {
+  border-color: #dfb877 !important;
+  box-shadow: 0 8px 24px rgba(223, 184, 119, 0.42), 0 0 14px rgba(223, 184, 119, 0.22);
+  transform: scale(1.06);
+}
+
+.theme-ivory .social-card:hover .social-card-icon {
+  border-color: #c99c4d !important;
+  box-shadow: 0 8px 22px rgba(201, 156, 77, 0.38);
+}
+
+.theme-mint .social-card:hover .social-card-icon {
+  border-color: #34d399 !important;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.45);
+}
+
+/* Subtle default colors for recognizable social brands */
+.social-card-icon.is-linkedin svg { color: #0a66c2; }
+.social-card-icon.is-instagram svg { color: #e1306c; }
+.social-card-icon.is-facebook svg { color: #1877f2; }
+.social-card-icon.is-youtube svg { color: #ff0000; }
+.social-card-icon.is-whatsapp svg { color: #25d366; }
+.social-card-icon.is-telegram svg { color: #0088cc; }
+.social-card-icon.is-portfolio svg { color: #dfb877; }
+.social-card-icon.is-shop svg { color: #10b981; }
+.social-card-icon.is-design svg { color: #ea4c89; }
+.social-card-icon.is-calendar svg { color: #0284c7; }
+.social-card-icon.is-music svg { color: #1db954; }
+.social-card-icon.is-map svg { color: #ea4335; }
+.social-card-icon.is-globe svg { color: #dfb877; }
+
+/* Dynamic Brand Fill on Hover */
+.social-card:hover .social-card-icon.is-linkedin { background: #0a66c2; border-color: #0a66c2 !important; }
+.social-card:hover .social-card-icon.is-linkedin svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-instagram { background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); border-color: #dc2743 !important; }
+.social-card:hover .social-card-icon.is-instagram svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-twitter { background: #000000; border-color: #444444 !important; }
+.social-card:hover .social-card-icon.is-twitter svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-github { background: #24292e; border-color: #555555 !important; }
+.social-card:hover .social-card-icon.is-github svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-facebook { background: #1877f2; border-color: #1877f2 !important; }
+.social-card:hover .social-card-icon.is-facebook svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-youtube { background: #ff0000; border-color: #ff0000 !important; }
+.social-card:hover .social-card-icon.is-youtube svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-telegram { background: #0088cc; border-color: #0088cc !important; }
+.social-card:hover .social-card-icon.is-telegram svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-whatsapp { background: #25d366; border-color: #25d366 !important; }
+.social-card:hover .social-card-icon.is-whatsapp svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-tiktok { background: #000000; border-color: #444444 !important; }
+.social-card:hover .social-card-icon.is-tiktok svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-portfolio { background: #dfb877; border-color: #dfb877 !important; }
+.social-card:hover .social-card-icon.is-portfolio svg { color: #080f16; }
+.social-card:hover .social-card-icon.is-design { background: #ea4c89; border-color: #ea4c89 !important; }
+.social-card:hover .social-card-icon.is-design svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-shop { background: #10b981; border-color: #10b981 !important; }
+.social-card:hover .social-card-icon.is-shop svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-calendar { background: #0284c7; border-color: #0284c7 !important; }
+.social-card:hover .social-card-icon.is-calendar svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-document { background: #64748b; border-color: #64748b !important; }
+.social-card:hover .social-card-icon.is-document svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-music { background: #1db954; border-color: #1db954 !important; }
+.social-card:hover .social-card-icon.is-music svg { color: #ffffff; }
+.social-card:hover .social-card-icon.is-map { background: #ea4335; border-color: #ea4335 !important; }
+.social-card:hover .social-card-icon.is-map svg { color: #ffffff; }
+
+/* Favicon Container & Images */
+.link-favicon-container {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.link-favicon-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  border-radius: 6px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.link-favicon-img.is-loading {
+  opacity: 0;
+  display: none;
+}
+
+.link-favicon-img.is-loaded {
+  opacity: 1;
+  display: block;
+}
+
+.link-fallback-globe {
+  width: 24px;
+  height: 24px;
+  color: var(--profile-accent);
+}
 
 .social-card-details {
   display: flex;
   flex-direction: column;
-  min-width: 0;
-  flex: 1;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
 }
 
 .social-card-name {
-  font-size: 0.88rem;
-  font-weight: 750;
-  line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.social-card-url {
-  font-size: 0.72rem;
-  color: var(--profile-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 1px;
-}
-
-.social-card-arrow {
-  display: grid;
-  place-items: center;
-  color: var(--profile-muted);
-  flex-shrink: 0;
-  transition: transform 0.2s ease, color 0.2s ease;
-}
-
-.social-card:hover .social-card-arrow {
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.25;
   color: var(--profile-text);
-  transform: translate(2px, -2px);
+  max-width: 100%;
+  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  text-align: center;
+  letter-spacing: 0.01em;
+  transition: color 0.15s ease;
+}
+
+.social-card:hover .social-card-name {
+  color: var(--profile-accent);
+}
+
+.social-card-url,
+.social-card-arrow {
+  display: none !important;
 }
 
 /* Lead Exchange Slot */
