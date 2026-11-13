@@ -4,6 +4,8 @@ import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
 import ariseLogoUrl from "./assets/arise-studio-logo.png";
+import { invoiceMarkup } from "./invoice.ts";
+import "./invoice.css";
 
 (function () {
   "use strict";
@@ -1119,7 +1121,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
   }
   window.setInterval(() => { if (activeTrackingToken && !document.hidden && (location.hash === "#track" || location.hash.startsWith("#track/"))) void renderTracking(activeTrackingToken, true); }, 5000);
 
-  async function renderInvoice(token) {
+  async function renderInvoice(token, focus) {
     const status = $(".invoice-status");
     const content = $("[data-invoice-content]");
     const print = $(".invoice-print");
@@ -1132,30 +1134,11 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
       if (!response.ok) throw new Error(response.status === 404 ? "This invoice is unavailable. Check your order tracking link." : "Could not load the invoice. Reload the page to try again.");
       const order = await response.json();
       if (location.hash !== `#invoice/${token}`) return;
-      const amount = minor => `BDT ${(minor / 100).toFixed(2)}`;
-      const date = new Intl.DateTimeFormat("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium" }).format(new Date(order.createdAt));
-      const payment = order.paymentAmountMinor ?? 0;
-      const verified = order.paymentStatus === "VERIFIED";
-      content.innerHTML = `<p class="invoice-number">${escapeHtml(order.invoiceNumber)} <span>${date}</span></p>
-        <p class="invoice-reference">Order ID <strong>${escapeHtml(order.id)}</strong><br>Payment method <strong>${order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}</strong></p>
-        ${order.status === "CANCELLED" ? '<p class="tracking-cancel">Order cancelled</p>' : ""}
-        <table class="invoice-table" aria-label="Invoice items">
-          <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Unit price</th><th scope="col">Amount</th></tr></thead>
-          <tbody>${order.items.map(item => `<tr><th scope="row">${escapeHtml(item.name)}<small>${escapeHtml(item.variantName)}</small></th><td>${item.quantity}</td><td>${amount(item.unitPriceMinor)}</td><td>${amount(item.unitPriceMinor * item.quantity)}</td></tr>`).join("")}</tbody>
-        </table>
-        <dl class="invoice-totals">
-          <div><dt>Subtotal</dt><dd>${amount(order.subtotalMinor)}</dd></div>
-          ${order.discountMinor ? `<div><dt>Discount</dt><dd>-${amount(order.discountMinor)}</dd></div>` : ""}
-          <div><dt>Delivery</dt><dd>${amount(order.shippingMinor)}</dd></div>
-          <div><dt>Order total</dt><dd>${amount(order.totalMinor)}</dd></div>
-        </dl>`;
-      if (order.status !== "CANCELLED" && payment > 0) {
-        const balance = order.totalMinor - payment;
-        content.insertAdjacentHTML("beforeend", `<p class="invoice-reference">${verified ? "Verified bKash payment" : "bKash payment pending verification"} <strong>${amount(payment)}</strong>${balance > 0 ? `<br>${verified ? "Remaining on delivery" : "Remaining on delivery after verification"} <strong>${amount(balance)}</strong>` : ""}</p>`);
-      }
+      content.innerHTML = invoiceMarkup(order);
       document.title = `Invoice ${order.invoiceNumber} | Oneinfo`;
       status.textContent = "";
       content.hidden = print.hidden = false;
+      if (focus) $("#invoice-title").focus();
     } catch (error) {
       if (location.hash === `#invoice/${token}`) status.textContent = error.message;
     }
@@ -1177,7 +1160,7 @@ import ariseLogoUrl from "./assets/arise-studio-logo.png";
     });
     if (reviewToken) { document.title = "Your review | Oneinfo"; void renderReviewPortal(reviewToken); return; }
     if (trackingPage) { document.title = "Track your order | Oneinfo"; void renderTracking(trackingToken); if (focus) $("#tracking-portal-title").focus(); return; }
-    if (invoicePage) { document.title = "Invoice | Oneinfo"; void renderInvoice(location.hash.slice(9)); if (focus) $("#invoice-title").focus(); return; }
+    if (invoicePage) { document.title = "Invoice | Oneinfo"; void renderInvoice(location.hash.slice(9), focus); return; }
     if (payment) {
       if (pendingOrder) {
         location.replace("#order-draft");
