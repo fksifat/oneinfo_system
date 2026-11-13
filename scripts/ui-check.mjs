@@ -199,7 +199,8 @@ try {
         await click('Settings');await until(`!!document.querySelector('.store-settings-dialog[open]')`);await inspect('admin-order-settings-'+width);
         if(width===1440){await click('Save payment settings');await until(`document.body.innerText.includes('COD advance saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.store-settings-dialog[open]')`);
-        await evaluate(`document.querySelector('.store-order').open=true`);assert.equal(await evaluate(`document.querySelector('.store-order').open`),true);
+        await until(`!!document.getElementById('order-actions-${uiOrder.id}')`);
+        await evaluate(`document.querySelectorAll('.store-order').forEach(order=>{order.open=!!order.querySelector('#order-actions-${uiOrder.id}')})`);
         const selectStage = async label => {
           const selector = `.store-order[open] button.pipeline-card[aria-label="${label} actions"]`;
           await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
