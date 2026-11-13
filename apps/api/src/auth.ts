@@ -76,9 +76,10 @@ export async function optionalOperator(request: FastifyRequest): Promise<Operato
   const authorization = request.headers.authorization;
   if (!authorization?.startsWith("Bearer ")) return null;
   try {
-    return await requireOperator(request);
-  } catch {
-    return null;
+    return await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);
+  } catch (error) {
+    if ([401, 403].includes((error as { statusCode?: number }).statusCode ?? 0)) return null;
+    throw error;
   }
 }
 

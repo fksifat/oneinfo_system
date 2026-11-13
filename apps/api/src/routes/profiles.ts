@@ -45,7 +45,7 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     if (!profile) return reply.code(404).send({ message: "Profile not found" });
     const linked = await db.select({ publicSlug: cards.publicSlug, lifecycleStatus: cards.lifecycleStatus, qcStatus: cards.qcStatus, confirmed: cardBatches.printConfirmedAt }).from(cards)
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.profileId, profile.id)).orderBy(asc(cards.createdAt), asc(cards.id));
-    const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && (card.qcStatus === "PASSED" || card.confirmed));
+    const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && (card.qcStatus === "PASSED" && card.confirmed));
     const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder }).from(profileLinks)
       .where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
     const [cardOwner] = active
@@ -77,12 +77,14 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/public/:slug/qr.png", async (request, reply) => {
     const { slug } = request.params as { slug: string };
-    const [profile] = await db.select({ publicSlug: customerProfiles.publicSlug }).from(customerProfiles)
-      .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true))).limit(1);
+    const [profile] = await db.select({ publicSlug: customerProfiles.publicSlug, handle: customerProfiles.handle, domain: companies.domain }).from(customerProfiles)
+      .leftJoin(companyEmployees, eq(companyEmployees.profileId, customerProfiles.id))
+      .leftJoin(companies, eq(companies.id, companyEmployees.companyId))
+      .where(and(eq(customerProfiles.publicSlug, slug), publicProfileAvailable())).limit(1);
     if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
-    const origin = (request.headers.origin as string) || process.env.VITE_STOREFRONT_URL || "https://oneinfo.online";
-    const url = `${origin}/team?profile=${encodeURIComponent(slug)}`;
-    const png = await QRCode.toBuffer(url, { margin: 2, width: 360 });
+    const url = profile.domain ? new URL("/team", `https://${profile.domain}`) : new URL(profile.handle ? `/${profile.handle}` : "/", config.PUBLIC_CARD_BASE_URL);
+    if (profile.domain || !profile.handle) url.searchParams.set("profile", slug);
+    const png = await QRCode.toBuffer(url.href, { margin: 2, width: 360 });
     return reply.type("image/png").send(png);
   });
 
