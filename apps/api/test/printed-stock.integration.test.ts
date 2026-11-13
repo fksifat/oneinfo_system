@@ -1,3 +1,5 @@
+import { PNG } from "pngjs";
+import jsQR from "jsqr";
 import { qrUrl } from "../src/domain/card-urls.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -571,6 +573,45 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
 
   }, 30000);
 
+  it("does not expose private previews to production operators and ignores caller-controlled QR origins", async () => {
+    const profile = await request("/api/v1/profiles", { publicSlug: "audit-profile-preview", displayName: "Audit Private Profile", published: false });
+    const [writer] = await client.db.insert(schema.operators).values({ email: `profile-writer-${randomUUID()}@example.com`, displayName: "Production writer", role: "PRODUCTION_OPERATOR" }).returning();
+    const { issueOperatorToken } = await import("../src/auth.js");
+    const token = await issueOperatorToken({ operatorId: writer!.id, email: writer!.email, role: "PRODUCTION_OPERATOR" });
+    for (const url of [`/api/v1/profiles/public/${profile.publicSlug}`, `/api/v1/profiles/handle/${profile.handle}`]) {
+      expect((await app.inject({url})).statusCode).toBe(404);
+      expect((await app.inject({url,headers:{authorization:`Bearer ${token}`}})).statusCode).toBe(404);
+      expect((await app.inject({url,headers})).statusCode).toBe(200);
+    }
+    const path = `/api/v1/profiles/public/${profile.publicSlug}/qr.png`;
+    expect((await app.inject({url:path})).statusCode).toBe(404);
+    await client.db.update(schema.customerProfiles).set({published:true}).where(eq(schema.customerProfiles.id,profile.id));
+    const response = await app.inject({url:path,headers:{origin:"https://attacker.example"}});
+    expect(response.statusCode).toBe(200);
+    const png=PNG.sync.read(response.rawPayload);
+    const value=jsQR(new Uint8ClampedArray(png.data),png.width,png.height)?.data;
+    const {config}=await import("../src/config.js");
+    expect(value).toBe(new URL(`/${profile.handle}`,config.PUBLIC_CARD_BASE_URL).href);
+    expect(value).not.toContain("attacker.example");
+  });
+
+  it("rejects failed-QC or unconfirmed active cards consistently on every public profile alias", async () => {
+    const card=await readyForClaim(),secret=await issue(card.id);
+    const grant=await activate(card.publicSlug,secret.secretCode);await signup(grant.claimToken,"qc-visibility@example.com");
+    const profile=(await request(`/api/v1/customer/cards/${card.publicSlug}`)).profile;
+    const urls=[`/api/v1/profiles/handle/${profile.handle}`,`/api/v1/profiles/public/${profile.publicSlug}`,`/api/v1/profiles/public/${profile.publicSlug}/contact.vcf`,`/api/v1/profiles/public/${profile.publicSlug}/qr.png`,`/api/v1/profiles/card/${card.publicSlug}`];
+    for(const qcStatus of ["FAILED","PENDING"] as const){
+      await client.db.update(schema.cards).set({qcStatus}).where(eq(schema.cards.id,card.id));
+      for(const url of urls)expect((await app.inject({url})).statusCode,url).toBe(404);
+      expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({status:"UNAVAILABLE"});
+    }
+    await client.db.update(schema.cards).set({qcStatus:"PASSED"}).where(eq(schema.cards.id,card.id));
+    await client.db.update(schema.cardBatches).set({printConfirmedAt:null}).where(eq(schema.cardBatches.id,card.batchId));
+    for(const url of urls)expect((await app.inject({url})).statusCode,url).toBe(404);
+    expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({status:"UNAVAILABLE"});
+    expect((await app.inject({method:"POST",url:`/api/v1/customer/cards/${card.publicSlug}/contact-leads`,remoteAddress:"192.0.2.50",payload:{requestId:randomUUID(),name:"Visitor",email:"visitor@example.com",consent:true}})).statusCode).toBe(404);
+  });
+
   it("hides disabled profiles consistently across handles, legacy URLs, vCards and card endpoints", async () => {
     const card = await readyForClaim(), secret = await issue(card.id);
     const grant = await activate(card.publicSlug, secret.secretCode);
@@ -947,6 +988,9 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const secret = edit.json().path.split("#edit/")[1];
     expect((await send("POST", editor, { token: secret, profile: { displayName: "Edited Employee", company: "Untrusted Company" } }, {})).json().profile)
       .toMatchObject({ displayName: "Edited Employee", company: "Oneinfo Team" });
+    const badge = await app.inject({url:`/api/v1/profiles/public/${employee.publicSlug}/qr.png`,headers:{origin:"https://attacker.example"}});
+    const badgePng=PNG.sync.read(badge.rawPayload);
+    expect(jsQR(new Uint8ClampedArray(badgePng.data),badgePng.width,badgePng.height)?.data).toBe(`https://team.example.com/team?profile=${employee.publicSlug}`);
     const publicPortal = await app.inject({ url: "/api/v1/company/public/team.example.com", headers: { origin: "https://team.example.com" } });
     expect(publicPortal.headers["access-control-allow-origin"]).toBe("*");
     expect(publicPortal.body).not.toContain("employee@example.com");
