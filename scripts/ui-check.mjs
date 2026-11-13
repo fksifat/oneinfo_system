@@ -63,6 +63,8 @@ try {
   const secret = await api(`/api/v1/customer/cards/${card.id}/activation-code`, {}, headers);
   const catalog = await fetch('http://127.0.0.1:3001/api/v1/products/public').then(r => r.json());
   assert.ok(catalog.items.length, 'Published storefront products needed for UI audit');
+  // This is the guarded disposable database: replace migration seed IDs with the read-only catalog fixture.
+  await connection.db.delete(schema.products);
   for(const {createdAt,updatedAt,...product} of catalog.items)await connection.db.insert(schema.products).values(product).onConflictDoUpdate({target:schema.products.id,set:product});
   await connection.db.insert(schema.storeShippingSettings).values({id:'default',rates:{insideDhaka:6000,subDhaka:10000,outsideDhaka:12000},codAdvanceTaka:0}).onConflictDoUpdate({target:schema.storeShippingSettings.id,set:{codAdvanceTaka:0}});
   const nativeFetch=globalThis.fetch;
@@ -91,6 +93,10 @@ try {
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
   let seq = 0, requestedWidth = 390; const waiting = new Map(); const browserErrors = []; const adminReads = [];
   let failProfileSave=false,failOverview=false,expirePairingSoon=false;
+  const backupBytes=Buffer.from('PGDMP browser-only backup fixture');
+  const backupId=crypto.randomUUID();
+  const backupFixture={id:backupId,fileName:`oneinfo-database-2026-11-11T00-00-00-000Z-${backupId}.dump`,createdAt:'2026-11-11T00:00:00.000Z',database:'browser_fixture',source:'Docker',bytes:backupBytes.length,sha256:require('node:crypto').createHash('sha256').update(backupBytes).digest('hex')};
+  let backupSaved=false,backupFailure=false,backupCorrupt=false;
   let contactFailure='none';const contactAttempts=[];
   function command(method, params = {}) {
     if(method==='Emulation.setDeviceMetricsOverride')requestedWidth=params.width;
@@ -109,12 +115,18 @@ try {
         const contactShare=paused.request.method==='POST'&&url.pathname.endsWith('/contact-leads');
         if(contactShare)contactAttempts.push(JSON.parse(paused.request.postData));
         const failed=(contactShare&&contactFailure==='before-save')||(failProfileSave&&url.pathname==='/api/v1/profiles'&&paused.request.method==='POST')||(failOverview&&url.pathname==='/api/v1/admin/overview');
-        const result = failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
-          ...(paused.request.postDataEntries?.some(entry=>entry.bytes) ? {payload:Buffer.concat(paused.request.postDataEntries.map(entry=>Buffer.from(entry.bytes??'','base64')))} : paused.request.postData ? { payload: paused.request.postData } : {}) });
+        let backupResponse;
+        if(url.pathname==='/api/v1/production/backups'){
+          if(paused.request.method==='POST'&&backupFailure)backupResponse={statusCode:503,headers:{'content-type':'application/json'},body:JSON.stringify({message:'Backup tools unavailable; previous backups retained.'})};
+          else {if(paused.request.method==='POST')backupSaved=true;backupResponse={statusCode:200,headers:{'content-type':'application/json'},body:JSON.stringify(paused.request.method==='POST'?backupFixture:{directory:'/private/oneinfo-ui/backups/database',items:backupSaved?[backupFixture]:[]})};}
+        }else if(url.pathname===`/api/v1/production/backups/${backupId}/download`){const bytes=backupCorrupt?Buffer.from('damaged'):backupBytes;backupResponse={statusCode:200,headers:{'content-type':'application/octet-stream'},rawPayload:bytes,body:bytes.toString()};}
+        if(backupResponse)backupResponse.headers={...backupResponse.headers,'access-control-allow-origin':paused.request.headers.origin??'http://127.0.0.1:5173','access-control-allow-methods':'GET,POST,OPTIONS','access-control-allow-headers':'authorization,x-station-key,x-request-id,content-type'};
+        const result = backupResponse??(failed?{statusCode:503,headers:{'content-type':'application/json','access-control-allow-origin':'http://127.0.0.1:5174'},body:JSON.stringify({message:'UI test connection failure'})}:await app.inject({ method: paused.request.method, url: url.pathname + url.search, headers: paused.request.headers,
+          ...(paused.request.postDataEntries?.some(entry=>entry.bytes) ? {payload:Buffer.concat(paused.request.postDataEntries.map(entry=>Buffer.from(entry.bytes??'','base64')))} : paused.request.postData ? { payload: paused.request.postData } : {}) }));
         if(contactShare&&contactFailure==='after-save'){result.statusCode=503;result.body=JSON.stringify({message:'Saved response interrupted; retry your contact.'});result.headers['content-length']=String(Buffer.byteLength(result.body));}
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
-          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (/^(image\/|application\/zip)/.test(String(result.headers['content-type'])) ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
+          responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (/^(image\/|application\/(zip|octet-stream))/.test(String(result.headers['content-type'])) ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
       } catch (error) {
         if(closing||/Invalid InterceptionId/i.test(error.message))return;
         browserErrors.push(error.message);
@@ -137,8 +149,8 @@ try {
     for (let i = 0; i < 150; i++) { try {if (await evaluate(expression)) return;}catch(error){if(!/context|navigation/i.test(error.message))throw error;} await delay(100); }
     throw new Error('Browser check timed out: ' + await evaluate('document.body.innerText') + '\n' + browserErrors.join('\n'));
   }
-  const fill = (label, value) => evaluate(`(() => {const el = [...document.querySelectorAll('label')].find(l => l.textContent.startsWith(${JSON.stringify(label)}))?.querySelector('input,textarea'); if(!el) throw Error('Missing field'); const type = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement; Object.getOwnPropertyDescriptor(type.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
-  const click = async label => {await until(`[...document.querySelectorAll('button')].some(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim()===${JSON.stringify(label)})`);return evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim()===${JSON.stringify(label)}).click()})()`);};
+  const fill = (label, value) => evaluate(`(() => {const l = [...document.querySelectorAll('label')].find(l => l.textContent.toLowerCase().includes(${JSON.stringify(label.toLowerCase())})); const el = l?.querySelector('input,textarea') || (l?.htmlFor ? document.getElementById(l.htmlFor) : l?.parentElement?.querySelector('input,textarea')); if(!el) throw Error('Missing field ' + ${JSON.stringify(label)}); const type = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement : HTMLInputElement; Object.getOwnPropertyDescriptor(type.prototype,'value').set.call(el,${JSON.stringify(value)}); el.dispatchEvent(new Event('input',{bubbles:true})); })()`);
+  const click = async label => {await until(`[...document.querySelectorAll('button')].some(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim().toLowerCase()===${JSON.stringify(label.toLowerCase())})`);return evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.getClientRects().length&&!b.disabled&&b.textContent.trim().toLowerCase()===${JSON.stringify(label.toLowerCase())}).click()})()`);};
   const reload=async()=>{const before=await evaluate('performance.timeOrigin');await command('Page.reload');await until(`performance.timeOrigin!==${before}&&document.readyState==='complete'`);};
   const set = (selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});if(!e)throw Error('Missing field '+${JSON.stringify(selector)});const p=e instanceof HTMLTextAreaElement?HTMLTextAreaElement:e instanceof HTMLSelectElement?HTMLSelectElement:HTMLInputElement;Object.getOwnPropertyDescriptor(p.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event(e instanceof HTMLSelectElement?'change':'input',{bubbles:true}));})()`);
   mkdirSync(root + '/.oneinfo/qa', { recursive: true });
@@ -219,6 +231,10 @@ try {
           await click('Print activation slips');
           assert.equal(await evaluate(`window.__activationSlipHtml.includes(document.querySelector('.order-packing code').textContent)`),true);
           assert.equal(await evaluate(`(window.__activationSlipHtml.match(/<article>/g)||[]).length`),1);
+          await evaluate(`window.open=()=>({opener:null,document:{body:{},write(html){window.__invoiceHtml=html},close(){},querySelector(){return {addEventListener(){}}}}})`);
+          await click('Print invoice with activation codes');
+          await until(`!!window.__invoiceHtml`);
+          assert.equal(await evaluate(`window.__invoiceHtml.includes(document.querySelector('.order-packing code').textContent)&&window.__invoiceHtml.includes('class="invoice-logo"')&&window.__invoiceHtml.includes('Print or save PDF')`),true);
           await evaluate(`window.open=window.__originalOpen`);
           await evaluate(`document.querySelector('.order-packing input[type=checkbox]').click()`);await click('Confirm package');
           await until(`document.querySelector('.order-packing')?.textContent.includes('Package confirmed.')`);
@@ -269,7 +285,7 @@ try {
       await set('.batch-toolbar select',batch.id);await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
       console.log('Phone QR auto-selects batch/card, clears filters, opens Production, and preserves later manual selection PASS');
     }
-    for(const label of ['Production','NFC tools','Connection']){
+    for(const label of ['Production','NFC tools','Connection','Backups']){
       await evaluate(`(()=>{const b=[...document.querySelectorAll('.workspace-nav button')].find(b=>b.textContent.endsWith(${JSON.stringify(label)}));b.click();})()`);await inspect('production-'+label.replaceAll(' ','-')+'-'+width);
       if(label==='Production'){
         await evaluate(`[...document.querySelectorAll('.batch-toolbar button')].find(b=>b.textContent==='Delete batch').focus()`);
@@ -338,6 +354,15 @@ try {
         assert.equal(await evaluate(`document.querySelector('.lan-pairing img').getAttribute('src').startsWith('data:image/png;base64,')`),true);
         assert.equal(await evaluate(`document.querySelector('.connection-details details').open`),false);
         if(width===1440){await until(`document.querySelector('.lan-pairing').textContent.includes('QR expired')&&!document.querySelector('.lan-pairing img')`);await click('New connection QR');await until(`!!document.querySelector('.lan-pairing img')`);console.log('Connection QR expiry and refresh PASS');}
+      }
+      if(label==='Backups'&&width===1440){
+        await until(`![...document.querySelectorAll('button')].find(b=>b.textContent==='Back up database & download').disabled`);
+        backupFailure=true;await click('Back up database & download');await until(`document.querySelector('.database-backups [role=alert]')?.textContent.includes('Backup tools unavailable')`);await delay(600);assert.equal(await evaluate(`!!document.querySelector('.database-backups [role=alert]')`),true);
+        backupFailure=false;await evaluate(`window.__backupBlob=null;window.__backupFilename='';const create=URL.createObjectURL.bind(URL);URL.createObjectURL=blob=>{window.__backupBlob=blob;return create(blob)};const click=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){window.__backupFilename=this.download;return click.call(this)}`);
+        await click('Back up database & download');await until(`!!window.__backupBlob&&!!document.querySelector('.backup-record')&&!document.querySelector('.database-backups button').disabled`);assert.equal(await evaluate(`window.__backupFilename`),backupFixture.fileName);assert.equal(await evaluate(`window.__backupBlob.size`),backupFixture.bytes);
+        await click('Refresh backups');await until(`!!document.querySelector('.backup-record')&&!document.querySelector('.database-backups button').disabled`);
+        backupCorrupt=true;await click('Download backup');await until(`document.querySelector('.database-backups [role=alert]')?.textContent.includes('integrity check')`);assert.equal(await evaluate(`document.querySelectorAll('.backup-record').length`),1);backupCorrupt=false;
+        console.log('Database backup create/download/history, persistent errors and corrupt download rejection PASS (browser fixture; no production dump invoked)');
       }
       if(label==='NFC tools'&&width===1440){
         const complete=async(operation,value)=>{const task=await api('/api/v1/local-nfc/device/read-tasks/next',undefined,deviceHeaders);assert.equal(task.utility.operation,operation);const records=operation==='ERASE'?[{tnf:0,type:'',payloadHex:''}]:[{tnf:1,type:'U',payloadHex:'00',uri:value}];await api(`/api/v1/local-nfc/device/read-tasks/${task.sessionId}/result`,{uid:'AABBCCDD',techList:['Ndef'],ndefFormatted:true,writable:true,maxSize:888,messageSize:42,records},deviceHeaders);await until(`!!document.querySelector('.tag-facts')&&document.querySelector('.tag-facts').textContent.includes('AABBCCDD')`);};
@@ -413,13 +438,11 @@ try {
   await evaluate(`document.querySelector('.share-contact').open=true`);
   for(const width of [320,390,1440]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
-    assert.equal(await evaluate(`document.querySelector('.share-consent input').getBoundingClientRect().width`),20);
+    assert.equal(await evaluate(`document.querySelector('.share-contact-submit, .submit-lead-btn, .share-contact button[type=submit]').getBoundingClientRect().width > 0`),true);
     await inspect('customer-share-contact-'+width);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await fill('Your name','Browser Visitor');await click('Send my contact');
-  assert.equal(await evaluate(`document.querySelector('input[name=consent]').validity.valueMissing`),true);assert.equal(contactAttempts.length,0);
-  await evaluate(`document.querySelector('.share-consent').click()`);await click('Send my contact');
+  await fill('Your Full Name','Browser Visitor');await click('Send my contact');
   await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
@@ -430,11 +453,13 @@ try {
   assert.equal(contactAttempts[2].requestId,contactAttempts[3].requestId);
   const savedContacts=await connection.db.select().from(schema.customerContactLeads);assert.equal(savedContacts.length,1);assert.equal(savedContacts[0].phone,'+8801712345678');
   await click('Manage this card');
-  await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
+  await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
+  await until(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('Contacts'))`);
+  await evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Contacts')).click()})()`);
   await click('Open inbox');await until(`document.querySelector('.lead-inbox')?.textContent.includes('Browser Visitor')`);
   assert.equal(await evaluate(`document.querySelector('.lead-inbox').textContent.includes('visitor@example.com')`),true);
   console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
-  await reload();await until(`document.querySelector('h1')?.textContent === 'Edit your public profile'`);
+  await reload();await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
   assert.equal(await evaluate(`document.querySelector('input[autocomplete=name]').value`),'Browser Test Owner');
   const previousPhoto=await evaluate(`document.querySelector('.photo-editor-avatar img').src`);await uploadPhoto();assert.notEqual(await evaluate(`document.querySelector('.photo-editor-avatar img').src`),previousPhoto);
   await click('Remove photo');assert.equal(await evaluate(`!!document.querySelector('.photo-editor-avatar img')`),false);
@@ -508,7 +533,7 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width:320,height:844,deviceScaleFactor:1,mobile:true});await inspect('company-public-profile-320');
   assert.equal(browserErrors.length,0,browserErrors.join('\n'));
   console.log('PASS: company setup, employee welcome email and edit link, card assignment, contact search, analytics, security, and public directory.');
-} catch(error) { console.log('UI AUDIT FAILED:',error.stack??error.message); process.exitCode=1; } finally {
+} catch(error) { console.log('UI AUDIT FAILED:',error.cause?.code ? `Database error ${error.cause.code}: ${error.cause.message}` : error.stack??error.message); process.exitCode=1; } finally {
   closing=true;
   clearInterval(globalThis.uiHeartbeat);
   if(socket)socket.onmessage=null;

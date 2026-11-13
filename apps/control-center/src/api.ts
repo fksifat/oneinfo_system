@@ -35,7 +35,9 @@ export async function uploadProductMedia(file: Blob, extension: string, token: s
   return body.url;
 }
 
-export function productMediaUrl(path: string) {
+export function productMediaUrl(path?: string) {
+  if (!path) return "";
+  if (path.startsWith("data:") || path.startsWith("blob:") || path.startsWith("http://") || path.startsWith("https://")) return path;
   const source = resolveProductImageUrl(path);
   const base = source.startsWith("/api/v1/product-media/") ? API_URL : import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175";
   return new URL(source, base || window.location.origin).href;

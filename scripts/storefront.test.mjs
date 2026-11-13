@@ -8,7 +8,9 @@ import {
   addCartVariant, reconcileCartItems,
   PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS,
   isColorLight, defaultCustomization, renderSurfaceMotifSvg,
+  renderBackMotifSvg, renderQrSvg,
 } from "../sites/storefront/catalog.js";
+import { ProductCustomizationSchema } from "@oneinfo/contracts";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
 
@@ -239,4 +241,292 @@ test("customizer presets and vector surface motifs cover all 10 premium designs"
   assert.equal(cart[1].customization.surfaceMotif, "contour");
   assert.equal(cart[0].customization.surfaceColor, "#0a0b0d");
   assert.equal(cart[1].customization.surfaceColor, "#0a121e");
+});
+
+test("two-sided card customization supports front/back vector motifs, QR styles, and contract validation", () => {
+  // Test back motifs for all 4 pattern styles
+  for (const motif of ["facets", "contour", "architectural", "inlay"]) {
+    const svg = renderBackMotifSvg(motif, "#c5a059");
+    assert.match(svg, /<svg class="card-surface-motif/);
+    assert.match(svg, /motif-\w+-back/);
+    assert.match(svg, /#c5a059/);
+  }
+  assert.equal(renderBackMotifSvg("minimal", "#c5a059"), "");
+
+  // Test vector QR svg rendering for all styles
+  const qrFramed = renderQrSvg("#d8b26e", "framed");
+  assert.match(qrFramed, /class="card-qr-svg qr-style-framed"/);
+  assert.match(qrFramed, /stroke="#d8b26e"/);
+
+  const qrBadge = renderQrSvg("#e2e8f0", "badge");
+  assert.match(qrBadge, /qr-style-badge/);
+  assert.match(qrBadge, /stroke-dasharray="4 2"/);
+
+  const qrMinimal = renderQrSvg("#c5a059", "minimal");
+  assert.match(qrMinimal, /qr-style-minimal/);
+
+  // Validate complete two-sided customization with ProductCustomizationSchema
+  const customTwoSided = {
+    name: "Avery Morgan",
+    title: "Managing Director",
+    presetId: "01",
+    layout: "left",
+    surfaceMotif: "facets",
+    surfaceColor: "#0a0b0d",
+    accentColor: "#d8b26e",
+    font: "sans",
+    finish: "matte",
+    backQrStyle: "framed",
+    backSubtitle: "oneinfo.me/avery",
+  };
+  const parsed = ProductCustomizationSchema.parse(customTwoSided);
+  assert.equal(parsed.name, "Avery Morgan");
+  assert.equal(parsed.backQrStyle, "framed");
+  assert.equal(parsed.backSubtitle, "oneinfo.me/avery");
+
+  // Reconcile two-sided customization in cart
+  const product = { id: "p1", name: "Oneinfo Signature", customizable: true };
+  const variant = { id: "v1", name: "Soft-Touch Black", colorHex: "#0a201f", available: true, priceMinor: 179000, salePriceMinor: null };
+  const cart = addCartVariant([], product, variant, 1, parsed);
+  assert.equal(cart[0].customization.backQrStyle, "framed");
+  assert.equal(cart[0].customization.backSubtitle, "oneinfo.me/avery");
+});
+
+test("customization supports resizing logo, icon, qr and adding divider lines (horizontal and vertical)", () => {
+  const customSizing = {
+    name: "Nazmul Hossain",
+    title: "Lead Engineer",
+    textSize: 16,
+    logoSize: 120,
+    iconSize: 90,
+    qrSize: 110,
+    dividerLines: [
+      { orientation: "horizontal", length: 120, style: "solid" },
+      { orientation: "vertical", length: 50, style: "dashed" },
+    ],
+    elementPositions: {
+      "divider-0": { x: 50, y: 55 },
+      "divider-1": { x: 40, y: 70 },
+      logo: { x: 25, y: 20 },
+      sign: { x: 85, y: 20 },
+    },
+  };
+  const parsed = ProductCustomizationSchema.parse(customSizing);
+  assert.equal(parsed.logoSize, 120);
+  assert.equal(parsed.iconSize, 90);
+  assert.equal(parsed.qrSize, 110);
+  assert.equal(parsed.dividerLines.length, 2);
+  assert.equal(parsed.dividerLines[0].orientation, "horizontal");
+  assert.equal(parsed.dividerLines[0].length, 120);
+  assert.equal(parsed.dividerLines[0].style, "solid");
+  assert.equal(parsed.dividerLines[1].orientation, "vertical");
+  assert.equal(parsed.dividerLines[1].style, "dashed");
+  assert.equal(parsed.elementPositions["divider-0"].x, 50);
+
+  const product = { id: "p1", name: "Oneinfo Card", customizable: true };
+  const variant = { id: "v1", name: "Gold", colorHex: "#d8b26e", available: true, priceMinor: 200000, salePriceMinor: null };
+  const cart = addCartVariant([], product, variant, 1, parsed);
+  assert.equal(cart[0].customization.logoSize, 120);
+  assert.equal(cart[0].customization.iconSize, 90);
+  assert.equal(cart[0].customization.qrSize, 110);
+  assert.equal(cart[0].customization.dividerLines.length, 2);
+});
+
+test("customization supports With Oneinfo Logo vs Without Oneinfo Logo with admin pricing control", () => {
+  const withLogoCustom = {
+    name: "Nazmul Hossain",
+    brandingMode: "with-logo",
+    hasOneinfoLogo: true,
+  };
+  const withoutLogoCustom = {
+    name: "Nazmul Hossain",
+    brandingMode: "without-logo",
+    hasOneinfoLogo: false,
+  };
+
+  const parsedWith = ProductCustomizationSchema.parse(withLogoCustom);
+  assert.equal(parsedWith.brandingMode, "with-logo");
+  assert.equal(parsedWith.hasOneinfoLogo, true);
+
+  const parsedWithout = ProductCustomizationSchema.parse(withoutLogoCustom);
+  assert.equal(parsedWithout.brandingMode, "without-logo");
+  assert.equal(parsedWithout.hasOneinfoLogo, false);
+
+  const product = { id: "p1", name: "Oneinfo Card", customizable: true };
+  const variant = {
+    id: "v1",
+    name: "Obsidian",
+    colorHex: "#0a0b0d",
+    available: true,
+    priceMinor: 149900,
+    salePriceMinor: null,
+    withoutLogoPriceMinor: 199900,
+    withoutLogoSalePriceMinor: 189900,
+  };
+
+  // With logo: regular/sale price
+  const cartWith = addCartVariant([], product, variant, 1, parsedWith);
+  assert.equal(cartWith[0].priceMinor, 149900);
+
+  // Without logo: admin controlled withoutLogoSalePriceMinor
+  const cartWithout = addCartVariant([], product, variant, 1, parsedWithout);
+  assert.equal(cartWithout[0].priceMinor, 189900);
+
+  // Reconcile cart keeps branding pricing
+  const reconciled = reconcileCartItems([...cartWith, ...cartWithout], [{ ...product, variants: [variant] }]);
+  assert.equal(reconciled.length, 2);
+  assert.equal(reconciled[0].priceMinor, 149900);
+  assert.equal(reconciled[1].priceMinor, 189900);
+
+  // Storefront markup & brand labeling contract:
+  // 1. Front card displays "YOUR LOGO" text placeholder when customer hasn't uploaded logo
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /card-logo-placeholder.*YOUR LOGO/s);
+  // 2. Back footer brand labeling is hidden when hasOneinfoLogo is false
+  assert.match(appSrc, /card-back-footer.*custom\.hasOneinfoLogo !== false/s);
+
+  // 3. EPS print generator contract
+  const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
+  assert.match(epsSrc, /\(YOUR LOGO\) show/);
+  assert.match(epsSrc, /custom\.hasOneinfoLogo !== false[\s\S]*\(ONEINFO\) show[\s\S]*\(By AriseStudio\) show/);
+});
+
+test("draggable card elements support rotation interactively, in admin preview, and in EPS vector export", () => {
+  const customWithRotation = {
+    ...defaultCustomization("01"),
+    name: "Avery Morgan",
+    elementPositions: {
+      logo: { x: 25, y: 20, rotate: 90 },
+      sign: { x: 85, y: 18, rotate: 180 },
+      name: { x: 30, y: 65, rotate: 45 },
+      "divider-0": { x: 50, y: 50, rotate: 270 },
+      "back-qr": { x: 50, y: 50, rotate: 90 },
+    },
+  };
+
+  const parsed = ProductCustomizationSchema.parse(customWithRotation);
+  assert.equal(parsed.elementPositions.logo.rotate, 90);
+  assert.equal(parsed.elementPositions.sign.rotate, 180);
+  assert.equal(parsed.elementPositions.name.rotate, 45);
+  assert.equal(parsed.elementPositions["divider-0"].rotate, 270);
+  assert.equal(parsed.elementPositions["back-qr"].rotate, 90);
+
+  // Storefront UI contains rotate handles, compact dual bars, and editable inputs
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /data-rotate-handle/);
+  assert.match(appSrc, /data-custom-rot-step/);
+  assert.match(appSrc, /data-custom-rot-input/);
+  assert.match(appSrc, /data-custom-text-size-input/);
+  assert.match(appSrc, /compact-prop-row/);
+  assert.match(appSrc, /activeRotateItem/);
+
+  // CSS contains rotation transform, rotate handle styling, and compact property row
+  const cssSrc = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(cssSrc, /\.element-rotate-handle/);
+  assert.match(cssSrc, /\.compact-prop-row/);
+  assert.match(cssSrc, /rotate\(var\(--rot, 0deg\)\)/);
+
+  // Admin Card Preview contains rotation in styles
+  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
+  assert.match(adminSrc, /rotate\(\$\{logoRot\}deg\)/);
+  assert.match(adminSrc, /rotate\(\$\{signRot\}deg\)/);
+  assert.match(adminSrc, /rotate\(\$\{nameRot\}deg\)/);
+  assert.match(adminSrc, /rotate\(\$\{qrRot\}deg\)/);
+
+  // EPS generator contains PostScript rotation transformations
+  const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
+  assert.match(epsSrc, /-\$\{logoRot\} rotate/);
+  assert.match(epsSrc, /-\$\{signRot\} rotate/);
+  assert.match(epsSrc, /-\$\{nameRot\} rotate/);
+  assert.match(epsSrc, /-\$\{qrRot\} rotate/);
+});
+
+test("customization quick inspector supports font dropdown, bold and italic text styles across storefront, admin and EPS generator", () => {
+  // Contract schema supports bold and italic flags
+  const parsed = ProductCustomizationSchema.parse({
+    presetId: "01",
+    name: "Avery Morgan",
+    bold: false,
+    italic: true,
+    elementPositions: {
+      name: { x: 45, y: 55, size: 16, font: "serif", bold: true, italic: false },
+      title: { x: 45, y: 68, size: 10, font: "mono", bold: false, italic: true },
+      "extra-0": { x: 45, y: 78, size: 9, font: "sans", bold: true, italic: true },
+    },
+  });
+  assert.equal(parsed.bold, false);
+  assert.equal(parsed.italic, true);
+  assert.equal(parsed.elementPositions.name.bold, true);
+  assert.equal(parsed.elementPositions.title.italic, true);
+  assert.equal(parsed.elementPositions["extra-0"].bold, true);
+  assert.equal(parsed.elementPositions["extra-0"].italic, true);
+
+  // Storefront UI contains font dropdown, B/I toggles, and proper event handling
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /data-custom-font-select/);
+  assert.match(appSrc, /data-custom-toggle-style/);
+  assert.match(appSrc, /inspector-font-select/);
+  assert.match(appSrc, /inspector-style-group/);
+  assert.match(appSrc, /inspector-style-btn/);
+
+  // CSS contains styles for font dropdown, B/I buttons, and font weight/style overrides
+  const cssSrc = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(cssSrc, /\.inspector-font-select-wrap/);
+  assert.match(cssSrc, /\.inspector-style-group/);
+  assert.match(cssSrc, /\.inspector-style-btn/);
+  assert.match(cssSrc, /\.card-custom-name\.is-not-bold/);
+  assert.match(cssSrc, /\.card-custom-name\.is-bold/);
+  assert.match(cssSrc, /\.is-italic/);
+
+  // Admin Card Preview supports bold and italic font rendering
+  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
+  assert.match(adminSrc, /isNameBold \? 700 : 400/);
+  assert.match(adminSrc, /isNameItalic \? "italic" : "normal"/);
+  assert.match(adminSrc, /isTitleBold \? 700 : 400/);
+  assert.match(adminSrc, /isTitleItalic \? "italic" : "normal"/);
+
+  // EPS generator supports PostScript font variants (Bold, Oblique, Italic)
+  const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
+  assert.match(epsSrc, /Times-BoldItalic/);
+  assert.match(epsSrc, /Helvetica-BoldOblique/);
+  assert.match(epsSrc, /Courier-BoldOblique/);
+});
+
+test("customizable product in catalog grid shows Limitless color, infinity options icon, and signature card preview", () => {
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /Colour: <strong>Limitless<\/strong>/);
+  assert.match(appSrc, /infinity-option-wrap/);
+  assert.match(appSrc, /is-limitless-palette/);
+  assert.match(appSrc, /is-limitless-swatch/);
+  assert.match(appSrc, /is-catalog-card/);
+
+  const cssSrc = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(cssSrc, /\.infinity-option-wrap/);
+  assert.match(cssSrc, /\.is-limitless-palette/);
+  assert.match(cssSrc, /\.is-limitless-swatch/);
+  assert.match(cssSrc, /\.is-catalog-card/);
+
+  const iconsSrc = readFileSync("sites/storefront/public/assets/icons.svg", "utf8");
+  assert.match(iconsSrc, /id="infinity"/);
+});
+
+test("admin card preview and storefront accurately reflect exact design, custom element positions, and media URLs", () => {
+  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
+  assert.match(adminSrc, /hasLogoPos = epLogo\?\.x != null && epLogo\?\.y != null/);
+  assert.match(adminSrc, /hasSignPos = epSign\?\.x != null && epSign\?\.y != null/);
+  assert.match(adminSrc, /hasNamePos = epName\?\.x != null && epName\?\.y != null/);
+  assert.match(adminSrc, /hasTitlePos = epTitle\?\.x != null && epTitle\?\.y != null/);
+  assert.match(adminSrc, /hasQrPos = epQr\?\.x != null && epQr\?\.y != null/);
+  assert.match(adminSrc, /productMediaUrl\(custom\.logoUrl\)/);
+
+  const ordersSrc = readFileSync("apps/control-center/src/Orders.tsx", "utf8");
+  assert.match(ordersSrc, /productMediaUrl\(item\.customization\.logoUrl\)/);
+
+  const apiSrc = readFileSync("apps/control-center/src/api.ts", "utf8");
+  assert.match(apiSrc, /export function productMediaUrl/);
+
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.doesNotMatch(appSrc, /\{ x: 50, y: 50/);
+  assert.match(appSrc, /logoPos = \(ep\.logo && ep\.logo\.x != null/);
+  assert.match(appSrc, /namePos = \(ep\.name && ep\.name\.x != null/);
 });

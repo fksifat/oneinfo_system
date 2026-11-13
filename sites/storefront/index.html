@@ -56,7 +56,18 @@
       <section id="tracking-portal" class="review-portal-page" hidden aria-labelledby="tracking-portal-title">
         <a class="back-to-products" href="#products">Back to cards</a>
         <div class="review-portal-card tracking-portal-card"><div class="tracking-head"><div><p class="kicker"><span></span> LIVE CARD JOURNEY</p><h1 id="tracking-portal-title" tabindex="-1">Track your Oneinfo order</h1></div><span class="tracking-live-pill"><span class="pulse-dot" aria-hidden="true"></span> Live updates</span></div>
+          <a class="button tracking-invoice" hidden>View invoice</a>
           <div data-tracking-content role="status"></div></div>
+      </section>
+      <section id="invoice-portal" class="review-portal-page" hidden aria-label="Invoice">
+        <article class="invoice-card">
+          <p class="invoice-status" role="status"></p>
+          <div data-invoice-content hidden></div>
+          <div class="invoice-actions">
+            <button class="button button-primary invoice-print" type="button" hidden>Print or save PDF</button>
+            <a class="button invoice-tracking">Track your order</a>
+          </div>
+        </article>
       </section>
       <section id="order-draft" class="order-page" hidden aria-labelledby="order-title">
         <div class="order-shell">
@@ -81,6 +92,7 @@
             <p class="order-receipt-payment"></p>
             <p class="order-receipt-email" role="status" hidden></p>
             <a class="order-receipt-tracking" hidden>Track your order</a>
+            <a class="button order-receipt-document" hidden>View invoice</a>
             <dl class="order-saved-details">
               <div><dt>Order ID</dt><dd class="order-receipt-id"></dd></div>
               <div class="order-receipt-invoice" hidden><dt>Invoice number</dt><dd></dd></div>

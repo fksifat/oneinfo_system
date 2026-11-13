@@ -299,6 +299,8 @@ export const ProductVariantSchema = z.object({
   colorHex: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Use a six-digit hex colour"),
   priceMinor: z.number().int().min(1).max(100_000_000),
   salePriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null),
+  withoutLogoPriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null).optional(),
+  withoutLogoSalePriceMinor: z.number().int().min(1).max(100_000_000).nullable().default(null).optional(),
   available: z.boolean().default(true),
   stockQuantity: z.number().int().min(0).max(1_000_000).optional(),
   finish: z.string().trim().max(80).default(""),
@@ -327,6 +329,34 @@ export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMi
 export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
   v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
 
+export const variantPriceForBranding = (
+  v: Pick<ProductVariant, "priceMinor" | "salePriceMinor" | "withoutLogoPriceMinor" | "withoutLogoSalePriceMinor">,
+  hasLogo: boolean = true
+): number => {
+  if (!hasLogo) {
+    if (v.withoutLogoPriceMinor) {
+      return v.withoutLogoSalePriceMinor ?? v.withoutLogoPriceMinor;
+    }
+    // Default surcharge of +500 BDT if withoutLogo price is unset by admin
+    const base = v.salePriceMinor ?? v.priceMinor;
+    return base + 50000;
+  }
+  return v.salePriceMinor ?? v.priceMinor;
+};
+
+export const variantRegularPriceForBranding = (
+  v: Pick<ProductVariant, "priceMinor" | "withoutLogoPriceMinor">,
+  hasLogo: boolean = true
+): number => {
+  if (!hasLogo) {
+    if (v.withoutLogoPriceMinor) {
+      return v.withoutLogoPriceMinor;
+    }
+    return v.priceMinor + 50000;
+  }
+  return v.priceMinor;
+};
+
 export const CardLayoutSchema = z.enum([
   "left",
   "center",
@@ -354,17 +384,60 @@ export type SurfaceMotif = z.infer<typeof SurfaceMotifSchema>;
 
 export const HexColorSchema = z.string().trim().regex(/^#[0-9a-fA-F]{6}$/i);
 
+export const DividerLineSchema = z.object({
+  orientation: z.enum(["horizontal", "vertical"]).default("horizontal"),
+  length: z.number().int().min(20).max(300).default(100),
+  style: z.enum(["solid", "dashed"]).default("solid").optional(),
+});
+export type DividerLine = z.infer<typeof DividerLineSchema>;
+
 export const ProductCustomizationSchema = z.object({
-  name: z.string().trim().min(1).max(50),
-  title: z.string().trim().max(60).optional().default(""),
+  name: z.string().trim().min(1).max(25),
+  title: z.string().trim().max(35).optional().default(""),
   layout: CardLayoutSchema.default("left"),
   surfaceMotif: SurfaceMotifSchema.default("facets"),
   surfaceColor: HexColorSchema.default("#0a0b0d"),
   accentColor: HexColorSchema.default("#d8b26e"),
   font: z.enum(["sans", "serif", "mono"]).default("sans"),
+  bold: z.boolean().optional(),
+  italic: z.boolean().optional(),
   finish: z.enum(["matte", "brushed", "gloss"]).default("matte").optional(),
   position: z.string().optional(),
   presetId: z.string().max(30).optional(),
+  backQrStyle: z.enum(["framed", "minimal", "badge"]).default("framed").optional(),
+  backSubtitle: z.string().trim().max(80).default("").optional(),
+  logoUrl: z.string().trim().max(500_000).optional(),
+  logoStyle: z.enum(["original", "monochrome"]).default("original").optional(),
+  companyName: z.string().trim().max(60).optional(),
+  extraLines: z.array(z.string().trim().max(35)).max(5).default([]).optional(),
+  textSize: z.number().int().min(6).max(36).default(14).optional(),
+  logoSize: z.number().int().min(30).max(250).default(100).optional(),
+  iconSize: z.number().int().min(30).max(250).default(100).optional(),
+  qrSize: z.number().int().min(30).max(250).default(100).optional(),
+  dividerLines: z.array(DividerLineSchema).max(4).default([]).optional(),
+  brandingMode: z.enum(["with-logo", "without-logo"]).default("with-logo").optional(),
+  hasOneinfoLogo: z.boolean().default(true).optional(),
+  customPos: z.object({
+    x: z.number().min(0).max(100),
+    y: z.number().min(0).max(100),
+    rotate: z.number().min(-360).max(360).default(0).optional(),
+  }).nullable().optional(),
+  elementPositions: z.record(z.string(), z.object({
+    x: z.number().min(0).max(100).optional(),
+    y: z.number().min(0).max(100).optional(),
+    rotate: z.number().min(-360).max(360).default(0).optional(),
+    font: z.enum(["sans", "serif", "mono"]).optional(),
+    size: z.number().min(6).max(300).optional(),
+    bold: z.boolean().optional(),
+    italic: z.boolean().optional(),
+  })).optional(),
+  elementStyles: z.record(z.string(), z.object({
+    font: z.enum(["sans", "serif", "mono"]).optional(),
+    size: z.number().min(6).max(300).optional(),
+    rotate: z.number().min(-360).max(360).optional(),
+    bold: z.boolean().optional(),
+    italic: z.boolean().optional(),
+  })).optional(),
 });
 export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
 
@@ -532,6 +605,7 @@ export type OrderReceipt = OrderTracking & {
   totalMinor: number;
   confirmationEmail?: "accepted" | "failed";
   trackingPath?: string;
+  invoicePath?: string;
   reviewInviteSentAt?: string | null;
   qrAllocation?: { required: number; assigned: number; pending: number; status: "AWAITING_QR" | "PARTIAL" | "ASSIGNED" };
 

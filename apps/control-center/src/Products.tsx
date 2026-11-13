@@ -4,7 +4,12 @@ import { printFinish, ProductImageSchema, ProductInputSchema, productMedia, disc
 import { api, productMediaUrl } from "./api.js";
 import { ProductMediaEditor } from "./ProductMediaEditor.js";
 
-type VariantDraft = Omit<ProductVariant, "priceMinor" | "salePriceMinor"> & { regular: string; sale: string };
+type VariantDraft = Omit<ProductVariant, "priceMinor" | "salePriceMinor" | "withoutLogoPriceMinor" | "withoutLogoSalePriceMinor"> & {
+  regular: string;
+  sale: string;
+  withoutLogoRegular: string;
+  withoutLogoSale: string;
+};
 type ProductDraft = Omit<ProductInput, "variants"> & { id?: string; version?: number; variants: VariantDraft[] };
 const editorSections = [
   ["details", "Details"],
@@ -16,8 +21,15 @@ const editorSections = [
 type EditorSection = typeof editorSections[number][0];
 
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", minimumFractionDigits: 0, maximumFractionDigits: 2 });
-const newVariant = (): VariantDraft => ({ id: crypto.randomUUID(), name: "", colorHex: "#143534", regular: "", sale: "", available: true, finish: "", appearance: "dark", imageUrl: "", backImageUrl: "", showAllColourMedia:true, defaultMediaIndex:0, media:[] });
-const toVariant = ({ regular, sale, ...v }: VariantDraft): ProductVariant => ({ ...v, media:v.media?.map(m=>m.type === "spin" ? {...m,frames:m.frames.map(f=>f.trim()).filter(Boolean)} : m), priceMinor: Math.round(Number(regular) * 100), salePriceMinor: sale === "" ? null : Math.round(Number(sale) * 100) });
+const newVariant = (): VariantDraft => ({ id: crypto.randomUUID(), name: "", colorHex: "#143534", regular: "", sale: "", withoutLogoRegular: "", withoutLogoSale: "", available: true, finish: "", appearance: "dark", imageUrl: "", backImageUrl: "", showAllColourMedia:true, defaultMediaIndex:0, media:[] });
+const toVariant = ({ regular, sale, withoutLogoRegular, withoutLogoSale, ...v }: VariantDraft): ProductVariant => ({
+  ...v,
+  media:v.media?.map(m=>m.type === "spin" ? {...m,frames:m.frames.map(f=>f.trim()).filter(Boolean)} : m),
+  priceMinor: Math.round(Number(regular) * 100),
+  salePriceMinor: sale === "" ? null : Math.round(Number(sale) * 100),
+  withoutLogoPriceMinor: withoutLogoRegular && withoutLogoRegular.trim() !== "" ? Math.round(Number(withoutLogoRegular) * 100) : null,
+  withoutLogoSalePriceMinor: withoutLogoSale && withoutLogoSale.trim() !== "" ? Math.round(Number(withoutLogoSale) * 100) : null,
+});
 const priceRange = (product: Product) => {
   const prices = product.variants.filter(v => v.available).map(variantPrice);
   const values = prices.length ? prices : product.variants.map(variantPrice);
@@ -46,7 +58,17 @@ export function Products({ token }: { token: string }) {
   useLayoutEffect(() => { editorScroll.current?.scrollTo({ top: 0, behavior: "instant" }); }, [section]);
   function edit(product?: Product) {
     setSection("details");
-    const variants = product ? product.variants.map(({priceMinor, salePriceMinor, ...v}) => ({...v, regular: String(priceMinor / 100), sale: salePriceMinor === null ? "" : String(salePriceMinor / 100), backImageUrl: v.backImageUrl ?? "", showAllColourMedia:true, defaultMediaIndex:v.defaultMediaIndex ?? 0, media:productMedia(v).map(m=>({...m,id: m.id.startsWith("legacy-") ? crypto.randomUUID() : m.id}))})) : [newVariant()];
+    const variants = product ? product.variants.map(({priceMinor, salePriceMinor, withoutLogoPriceMinor, withoutLogoSalePriceMinor, ...v}) => ({
+      ...v,
+      regular: String(priceMinor / 100),
+      sale: salePriceMinor === null ? "" : String(salePriceMinor / 100),
+      withoutLogoRegular: withoutLogoPriceMinor ? String(withoutLogoPriceMinor / 100) : "",
+      withoutLogoSale: withoutLogoSalePriceMinor ? String(withoutLogoSalePriceMinor / 100) : "",
+      backImageUrl: v.backImageUrl ?? "",
+      showAllColourMedia: true,
+      defaultMediaIndex: v.defaultMediaIndex ?? 0,
+      media: productMedia(v).map(m=>({...m, id: m.id.startsWith("legacy-") ? crypto.randomUUID() : m.id}))
+    })) : [newVariant()];
     setEditing(product ? {...product, customizable: product.customizable ?? false, warranty:product.warrantyIsDemo ? "" : product.warranty ?? "", warrantyIsDemo:false, variants} : {name:"", slug:"", subtitle:"", description:"", customizable:false, warranty:"", warrantyIsDemo:false, features:[], status:"DRAFT", featured:false, badge:"", sortOrder:0, variants});
     setActiveVariant(variants[0]!.id); setFeatures(product?.features.join("\n") ?? ""); setError(""); setNotice("");
   }
@@ -55,7 +77,12 @@ export function Products({ token }: { token: string }) {
   }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!editing) return;
-    const invalid = editing.variants.find(v => !/^\d+(\.\d{1,2})?$/.test(v.regular) || (v.sale !== "" && !/^\d+(\.\d{1,2})?$/.test(v.sale)));
+    const invalid = editing.variants.find(v =>
+      !/^\d+(\.\d{1,2})?$/.test(v.regular) ||
+      (v.sale !== "" && !/^\d+(\.\d{1,2})?$/.test(v.sale)) ||
+      (v.withoutLogoRegular !== "" && !/^\d+(\.\d{1,2})?$/.test(v.withoutLogoRegular)) ||
+      (v.withoutLogoSale !== "" && !/^\d+(\.\d{1,2})?$/.test(v.withoutLogoSale))
+    );
     if (invalid) { setSection("colours"); setActiveVariant(invalid.id); setError("Enter regular and sale prices with up to two decimal places."); return; }
     const parsed = ProductInputSchema.safeParse({...editing, variants: editing.variants.map(toVariant), features: features.split("\n").map(s => s.trim()).filter(Boolean)});
     if (!parsed.success) {
@@ -121,10 +148,10 @@ export function Products({ token }: { token: string }) {
                 <div className="card-mini-chip" aria-hidden="true"></div>
                 <div className="card-mini-brand">Oneinfo</div>
                 <div className="card-mini-nfc" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M8.5 16.5a5 5 0 0 1 0-7" />
-                    <path d="M12 19a8.5 8.5 0 0 1 0-14" />
-                    <path d="M15.5 21.5a12 12 0 0 1 0-19" />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M6 9a5 5 0 0 1 0 6" />
+                    <path d="M10 6a9 9 0 0 1 0 12" />
+                    <path d="M14 3a13 13 0 0 1 0 18" />
                   </svg>
                 </div>
               </div>
@@ -200,8 +227,12 @@ export function Products({ token }: { token: string }) {
               {activeVariant === v.id && <div className="variant-fields" id={`variant-${v.id}`}><div className="catalog-form-grid" hidden={section === "media"}>
                 <label>Colour name<input required maxLength={60} value={v.name} placeholder="e.g. Midnight blue" onChange={e => changeVariant(v.id,{name:e.target.value})} /></label>
                 <label>Colour swatch<div className="colour-input"><input aria-label={`Colour swatch for ${v.name || `colour ${index+1}`}`} type="color" value={v.colorHex} onChange={e => changeVariant(v.id,{colorHex:e.target.value})} /><span>{v.colorHex.toUpperCase()}</span></div></label>
-                <label>Regular price (BDT)<input type="number" min="0.01" max="1000000" step="0.01" required value={v.regular} onChange={e => changeVariant(v.id,{regular:e.target.value})} /></label>
-                <label>Sale price (BDT)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="No discount" value={v.sale} onChange={e => changeVariant(v.id,{sale:e.target.value})} /><small>Optional. Must be below the regular price.</small></label>
+                <label>{editing.customizable ? "Regular price — With Logo (BDT)" : "Regular price (BDT)"}<input type="number" min="0.01" max="1000000" step="0.01" required value={v.regular} onChange={e => changeVariant(v.id,{regular:e.target.value})} /></label>
+                <label>{editing.customizable ? "Sale price — With Logo (BDT)" : "Sale price (BDT)"}<input type="number" min="0.01" max="1000000" step="0.01" placeholder="No discount" value={v.sale} onChange={e => changeVariant(v.id,{sale:e.target.value})} /><small>Optional. Must be below regular price.</small></label>
+                {editing.customizable && <>
+                  <label>Regular price — Without Logo (BDT)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="Default: regular + 500 BDT" value={v.withoutLogoRegular} onChange={e => changeVariant(v.id,{withoutLogoRegular:e.target.value})} /><small>Price when customer selects &ldquo;Without Oneinfo Logo&rdquo;.</small></label>
+                  <label>Sale price — Without Logo (BDT)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="Optional sale price" value={v.withoutLogoSale} onChange={e => changeVariant(v.id,{withoutLogoSale:e.target.value})} /><small>Optional discounted price without logo.</small></label>
+                </>}
               </div>
               <div className="catalog-form-grid" hidden={section !== "media"}>
                 <label className="full catalog-default-preview"><span>Default large preview<small>Opens first when this colour is selected.</small></span><select value={v.defaultMediaIndex} onChange={e=>changeVariant(v.id,{defaultMediaIndex:Number(e.target.value)})}>{(v.media?.length ? v.media : [null]).map((m,i)=><option value={i} key={m?.id ?? "empty"}>{m ? `${i+1}. ${m.label || (m.type === "model" ? "3D View" : m.type)}` : "Card illustration"}</option>)}</select></label>

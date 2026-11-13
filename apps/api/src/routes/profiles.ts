@@ -6,10 +6,11 @@ import { ensureProfileHandle } from "../domain/profile-handles.js";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { AssignCardSchema, contactVcard, CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
-import { and, asc, eq, getTableColumns, isNull, isNotNull, sql } from "drizzle-orm";
-import { requireOperator } from "../auth.js";
+import { and, asc, eq, getTableColumns, isNull, isNotNull, or, sql } from "drizzle-orm";
+import { requireOperator, optionalOperator } from "../auth.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
-import { auditLogs, cardBatches, customerAccounts, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, orderActivationProfiles, profileLinks } from "../db/schema.js";
+import { auditLogs, cardBatches, customerAccounts, companies, companyEmployees, cardActivationSecrets, cardEvents, cards, customerProfiles, orderCardAllocations, orderActivationProfiles, profileLinks } from "../db/schema.js";
 import { parseBody, sendCreated } from "../http.js";
 
 export const publicProfileFields = {
@@ -38,15 +39,31 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
     reply.header("Cache-Control", "no-store");
     const { handle } = request.params as { handle: string };
     if (!/^[a-zA-Z0-9]{1,64}$/.test(handle)) return reply.code(404).send({ message: "Profile not found" });
+    const operator = await optionalOperator(request);
     const [profile] = await db.select(publicProfileFields).from(customerProfiles)
-      .where(and(sql`lower(${customerProfiles.handle}) = lower(${handle})`, publicProfileAvailable()));
+      .where(and(sql`lower(${customerProfiles.handle}) = lower(${handle})`, operator ? undefined : publicProfileAvailable()));
     if (!profile) return reply.code(404).send({ message: "Profile not found" });
     const linked = await db.select({ publicSlug: cards.publicSlug, lifecycleStatus: cards.lifecycleStatus, qcStatus: cards.qcStatus, confirmed: cardBatches.printConfirmedAt }).from(cards)
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId)).where(eq(cards.profileId, profile.id)).orderBy(asc(cards.createdAt), asc(cards.id));
-    const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && card.qcStatus === "PASSED" && card.confirmed);
+    const active = linked.find(card => card.lifecycleStatus === "ACTIVATED" && (card.qcStatus === "PASSED" && card.confirmed));
     const links = await db.select({ id: profileLinks.id, label: profileLinks.label, url: profileLinks.url, sortOrder: profileLinks.sortOrder }).from(profileLinks)
       .where(and(eq(profileLinks.profileId, profile.id), eq(profileLinks.active, true))).orderBy(asc(profileLinks.sortOrder));
-    return { profile, links, cardSlug: active?.publicSlug ?? null };
+    const [cardOwner] = active
+      ? await db.select({ active: customerAccounts.active })
+          .from(cards)
+          .leftJoin(companies, eq(cards.companyId, companies.id))
+          .leftJoin(customerAccounts, or(eq(cards.customerAccountId, customerAccounts.id), eq(companies.ownerAccountId, customerAccounts.id)))
+          .where(eq(cards.publicSlug, active.publicSlug))
+          .limit(1)
+      : [];
+    return {
+      status: "PROFILE" as const,
+      profile,
+      links,
+      cardSlug: active?.publicSlug ?? null,
+      canShareContact: active ? cardOwner?.active === true : false,
+      crmEnabled: Boolean(config.CRM_LEAD_WEBHOOK_URL),
+    };
   });
 
   app.get("/public/:slug/contact.vcf", async (request, reply) => {
@@ -60,21 +77,24 @@ export const profileRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/public/:slug/qr.png", async (request, reply) => {
     const { slug } = request.params as { slug: string };
-    const [profile] = await db.select({ publicSlug: customerProfiles.publicSlug }).from(customerProfiles)
-      .where(and(eq(customerProfiles.publicSlug, slug), eq(customerProfiles.published, true))).limit(1);
+    const [profile] = await db.select({ publicSlug: customerProfiles.publicSlug, handle: customerProfiles.handle, domain: companies.domain }).from(customerProfiles)
+      .leftJoin(companyEmployees, eq(companyEmployees.profileId, customerProfiles.id))
+      .leftJoin(companies, eq(companies.id, companyEmployees.companyId))
+      .where(and(eq(customerProfiles.publicSlug, slug), publicProfileAvailable())).limit(1);
     if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
-    const origin = (request.headers.origin as string) || process.env.VITE_STOREFRONT_URL || "https://oneinfo.online";
-    const url = `${origin}/team?profile=${encodeURIComponent(slug)}`;
-    const png = await QRCode.toBuffer(url, { margin: 2, width: 360 });
+    const url = profile.domain ? new URL("/team", `https://${profile.domain}`) : new URL(profile.handle ? `/${profile.handle}` : "/", config.PUBLIC_CARD_BASE_URL);
+    if (profile.domain || !profile.handle) url.searchParams.set("profile", slug);
+    const png = await QRCode.toBuffer(url.href, { margin: 2, width: 360 });
     return reply.type("image/png").send(png);
   });
 
   app.get("/public/:slug", async (request) => {
     const { slug } = request.params as { slug: string };
+    const operator = await optionalOperator(request);
     const [profile] = await db
       .select(publicProfileFields)
       .from(customerProfiles)
-      .where(and(eq(customerProfiles.publicSlug, slug), publicProfileAvailable()))
+      .where(and(eq(customerProfiles.publicSlug, slug), operator ? undefined : publicProfileAvailable()))
       .limit(1);
     if (!profile) throw Object.assign(new Error("Published profile not found"), { statusCode: 404 });
     const links = await db

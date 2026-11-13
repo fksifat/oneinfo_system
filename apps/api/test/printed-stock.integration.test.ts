@@ -1,3 +1,5 @@
+import { PNG } from "pngjs";
+import jsQR from "jsqr";
 import { qrUrl } from "../src/domain/card-urls.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,6 +79,33 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     return created;
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
+
+  it("limits database backup listing to a local administrator with a valid station", async () => {
+    const path = "/api/v1/production/backups";
+    const original = process.env.ONEINFO_BACKUP_DIR;
+    const directory = mkdtempSync(join(tmpdir(), "oneinfo-backup-access-"));
+    process.env.ONEINFO_BACKUP_DIR = directory;
+    try {
+      expect((await app.inject({ url: path })).statusCode).toBe(401);
+      expect((await app.inject({ url: path, headers: { authorization: headers.authorization! } })).statusCode).toBe(401);
+      expect((await app.inject({ url: path, headers, remoteAddress: "192.0.2.10" })).statusCode).toBe(403);
+      expect((await app.inject({ url: path, headers })).json().items).toEqual([]);
+      const [auditor] = await client.db.insert(schema.operators).values({ email: `backup-auditor-${randomUUID()}@example.com`, displayName: "Backup auditor", role: "AUDITOR" }).returning();
+      const { issueOperatorToken } = await import("../src/auth.js");
+      const accessToken = await issueOperatorToken({ operatorId: auditor!.id, email: auditor!.email, role: "AUDITOR" });
+      expect((await app.inject({ url: path, headers: { ...headers, authorization: `Bearer ${accessToken}` } })).statusCode).toBe(403);
+      const { config } = await import("../src/config.js");
+      const enabled = config.WORKSTATION_NFC_ENABLED;
+      config.WORKSTATION_NFC_ENABLED = false;
+      const cloudApp = (await import("../src/app.js")).buildApp();
+      try { expect((await cloudApp.inject({ url: path, headers })).statusCode).toBe(404); }
+      finally { await cloudApp.close(); config.WORKSTATION_NFC_ENABLED = enabled; }
+
+    } finally {
+      if (original === undefined) delete process.env.ONEINFO_BACKUP_DIR; else process.env.ONEINFO_BACKUP_DIR = original;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 
   it("creates the maximum batch with unique cards, all jobs and complete creation history", async () => {
     const created = await batch(1000, false);
@@ -544,6 +573,45 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
 
   }, 30000);
 
+  it("does not expose private previews to production operators and ignores caller-controlled QR origins", async () => {
+    const profile = await request("/api/v1/profiles", { publicSlug: "audit-profile-preview", displayName: "Audit Private Profile", published: false });
+    const [writer] = await client.db.insert(schema.operators).values({ email: `profile-writer-${randomUUID()}@example.com`, displayName: "Production writer", role: "PRODUCTION_OPERATOR" }).returning();
+    const { issueOperatorToken } = await import("../src/auth.js");
+    const token = await issueOperatorToken({ operatorId: writer!.id, email: writer!.email, role: "PRODUCTION_OPERATOR" });
+    for (const url of [`/api/v1/profiles/public/${profile.publicSlug}`, `/api/v1/profiles/handle/${profile.handle}`]) {
+      expect((await app.inject({url})).statusCode).toBe(404);
+      expect((await app.inject({url,headers:{authorization:`Bearer ${token}`}})).statusCode).toBe(404);
+      expect((await app.inject({url,headers})).statusCode).toBe(200);
+    }
+    const path = `/api/v1/profiles/public/${profile.publicSlug}/qr.png`;
+    expect((await app.inject({url:path})).statusCode).toBe(404);
+    await client.db.update(schema.customerProfiles).set({published:true}).where(eq(schema.customerProfiles.id,profile.id));
+    const response = await app.inject({url:path,headers:{origin:"https://attacker.example"}});
+    expect(response.statusCode).toBe(200);
+    const png=PNG.sync.read(response.rawPayload);
+    const value=jsQR(new Uint8ClampedArray(png.data),png.width,png.height)?.data;
+    const {config}=await import("../src/config.js");
+    expect(value).toBe(new URL(`/${profile.handle}`,config.PUBLIC_CARD_BASE_URL).href);
+    expect(value).not.toContain("attacker.example");
+  });
+
+  it("rejects failed-QC or unconfirmed active cards consistently on every public profile alias", async () => {
+    const card=await readyForClaim(),secret=await issue(card.id);
+    const grant=await activate(card.publicSlug,secret.secretCode);await signup(grant.claimToken,"qc-visibility@example.com");
+    const profile=(await request(`/api/v1/customer/cards/${card.publicSlug}`)).profile;
+    const urls=[`/api/v1/profiles/handle/${profile.handle}`,`/api/v1/profiles/public/${profile.publicSlug}`,`/api/v1/profiles/public/${profile.publicSlug}/contact.vcf`,`/api/v1/profiles/public/${profile.publicSlug}/qr.png`,`/api/v1/profiles/card/${card.publicSlug}`];
+    for(const qcStatus of ["FAILED","PENDING"] as const){
+      await client.db.update(schema.cards).set({qcStatus}).where(eq(schema.cards.id,card.id));
+      for(const url of urls)expect((await app.inject({url})).statusCode,url).toBe(404);
+      expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({status:"UNAVAILABLE"});
+    }
+    await client.db.update(schema.cards).set({qcStatus:"PASSED"}).where(eq(schema.cards.id,card.id));
+    await client.db.update(schema.cardBatches).set({printConfirmedAt:null}).where(eq(schema.cardBatches.id,card.batchId));
+    for(const url of urls)expect((await app.inject({url})).statusCode,url).toBe(404);
+    expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({status:"UNAVAILABLE"});
+    expect((await app.inject({method:"POST",url:`/api/v1/customer/cards/${card.publicSlug}/contact-leads`,remoteAddress:"192.0.2.50",payload:{requestId:randomUUID(),name:"Visitor",email:"visitor@example.com",consent:true}})).statusCode).toBe(404);
+  });
+
   it("hides disabled profiles consistently across handles, legacy URLs, vCards and card endpoints", async () => {
     const card = await readyForClaim(), secret = await issue(card.id);
     const grant = await activate(card.publicSlug, secret.secretCode);
@@ -620,6 +688,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const tracking = await request("/api/v1/orders/tracking", { token: placed.trackingPath.split("#track/")[1] });
     expect(tracking).toMatchObject({ activationMethod: "ORDER_SECRET", packedAt: expect.any(String) });
     expect(JSON.stringify(tracking)).not.toContain(codes[0].secretCode);
+    const invoice = await request("/api/v1/orders/invoice", { token: placed.invoicePath.split("#invoice/")[1] });
+    expect(JSON.stringify(invoice)).not.toContain(codes[0].secretCode);
   });
 
   it("binds any ready card to its code's existing temporary profile and keeps multiple profiles independently editable", async () => {
@@ -918,6 +988,9 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const secret = edit.json().path.split("#edit/")[1];
     expect((await send("POST", editor, { token: secret, profile: { displayName: "Edited Employee", company: "Untrusted Company" } }, {})).json().profile)
       .toMatchObject({ displayName: "Edited Employee", company: "Oneinfo Team" });
+    const badge = await app.inject({url:`/api/v1/profiles/public/${employee.publicSlug}/qr.png`,headers:{origin:"https://attacker.example"}});
+    const badgePng=PNG.sync.read(badge.rawPayload);
+    expect(jsQR(new Uint8ClampedArray(badgePng.data),badgePng.width,badgePng.height)?.data).toBe(`https://team.example.com/team?profile=${employee.publicSlug}`);
     const publicPortal = await app.inject({ url: "/api/v1/company/public/team.example.com", headers: { origin: "https://team.example.com" } });
     expect(publicPortal.headers["access-control-allow-origin"]).toBe("*");
     expect(publicPortal.body).not.toContain("employee@example.com");
@@ -1362,17 +1435,34 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       const payload = { ...orderPayload(), payment: { method: "BKASH", amountMinor: 56000 } };
       const reserved = await request("/api/v1/orders/reserve", payload);
       expect(reserved.status).toBe("AWAITING_PAYMENT");
+      expect(reserved.invoicePath).toBeUndefined();
+      const token = reserved.trackingPath.split("#track/")[1];
+      const invoice = (secret: string) => app.inject({ method: "POST", url: "/api/v1/orders/invoice", payload: { token: secret } });
+      expect((await invoice(token)).statusCode).toBe(404);
       expect((await request("/api/v1/orders/reserve", payload)).id).toBe(reserved.id);
       expect((await app.inject({ method: "POST", url: "/api/v1/orders/reserve", payload: { ...payload, requestId: randomUUID() } })).statusCode).toBe(409);
       expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
       expect(await client.db.select().from(schema.orderEmails)).toHaveLength(0);
       const [remaining] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
       await client.db.update(schema.products).set({ variants: remaining!.variants.map(variant => ({ ...variant, priceMinor: 60000 })) }).where(eq(schema.products.id, productId));
-      const paid = await request("/api/v1/orders", { ...payload, payment: { ...payload.payment, transactionId: "AUDITPAY01" } });
+      const submit = { ...payload, payment: { ...payload.payment, transactionId: "AUDITPAY01" } };
+      const paid = await request("/api/v1/orders", submit);
       expect(paid).toMatchObject({ id: reserved.id, status: "RECEIVED", totalMinor: 56000 });
+      expect(paid.invoiceNumber).toMatch(/^\d{8}-[A-Z0-9]{6}$/);
+      expect(paid.invoicePath).toBe(`/#invoice/${token}`);
+      expect((await request("/api/v1/orders", submit)).invoiceNumber).toBe(paid.invoiceNumber);
+      expect((await invoice(`${paid.id}.${"a".repeat(43)}`)).statusCode).toBe(404);
+      const document = await invoice(token);
+      expect(document.statusCode, document.body).toBe(200);
+      expect(document.headers["cache-control"]).toBe("no-store");
+      expect(document.json()).toMatchObject({ invoiceNumber: paid.invoiceNumber, subtotalMinor: 50000, shippingMinor: 6000, totalMinor: 56000,
+        items: [{ name: "Test card", variantName: "Standard", quantity: 1, unitPriceMinor: 50000 }] });
+      expect(document.body).not.toContain("buyer@example.com");
+      expect(document.body).not.toContain("AUDITPAY01");
       const cancelUrl = `/api/v1/orders/admin/${paid.id}/cancel`;
       expect((await app.inject({ method: "POST", url: cancelUrl, headers, payload: { reason: "Customer cancelled" } })).statusCode).toBe(409);
       await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
+      expect((await invoice(token)).json().status).toBe("CANCELLED");
       await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
       expect((await client.db.select().from(schema.products).where(eq(schema.products.id, productId)))[0]!.variants[0]!.stockQuantity).toBe(1);
       expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${paid.id}/fulfillment`, headers, payload: { status: "PROCESSING" } })).statusCode).toBe(409);

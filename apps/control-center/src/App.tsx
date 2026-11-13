@@ -9,14 +9,14 @@ import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "./api.js";
 import { ProfilePhoto } from "./ProfilePhoto.js";
-import { ProfileView } from "./ProfileView.js";
+import { ProfileView, ProfileSkeleton } from "./ProfileView.js";
 import { CardPassport } from "./CardPassport.js";
 import { CardPortal } from "./CardPortal.js";
 import { TeamAdmin, TeamPortal } from "./TeamPortal.js";
 import { ActivationCode } from "./ActivationCode.js";
 import { CreateProfileSchema, UpdateProfileSchema } from "@oneinfo/contracts";
 
-type View = "orders" | "tracking" | "products" | "reviews" | "overview" | "profiles" | "cards" | "assigned" | "batches" | "stations" | "audit" | "production" | "companies";
+type View = "orders" | "custom-orders" | "tracking" | "products" | "reviews" | "overview" | "profiles" | "cards" | "assigned" | "batches" | "stations" | "audit" | "production" | "companies";
 const nav: { id: View; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "◫" }, { id: "products", label: "Products", icon: "▣" },
   { id: "orders", label: "Orders", icon: "≡" }, { id: "tracking", label: "Card pipeline", icon: "→" }, { id: "reviews", label: "Reviews", icon: "☆" }, { id: "profiles", label: "Client profiles", icon: "◎" },
@@ -134,6 +134,7 @@ function NavIcon({ name }: { name: string }) {
     {name === "overview" ? <><rect x="3.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="3.5" width="7" height="7" rx="1.5" /><rect x="3.5" y="13.5" width="7" height="7" rx="1.5" /><rect x="13.5" y="13.5" width="7" height="7" rx="1.5" /></> : null}
     {name === "products" ? <><path d="m12 3.8 8.2 4.3v7.8L12 20.2l-8.2-4.3V8.1L12 3.8Z" /><path d="m3.9 8.2 8.1 4.3 8.1-4.3M12 12.5v7.3" /></> : null}
     {name === "orders" ? <><path d="M7 3.5h10l3 3v14H4v-17h3Z" /><path d="M8 10h8M8 14h8M8 18h5" /></> : null}
+    {name === "custom-orders" ? <path d="m12 2 2.4 5.6L20 10l-4.2 4 1.2 5.8L12 17l-5 2.8 1.2-5.8L4 10l5.6-2.4L12 2Z" /> : null}
     {name === "tracking" ? <><path d="M4 12h14m-5-5 5 5-5 5" /><circle cx="4" cy="12" r="1.5" /></> : null}
     {name === "reviews" ? <path d="m12 3.5 2.6 5.3 5.9.9-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.9L12 3.5Z" /> : null}
     {name === "profiles" ? <><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20c.3-3.4 2.1-5.2 5.5-5.2s5.2 1.8 5.5 5.2M16 5.3a3.2 3.2 0 0 1 0 6.1M17 14.9c2.2.5 3.4 2.2 3.6 5.1" /></> : null}
@@ -150,28 +151,57 @@ function PublicProfile({ slug }: { slug: string }) {
   const [data, setData] = useState<{ profile: Profile; links: ProfileLink[] } | null>(null);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    api<{ profile: Profile; links: ProfileLink[] }>(`/api/v1/profiles/public/${encodeURIComponent(slug)}`)
+  const loadPublic = useCallback(() => {
+    setError("");
+    const token = localStorage.getItem("oneinfo.admin.token") ?? undefined;
+    api<{ profile: Profile; links: ProfileLink[] }>(`/api/v1/profiles/public/${encodeURIComponent(slug)}`, token)
       .then(setData)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Profile unavailable"));
   }, [slug]);
 
-  if (error) return <div className="profile-page"><div className="profile-error"><span>ONEINFO</span><h1>Profile unavailable</h1><p>{error}</p></div></div>;
-  if (!data) return <div className="profile-page"><div className="profile-loader">Loading Oneinfo profile…</div></div>;
+  useEffect(() => {
+    loadPublic();
+  }, [loadPublic]);
+
+  if (!data) return <ProfileSkeleton error={error} onRetry={loadPublic} />;
   return <ProfileView data={data} />;
 }
 
 function NamedProfile({ handle }: { handle: string }) {
-  const [data, setData] = useState<(import("./ProfileView.js").PublicProfileData & { cardSlug: string | null })>();
+  const [data, setData] = useState<(import("./ProfileView.js").PublicProfileData & {
+    cardSlug: string | null;
+    canShareContact?: boolean;
+    crmEnabled?: boolean;
+  })>();
   const [error, setError] = useState("");
-  useEffect(() => {
-    let current = true;
-    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`).then(result => { if (current) setData(result); })
-      .catch(() => { if (current) setError("This profile is unavailable. Check the link or contact the card owner."); });
-    return () => { current = false; };
+
+  const loadNamed = useCallback(() => {
+    setError("");
+    const token = localStorage.getItem("oneinfo.admin.token") ?? undefined;
+    api<NonNullable<typeof data>>(`/api/v1/profiles/handle/${encodeURIComponent(handle)}`, token)
+      .then(result => setData(result))
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : "This profile is unavailable. Check the link or contact the card owner."));
   }, [handle]);
-  if (!data) return <main className="card-portal"><section><h1>{error ? "Profile unavailable" : "Opening profile…"}</h1>{error && <p role="alert">{error}</p>}<a href="/">Oneinfo home</a></section></main>;
-  return data.cardSlug ? <CardPortal slug={data.cardSlug} /> : <ProfileView data={data} />;
+
+  useEffect(() => {
+    loadNamed();
+  }, [loadNamed]);
+
+  if (!data) return <ProfileSkeleton error={error} onRetry={loadNamed} />;
+  return data.cardSlug ? (
+    <CardPortal
+      slug={data.cardSlug}
+      initialCard={{
+        status: "PROFILE",
+        profile: data.profile,
+        links: data.links,
+        canShareContact: data.canShareContact,
+        crmEnabled: data.crmEnabled,
+      }}
+    />
+  ) : (
+    <ProfileView data={data} />
+  );
 }
 
 export function App() {
@@ -431,7 +461,7 @@ export function App() {
         </section> : null}
 
         {view === "products" ? <Products token={token} /> : null}
-        {view === "orders" ? <Orders token={token} settingsOpen={ordersSettingsOpen} onSettingsOpenChange={setOrdersSettingsOpen} /> : null}
+        {view === "orders" || view === "custom-orders" ? <Orders token={token} customOnly={view === "custom-orders"} settingsOpen={ordersSettingsOpen} onSettingsOpenChange={setOrdersSettingsOpen} /> : null}
         {view === "tracking" ? <><WorkQueue token={token} /><AdminTrackingHub token={token} /></> : null}
         {view === "reviews" ? <Reviews token={token} /> : null}
         {view === "companies" ? <TeamAdmin token={token} /> : null}
@@ -494,15 +524,13 @@ export function App() {
                   </div>
                   <div className="tile-actions">
                     <button type="button" onClick={() => void editProfile(profile)}>Edit</button>
-                    {profile.published ? (
-                      <a
-                        href={profile.handle ? "/" + profile.handle : "?profile=" + profile.publicSlug}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open profile ↗
-                      </a>
-                    ) : null}
+                    <a
+                      href={profile.handle ? "/" + profile.handle : "?profile=" + profile.publicSlug}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {profile.published ? "Open profile ↗" : "Preview profile ↗"}
+                    </a>
                   </div>
                 </article>
               ))}

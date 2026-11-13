@@ -1,7 +1,8 @@
 import { AccountAccess, AccountSettings } from "./AccountAccess.js";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { api } from "./api.js";
-import { customerApi, LeadInbox, ProfileAnalytics } from "./CardPortal.js";
+import { customerApi } from "./customer-api.js";
+import { LeadInbox, ProfileAnalytics } from "./CardPortal.js";
 import { ProfileView, type PublicProfileData } from "./ProfileView.js";
 import { readEmployeeCsv } from "./company-csv.js";
 
@@ -200,7 +201,7 @@ function CompanyWorkspace() {
     return matchesSearch && matchesStatus;
   }) ?? [];
 
-  return <main className="card-portal card-portal-studio"><section className="studio-container">
+  return <main className="card-portal card-portal-studio team-workspace-studio"><section className="studio-container">
     <header className="studio-header">
       <div className="studio-header-main">
         <div className="studio-badge-row">
@@ -690,7 +691,7 @@ function EmployeeEditor({ secret }: { secret: string }) {
     else setLinks(prev => [...prev, { label: "Portfolio", url: "https://" }]);
   }
 
-  return <main className="card-portal card-portal-studio"><section className="studio-container">
+  return <main className="card-portal card-portal-studio team-workspace-studio"><section className="studio-container">
     <header className="studio-header">
       <div className="studio-header-main">
         <div className="studio-badge-row">

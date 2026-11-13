@@ -97,7 +97,7 @@ button { border: 0; cursor: pointer; }
 .art-light { background: #e8e5db; }
 .art-dark { background: #213b3a; }
 .art-metal { background: linear-gradient(135deg, #aaa89f, #e4e2d8 50%, #777870); }
-.mini-product-card { width: 76%; aspect-ratio: 1.585; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(17,43,43,0.24); transform: rotate(-8deg); transition: transform 0.35s ease; }
+.mini-product-card { width: 76%; aspect-ratio: 86 / 55; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; box-shadow: 0 25px 50px rgba(17,43,43,0.24); transform: rotate(-8deg); transition: transform 0.35s ease; }
 .product:hover .mini-product-card { transform: rotate(-3deg) translateY(-7px); }
 .mini-product-card span { font-size: 0.62rem; font-weight: 900; letter-spacing: 0.14em; }
 .mini-product-card strong { margin-top: auto; font-size: 1.05rem; }
@@ -210,7 +210,7 @@ details p { max-width: 700px; padding: 0 45px 24px 0; line-height: 1.7; }
 .modal-card > .icon-button { position: absolute; right: 20px; top: 20px; }
 .modal-card h2 { font-size: clamp(2.3rem, 5vw, 4rem); }
 .tap-demo { min-height: 300px; display: flex; justify-content: center; align-items: center; position: relative; }
-.demo-card { width: 230px; aspect-ratio: 1.585; padding: 18px; border-radius: 14px; background: var(--ink); color: white; transform: rotate(-8deg); display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow); }
+.demo-card { width: 230px; aspect-ratio: 86 / 55; padding: 18px; border-radius: 14px; background: var(--ink); color: white; transform: rotate(-8deg); display: flex; flex-direction: column; justify-content: space-between; box-shadow: var(--shadow); }
 .demo-card span { font-size: 0.6rem; letter-spacing: 0.12em; }
 .demo-phone { width: 125px; height: 240px; margin-left: -25px; border: 6px solid #071d1d; border-radius: 24px; background: white; transform: rotate(6deg); box-shadow: var(--shadow); padding: 10px; }
 .demo-screen { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; }
@@ -653,6 +653,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .order-coupon-status:empty { display: none; }
 
 .tracking-portal-card { max-width: 1020px; }
+.tracking-invoice, .order-receipt-document { margin-bottom: 16px; }
 .tracking-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 20px; }
 .tracking-live-pill { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 100px; background: var(--ink); color: var(--lime); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .tracking-lookup-form { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 12px; padding: 18px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--cream); }

@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { StoreOrder } from "@oneinfo/contracts";
 import { api } from "./api.js";
 import { escapePrintText as escape } from "./print-artwork.js";
+import { invoiceMarkup } from "../../../sites/storefront/invoice.js";
+import invoiceStyles from "../../../sites/storefront/invoice.css?inline";
 
 export function OrderPacking({ order, token, initiallyOpen, onChange }: { order: StoreOrder; token: string; initiallyOpen: boolean; onChange: () => Promise<void> }) {
   return order.activationMethod === "ORDER_SECRET"
@@ -24,6 +26,31 @@ function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
     try { await action(); } catch (e) { setError(e instanceof Error ? e.message : "Could not update packing."); }
     finally { setBusy(false); }
   }
+  function printInvoice() {
+    if (busy || !paid || !order.invoiceNumber) return;
+    const tab = window.open("", "_blank", "popup");
+    if (!tab) { setError("Allow popups to print the invoice."); return; }
+    tab.opener = null;
+    tab.document.body.textContent = "Loading invoice…";
+    void run(async () => {
+      try {
+        const { items } = await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" });
+        if (!items.some(slot => slot.secretCode)) throw new Error("This order has no unused activation codes.");
+        if (tab.closed) return;
+        tab.document.write(`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+          <title>Invoice ${escape(order.invoiceNumber ?? "")} | Oneinfo</title><style>
+          *,*::before,*::after{box-sizing:border-box}body{margin:20px;font:15px/1.45 system-ui;background:#f2f6f3}
+          .invoice-actions button{font:inherit;padding:8px 14px;cursor:pointer}
+          ${invoiceStyles}</style><main><article class="invoice-card">${invoiceMarkup(order, items)}
+          <div class="invoice-actions"><button type="button">Print or save PDF</button></div></article></main></html>`);
+        tab.document.close();
+        tab.document.querySelector("button")?.addEventListener("click", () => tab.print());
+      } catch (error) {
+        tab.close();
+        throw error;
+      }
+    });
+  }
   function printCodes() {
     const tab = window.open("", "_blank", "popup");
     if (!tab) { setError("Allow popups to print activation codes."); return; }
@@ -43,6 +70,7 @@ function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
     <button type="button" disabled={busy || !paid} onClick={() => void run(async () => {
       setCodes((await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" })).items);
     })}>{busy ? "Loading…" : codes ? "Refresh secret codes" : "Show secret codes"}</button>
+    {order.invoiceNumber && <button type="button" disabled={busy || !paid} onClick={printInvoice}>Print invoice with activation codes</button>}
     {!paid && <p>Verify payment before accessing codes or confirming packing.</p>}
     {codes && <><ul>{codes.map(slot => <li key={slot.id}>
       <span>Profile {slot.lineIndex + 1}.{slot.unitIndex + 1}</span> · {slot.redeemedAt ? "Activated" : <code>{slot.secretCode}</code>}

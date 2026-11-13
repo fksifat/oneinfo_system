@@ -5,7 +5,7 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
   bkashNumber, CodAdvanceSchema, defaultCodAdvanceTaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
-  ShippingRatesSchema, StoreCouponSchema, variantPrice, AdminOrderSearchSchema, OrderFulfillmentSchema,
+  ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
   type AdminOrderSearch, type OrderReceipt,
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
@@ -19,7 +19,7 @@ import { qrUrl } from "../domain/card-urls.js";
 import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
 import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
-import { orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
+import { invoicePath, orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
 import { attemptOrderEmail, queueOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
 import { dispatchOrderEmail } from "../domain/order-email-worker.js";
 
@@ -38,6 +38,7 @@ function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
   return { id, activationMethod, packedAt: packedAt?.toISOString() ?? null, paymentMethod, paymentAmountMinor,
     ...(paymentAmountMinor > 0 && { paymentStatus: paymentVerifiedAt ? "VERIFIED" : "PENDING_VERIFICATION" }),
     ...orderTracking(order), trackingPath: trackingPath(id), shippingZone, subtotalMinor, shippingMinor,
+    ...(order.invoiceNumber && { invoicePath: invoicePath(id) }),
     couponCode, discountMinor, totalMinor: subtotalMinor + shippingMinor - discountMinor };
 }
 
@@ -244,6 +245,22 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     return reply.code(404).send({ message: "This private tracking link is invalid." });
   });
 
+  app.post("/invoice", { bodyLimit: 1024 }, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { token } = parseBody(z.object({ token: z.string().max(100) }), request.body);
+    const id = trackingOrderId(token);
+    if (id) {
+      const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
+      if (order?.invoiceNumber && !order.awaitingPayment) {
+        const { invoiceNumber, status, createdAt, subtotalMinor, shippingMinor, discountMinor, totalMinor, paymentMethod, paymentAmountMinor, paymentStatus } = receipt(order);
+        return { id, invoiceNumber, status, createdAt, subtotalMinor, shippingMinor, discountMinor, totalMinor, paymentMethod,
+          paymentAmountMinor, paymentStatus,
+          items: order.items.map(({ name, variantName, quantity, unitPriceMinor }) => ({ name, variantName, quantity, unitPriceMinor })) };
+      }
+    }
+    return reply.code(404).send({ message: "This invoice is unavailable." });
+  });
+
   app.post("/admin/:id/fulfillment", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
@@ -343,7 +360,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   } });
 
-  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 32 * 1024 }, async (request, reply) => {
+  for (const route of ["/", "/reserve"]) app.post(route, { bodyLimit: 512 * 1024 }, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
     const reserving = route === "/reserve";
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
@@ -390,7 +407,8 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         const variant = product?.variants.find(item => item.id === line.variantId);
         if (!product || !variant?.available) conflict("An item in your cart is no longer available.");
         if (variant.stockQuantity !== undefined && line.quantity > variant.stockQuantity) conflict("There are not enough units of an item in your cart.");
-        const unitPriceMinor = variantPrice(variant);
+        const hasLogo = line.customization?.hasOneinfoLogo !== false && line.customization?.brandingMode !== "without-logo";
+        const unitPriceMinor = variantPriceForBranding(variant, hasLogo);
         if (unitPriceMinor !== line.unitPriceMinor) conflict("An item price changed. Review your updated cart and try again.");
         return { ...line, unitPriceMinor, name: product.name, variantName: variant.name };
       });

@@ -1,3 +1,31 @@
+# Full project audit — 13 November 2026
+
+Pulled `origin/main` through `a4c80ed` before review. Preserved local editor settings and existing customer, card, order and media data. Reviewed storefront checkout/customization/invoices, Admin and customer/company profiles, authentication, activation and QR/NFC production, local backups, dependencies, migrations and deployment safeguards.
+
+## Confirmed findings
+
+| Priority | Problem | Fix and evidence |
+|---|---|---|
+| P1 | Public profile preview accepted any operator token, allowing production-only roles to read unpublished profiles despite the private profile API's reader-role restrictions. | Limit optional preview authentication to SUPER_ADMIN/AUDITOR; a production-operator token receives only normal public visibility. Integration checks private handle and slug routes with anonymous, writer and administrator access. |
+| P1 | Recent changes weakened QC/print checks with OR conditions and activation-only bypasses. A failed-QC or unconfirmed active card could show a profile through one alias while contact/vCard routes rejected it. | Restore the common publication, active owner/employee, QC-passed and print-confirmed predicate across named profiles, card scans, vCards, QR badges and contact sharing. Regressions cover failed/pending QC and missing print confirmation. A read-only live aggregate found zero active cards with inconsistent QC/print flags; no data repair was needed. |
+| P2 | Employee QR badges used the request Origin as their destination and ignored profile/account visibility. Direct downloads could lead to the wrong portal; caller-controlled origins could change the encoded link. | Derive destinations from the employee's registered company domain or the configured public card origin/handle, and apply the shared public visibility guard. PNG decoding tests verify both canonical and branded destinations despite an unrelated supplied Origin. |
+| P2 | Optional operator authentication swallowed database failures along with invalid credentials. | Only authentication/role rejection falls back to anonymous access; infrastructure failures propagate to the normal error handler. Auth-outage regression verifies the error is preserved. |
+
+Company suspension/reassignment was also checked: disabling an employee intentionally suspends their cards, and assigning that card to a different active employee is a supported handover. That behavior was retained and its existing workflow regression passes.
+
+## Verification and remaining limits
+
+- Typecheck and full build pass; 129 API unit checks, desktop bridge tests and 32 launcher/storefront/hosting checks pass.
+- 69 disposable PostgreSQL workflows plus guarded QR/NFC smoke pass, including stock deletion protection, activation, payment/packing/invoice privacy, customer contact sharing, company handover and database backup access.
+- Chrome checks pass at 320/390/768/1440px across Admin, storefront, production/print/backup screens, profile activation/editing/photo upload, contact exchange and company management. No synthetic payments, emails or tag writes were sent to live services.
+- Android unit/debug APK build and deployment/rollback/archive safeguards pass. Drizzle migration generation was checked in an ignored temporary directory; fresh migrations and reconciliation run only against disposable databases.
+- Production dependency audit: **0 vulnerabilities**. **4 moderate development-only audit entries remain** in the old esbuild branch of Drizzle's loader (one underlying advisory). npm's proposed automatic fix downgrades Drizzle across a breaking version boundary; no unvalidated dependency override or forced downgrade was committed. Keep migration/development tooling private while awaiting a compatible upstream update.
+- Physical printer/NFC/camera hardware, other desktop operating systems, provider delivery and a full VPS disaster recovery were not exercised in this audit. Database restore was separately verified when the local backup feature was introduced; current backups remain intact.
+
+No application schema migration or customer-data rewrite is required by these fixes. Historical audit results follow below.
+
+---
+
 # Production management follow-up — 9 November 2026
 
 Reviewed Admin inventory/assigned cards, batch visibility and reprinting, workstation launch/connection guidance, station revocation/recovery, and list refresh/pagination. Changes preserve existing assignment, print-confirmation, deletion and activation guards; no business data migration is required.

@@ -96,9 +96,11 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     }
   });
 
-  for (const kind of ["upload", "profile", "profile-claim", "profile-employee"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: kind === "upload" ? maxMediaBytes : 2 * 1024 * 1024 }, async (request, reply) => {
+  for (const kind of ["upload", "profile", "profile-claim", "profile-employee", "custom-logo"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: kind === "upload" ? maxMediaBytes : 2 * 1024 * 1024 }, async (request, reply) => {
     if (kind === "upload") await requireOperator(request, ["SUPER_ADMIN"]);
-    else {
+    else if (kind === "custom-logo") {
+      if (!await allowAuthAttempt(`custom-logo:${request.ip}`, 60, 60 * 60_000)) return reply.code(429).header("Retry-After", "3600").send({ message: "Photo upload limit reached. Please try again in an hour." });
+    } else {
       let subject: string;
       if (kind === "profile-employee") {
         const rawToken = request.headers.authorization?.replace(/^Bearer /, "") ?? "";
@@ -124,7 +126,8 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
       if (!await allowAuthAttempt(`profile-photo:${subject}`, 30, 60 * 60_000)) return reply.code(429).header("Retry-After", "3600").send({ message: "Photo upload limit reached. Please try again in an hour." });
     }
     const extension = request.params.extension.toLowerCase();
-    if (kind !== "upload" && !["png", "jpg", "webp"].includes(extension)) return reply.code(415).send({ message: "Choose a JPEG, PNG or WebP photo" });
+    if (kind === "custom-logo" && !["png", "jpg", "webp", "svg"].includes(extension)) return reply.code(415).send({ message: "Choose a PNG, JPEG, WebP or SVG logo" });
+    if (kind !== "upload" && kind !== "custom-logo" && !["png", "jpg", "webp"].includes(extension)) return reply.code(415).send({ message: "Choose a JPEG, PNG or WebP photo" });
     if (!Object.hasOwn(formats, extension)) return reply.code(415).send({ message: "Unsupported media format" });
     if (!Buffer.isBuffer(request.body) || request.body.length === 0) return reply.code(400).send({ message: "Choose a media file to upload" });
     const body = request.body;

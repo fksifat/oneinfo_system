@@ -1,3 +1,4 @@
+import { databaseBackupRoutes } from "./routes/database-backups.js";
 import { accountRecoveryRoutes } from "./routes/account-recovery.js";
 import cors from "@fastify/cors";
 import Fastify from "fastify";
@@ -56,6 +57,7 @@ export function buildApp(https?: ServerOptions) {
   app.register(adminRoutes, { prefix: "/api/v1/admin" });
   if (!process.env.VERCEL && config.WORKSTATION_NFC_ENABLED) {
     app.register(localNfcRoutes, { prefix: "/api/v1/local-nfc" });
+    app.register(databaseBackupRoutes, { prefix: "/api/v1/production/backups" });
   }
 
   app.setErrorHandler((error, request, reply) => {

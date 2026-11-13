@@ -299,3 +299,24 @@ This is a working foundation, not a production launch. The next milestones are:
 Before production, copy `.env.example` to `.env`, replace `JWT_SECRET`, and set the real Oneinfo public-card domain.
 
 Admin Production management: **Cards & inventory** holds unassigned printed stock and supports server-side search by card code, QR/NFC link, client name or batch code, plus stock-state filters. **Assigned cards** keeps linked client/company cards separate. New stock points operators to NFC/QC or the order secret slip; existing legacy card codes remain available under “Existing card code”. **Production batches** can show all, awaiting-print or confirmed batches; only confirmed batches can be reprinted, with Select all printable/Clear selection controls. Unconfirmed stock remains excluded from inventory and customer activation. **Stations** supports name/code and connection-state filters; unfinished job recovery explicitly revokes station access. The NFC/QR page provides one console launch entry and concise phone pairing guidance. Admin refresh loads the active list and shared summary instead of every list every five seconds.
+
+### Local database backups from the production console
+
+Open **Backups → Back up database & download** on the production PC. The console first saves a PostgreSQL custom-format `.dump` and a SHA-256 manifest in `.oneinfo/backups/database`, then downloads a verified copy to the browser's Downloads folder. The Backups page shows the actual directory, database/source, time, size and checksum, and lets you download any of the latest 20 snapshots again. Older completed files stay on disk; there is no automatic deletion. A failed browser download leaves the PC copy intact. Keep a second copy on a separate drive.
+
+Take a backup **after generating your final QR batch**, again after print confirmation/NFC/QC, and regularly after orders or customer activations. A snapshot contains database state at backup time; later changes require a newer snapshot. Generation and other normal writes can continue while PostgreSQL takes the consistent snapshot.
+
+This feature requires a local administrator and an active registered station. It is available only through the workstation API on the PC's loopback connection; LAN phone requests and the public VPS API cannot export the database. The dump contains private account/customer data and encrypted activation records; it is **not password-encrypted**. The PC directory/files use owner-only permissions where supported. Do not publish the dump, add it to Git, or store it in a shared public folder.
+
+The existing VPS setup uses `ONEINFO_DATABASE_SSH` and `ONEINFO_DATABASE_CONTAINER`, running the database container's matching `pg_dump` over the already trusted SSH connection; no PostgreSQL client installation on the PC is required. Local launcher PostgreSQL uses Docker Compose. Other database connections require a compatible `pg_dump` client in PATH. `ONEINFO_BACKUP_DIR` can optionally select another private local directory/drive; restart Oneinfo after changing it.
+
+A database dump includes all database tables, migration history, card links and stored QR images. It does **not** contain uploaded media files, `.env`/`.env.vps`, SSH keys, or the workstation's `.oneinfo/nfc-state.bin` and `.oneinfo/lan-identity.json`. Back those up separately and protect the existing `JWT_SECRET`: encrypted order activation codes depend on that original key. Keep the database and its matching media/configuration backups together. There is no destructive restore button in the console.
+
+To verify recovery, use PostgreSQL tools matching the dump's server version (the current deployment uses PostgreSQL 17) and restore into a **new, separate database**, never an existing production database. For a separate local test using this project's PostgreSQL container:
+
+```bash
+docker compose exec -T postgres createdb -U oneinfo oneinfo_restore_check
+docker compose exec -T postgres pg_restore --exit-on-error --single-transaction --no-owner --no-privileges -U oneinfo -d oneinfo_restore_check < /path/to/backup.dump
+```
+
+The redirection example uses Bash/macOS/Linux; on Windows use a binary-safe input stream, or copy the file into the test container and pass its filename to `pg_restore`. Check tables, QR links and migration history before deliberately switching an app to the restored database. Retain the original dump and the live database while checking recovery. Do not use `--clean` against a running production database.
