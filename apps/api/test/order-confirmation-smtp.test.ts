@@ -23,7 +23,7 @@ it("sends an inline logo and escaped receipt once, with an accurate pending paym
     deliveryAddress: { district: "Dhaka", addressLine: "House 12 <West>" },
     items: [{ productId: "p", variantId: "v", name: "Essential & Co", variantName: "White", quantity: 1, unitPriceMinor: 49900 }],
     shippingZone: "subDhaka", subtotalMinor: 49900, shippingMinor: 10000, totalMinor: 54910,
-    couponCode: "SAVE10", discountMinor: 4990,
+    couponCode: "SAVE10", discountMinor: 4990, invoiceNumber: "20261113-ABC123", activationMethod: "ORDER_SECRET",
   };
 
   expect(await sendOrderConfirmation(order, true)).toBe("accepted");
@@ -41,8 +41,17 @@ it("sends an inline logo and escaped receipt once, with an accurate pending paym
   expect(message.html).toContain("Essential &amp; Co");
   expect(message.html).toContain("House 12 &lt;West&gt;");
   expect(message.html).toContain("bKash payment pending verification: BDT 100.00");
+  expect(message.html).toContain('bgcolor="#173a34"');
+  expect(message.html).toContain("Set up your card after delivery");
+  expect(message.html).toContain("20261113-ABC123");
   expect(message.text).toContain("Remaining on delivery after verification: BDT 449.10");
   expect(message.html).toMatch(/href="https:\/\/www\.oneinfo\.online\/#track\/00000000-0000-4000-8000-000000000001\.[a-zA-Z0-9_-]{43}"/);
+  expect(message.html).toMatch(/href="https:\/\/www\.oneinfo\.online\/#invoice\/00000000-0000-4000-8000-000000000001\.[a-zA-Z0-9_-]{43}"/);
+  expect(message.html.indexOf("Track your order")).toBeLessThan(message.html.indexOf("Order summary"));
+  expect(await sendOrderConfirmation({ ...order, paymentStatus: "VERIFIED" }, true, true)).toBe("accepted");
+  const verified = sendMail.mock.lastCall![0];
+  expect(verified.html).toContain("Verified bKash payment: BDT 100.00");
+  expect(verified.text).toContain("Remaining on delivery: BDT 449.10");
   sendMail.mockRejectedValueOnce(new Error("SMTP unavailable"));
   expect(await sendOrderConfirmation(order, true)).toBe("failed");
 });

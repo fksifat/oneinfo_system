@@ -19,7 +19,7 @@ import { qrUrl } from "../domain/card-urls.js";
 import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
 import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
-import { orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
+import { invoicePath, orderTracking, trackingOrderId, trackingPath } from "../domain/order-tracking.js";
 import { attemptOrderEmail, queueOrderEmail, orderEmailHistory, orderEmailKinds } from "../domain/order-email-history.js";
 import { dispatchOrderEmail } from "../domain/order-email-worker.js";
 
@@ -38,6 +38,7 @@ function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
   return { id, activationMethod, packedAt: packedAt?.toISOString() ?? null, paymentMethod, paymentAmountMinor,
     ...(paymentAmountMinor > 0 && { paymentStatus: paymentVerifiedAt ? "VERIFIED" : "PENDING_VERIFICATION" }),
     ...orderTracking(order), trackingPath: trackingPath(id), shippingZone, subtotalMinor, shippingMinor,
+    ...(order.invoiceNumber && { invoicePath: invoicePath(id) }),
     couponCode, discountMinor, totalMinor: subtotalMinor + shippingMinor - discountMinor };
 }
 
@@ -242,6 +243,22 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       }
     }
     return reply.code(404).send({ message: "This private tracking link is invalid." });
+  });
+
+  app.post("/invoice", { bodyLimit: 1024 }, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const { token } = parseBody(z.object({ token: z.string().max(100) }), request.body);
+    const id = trackingOrderId(token);
+    if (id) {
+      const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
+      if (order?.invoiceNumber && !order.awaitingPayment) {
+        const { invoiceNumber, status, createdAt, subtotalMinor, shippingMinor, discountMinor, totalMinor, paymentMethod, paymentAmountMinor, paymentStatus } = receipt(order);
+        return { id, invoiceNumber, status, createdAt, subtotalMinor, shippingMinor, discountMinor, totalMinor, paymentMethod,
+          paymentAmountMinor, paymentStatus,
+          items: order.items.map(({ name, variantName, quantity, unitPriceMinor }) => ({ name, variantName, quantity, unitPriceMinor })) };
+      }
+    }
+    return reply.code(404).send({ message: "This invoice is unavailable." });
   });
 
   app.post("/admin/:id/fulfillment", async request => {

@@ -52,7 +52,7 @@ export async function sendTransactionalEmail({ to, subject, text, html, idempote
   }
 }
 
-export function renderOneinfoEmail(order: { id: string; customer: { name: string } }, status: string, title: string, intro: string, body: string) {
+export function renderOneinfoEmail(order: { id: string; customer: { name: string } }, status: string, title: string, intro: string, body: string, headerAction = "") {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeEmailHtml(title)}</title></head>
 <body style="margin:0;background:#f9f8f5;color:#121316;font:15px/1.5 Arial,Helvetica,sans-serif">
@@ -64,6 +64,7 @@ export function renderOneinfoEmail(order: { id: string; customer: { name: string
   <p style="margin:22px 0 6px;color:#c8a165;font-size:12px;font-weight:bold;letter-spacing:1px">${escapeEmailHtml(status)}</p>
   <h1 style="margin:0;font-size:30px;line-height:1.15">${escapeEmailHtml(title)}</h1>
   <p style="margin:12px 0 0">Hi ${escapeEmailHtml(order.customer.name)}, ${escapeEmailHtml(intro)}</p>
+  ${headerAction}
 </td></tr>
 <tr><td style="padding:24px">
   <p style="margin:0 0 20px;color:#6b675e;font-size:13px;overflow-wrap:anywhere">Order ID<br><strong style="color:#121316">${escapeEmailHtml(order.id)}</strong></p>

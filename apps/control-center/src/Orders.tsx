@@ -385,6 +385,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                   <span className="order-meta-phone">{order.customer.phone}</span>
                   <span className="order-meta-sep" aria-hidden="true">·</span>
                   <time className="order-meta-date">{new Date(order.createdAt).toLocaleString("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })}</time>
+                  {order.invoiceNumber && <><span className="order-meta-sep" aria-hidden="true">·</span><span>Invoice {order.invoiceNumber}</span></>}
                 </small>
               </span>
             </div>
@@ -401,6 +402,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
           </summary>
 
           <div className="store-order-content">
+            {order.invoicePath && <p><a className="button-action button-action-primary" href={new URL(order.invoicePath, import.meta.env.VITE_STOREFRONT_URL || "http://127.0.0.1:5175").href} target="_blank" rel="noreferrer">View invoice</a></p>}
             <div className="order-work-panels">
               {!order.invoiceNumber && <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
                 startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />}

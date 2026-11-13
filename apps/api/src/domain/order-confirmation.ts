@@ -1,6 +1,6 @@
 import type { StoreOrder } from "@oneinfo/contracts";
 import { escapeEmailHtml as escapeHtml, renderOneinfoEmail, sendTransactionalEmail, transactionalEmailEnabled, usesBrevoSmtp } from "./transactional-email.js";
-import { trackingUrl } from "./order-tracking.js";
+import { invoicePath, trackingUrl } from "./order-tracking.js";
 
 export const confirmationEmailEnabled = transactionalEmailEnabled;
 const money = (minor: number) => `BDT ${(minor / 100).toFixed(2)}`;
@@ -21,12 +21,14 @@ export async function sendOrderConfirmation(order: StoreOrder, created: boolean,
     ["Shipping", money(order.shippingMinor)],
     [payment > 0 ? "Order total" : "Total due on delivery", money(order.totalMinor)],
   ];
+  const verified = order.paymentStatus === "VERIFIED" || Boolean(order.paymentVerifiedAt);
   const paymentNotes = payment > 0 ? [
-    `bKash payment pending verification: ${money(payment)}`,
-    ...(order.totalMinor > payment ? [`Remaining on delivery after verification: ${money(order.totalMinor - payment)}`] : []),
+    `${verified ? "Verified bKash payment" : "bKash payment pending verification"}: ${money(payment)}`,
+    ...(order.totalMinor > payment ? [`${verified ? "Remaining on delivery" : "Remaining on delivery after verification"}: ${money(order.totalMinor - payment)}`] : []),
   ] : [];
   const paymentMethod = order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery";
   const link = trackingUrl(order.id);
+  const invoice = link && order.invoiceNumber ? new URL(invoicePath(order.id), link).href : undefined;
   const text = [
     "Oneinfo received your order.",
     `Order ID: ${order.id}`,
@@ -38,13 +40,14 @@ export async function sendOrderConfirmation(order: StoreOrder, created: boolean,
     ...paymentNotes,
     "",
     `Payment method: ${paymentMethod}`,
+    ...(invoice ? [`View invoice: ${invoice}`] : []),
     ...(link ? [`Track your order: ${link}`] : []),
   ].join("\n");
   const sent = await sendTransactionalEmail({
     to: order.customer.email,
     subject: "Your Oneinfo order confirmation",
     text,
-    html: renderOrderEmail(order, totals, paymentMethod, paymentNotes, link),
+    html: renderOrderEmail(order, totals, paymentMethod, paymentNotes, link, invoice),
     idempotencyKey: `oneinfo-order/${order.id}`,
   });
   return sent ? "accepted" : "failed";
@@ -78,26 +81,39 @@ export async function sendPaymentVerifiedEmail(order: Pick<StoreOrder, "id" | "c
   });
 }
 
-function renderOrderEmail(order: StoreOrder, totals: ReadonlyArray<readonly [string, string]>, paymentMethod: string, paymentNotes: string[], tracking?: string) {
+function renderOrderEmail(order: StoreOrder, totals: ReadonlyArray<readonly [string, string]>, paymentMethod: string, paymentNotes: string[], tracking?: string, invoice?: string) {
   const items = order.items.map(item => `<tr>
-    <td style="padding:12px 0;border-bottom:1px solid #e2e8df"><strong>${escapeHtml(item.name)}</strong><br>
-      <span style="color:#526460">${escapeHtml(item.variantName)} · Qty ${item.quantity}</span></td>
-    <td align="right" style="padding:12px 0 12px 8px;border-bottom:1px solid #e2e8df;white-space:nowrap">${money(item.quantity * item.unitPriceMinor)}</td>
+    <td valign="top" style="padding:14px 0;border-top:1px solid #e4e8e4;overflow-wrap:anywhere"><strong>${escapeHtml(item.name)}</strong><br>
+      <span style="color:#526460;font-size:13px">${escapeHtml(item.variantName)} · Qty ${item.quantity}</span></td>
+    <td align="right" valign="top" style="padding:14px 0 14px 8px;border-top:1px solid #e4e8e4;white-space:nowrap;font-size:14px;font-weight:bold">${money(item.quantity * item.unitPriceMinor)}</td>
   </tr>`).join("");
-  const amounts = totals.map(([label, value], index) => `<tr style="${index === totals.length - 1 ? "font-weight:bold;font-size:17px" : ""}">
-    <td style="padding:5px 0">${escapeHtml(label)}</td>
-    <td align="right" style="padding:5px 0 5px 8px;white-space:nowrap">${value}</td>
+  const amounts = totals.slice(0, -1).map(([label, value]) => `<tr>
+    <td style="padding:5px 0;color:#526460">${escapeHtml(label)}</td>
+    <td align="right" style="padding:5px 0 5px 8px;white-space:nowrap">${escapeHtml(value)}</td>
   </tr>`).join("");
+  const total = totals.at(-1);
   const address = [order.deliveryAddress.addressLine, order.deliveryAddress.district, order.deliveryAddress.postalCode].filter(Boolean).join(", ");
+  const trackAction = tracking ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin:20px 0 0">
+    <tr><td bgcolor="#173a34" style="border-radius:7px"><a href="${escapeHtml(tracking)}" style="display:inline-block;padding:11px 19px;border:1px solid #173a34;border-radius:7px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none">Track your order</a></td></tr>
+  </table>` : "";
   return renderOneinfoEmail(order, "ORDER RECEIVED", "Thanks for your order.", "we’ve received your Oneinfo order.", `
-  ${order.invoiceNumber ? `<p><strong>Invoice ${escapeHtml(order.invoiceNumber)}</strong><br>${order.activationMethod === "ORDER_SECRET" ? "Scan your card and enter the private secret code supplied in your package to set up your profile." : "After delivery, scan your card and enter this invoice number to request an activation email."}</p>` : ""}
-  <h2 style="margin:0;font-size:19px">Order summary</h2>
+  ${order.invoiceNumber ? `<p style="margin:0 0 22px;color:#526460;font-size:13px">Invoice number<br>
+    <strong style="color:#121316;font-size:15px">${escapeHtml(order.invoiceNumber)}</strong>${invoice ? ` &nbsp; <a href="${escapeHtml(invoice)}" style="display:inline-block;padding:4px 0;color:#173a34;font-weight:bold;text-decoration:underline">View invoice</a>` : ""}</p>` : ""}
+  <h2 style="margin:0 0 10px;color:#173a34;font-size:19px">Order summary</h2>
   <table aria-label="Order items" width="100%" cellspacing="0" cellpadding="0">${items}</table>
-  <table aria-label="Order totals" width="100%" cellspacing="0" cellpadding="0" style="margin:12px 0 18px">${amounts}</table>
-  <div style="padding:14px;background:#f7f1e1;color:#121316;border-radius:10px">
-    <strong>${paymentMethod}</strong><br>
-    ${paymentNotes.length ? paymentNotes.join("<br>") : "Pay the total when your order arrives."}
-  </div>
-  <h2 style="margin:20px 0 4px;font-size:17px">Delivery address</h2>
-  <p style="margin:0;overflow-wrap:anywhere">${escapeHtml(address)}</p>${trackingButton(tracking)}`);
+  <table aria-label="Order totals" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #e4e8e4;margin:0 0 18px;font-size:14px">
+    ${amounts}
+    ${total ? `<tr><th scope="row" align="left" bgcolor="#eef4ef" style="padding:11px 9px;color:#173a34">${escapeHtml(total[0])}</th>
+      <td align="right" bgcolor="#eef4ef" style="padding:11px 9px;color:#173a34;font-size:16px;font-weight:bold;white-space:nowrap">${escapeHtml(total[1])}</td></tr>` : ""}
+  </table>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+    <tr><td bgcolor="#f7f2e6" style="padding:14px 15px;border-left:3px solid #c8a165;font-size:14px">
+      <strong>${escapeHtml(paymentMethod)}</strong>
+      <p style="margin:4px 0 0;color:#433e33">${paymentNotes.length ? paymentNotes.map(escapeHtml).join("<br>") : "Pay the total when your order arrives."}</p>
+    </td></tr>
+  </table>
+  <h2 style="margin:22px 0 5px;color:#173a34;font-size:17px">Delivery address</h2>
+  <p style="margin:0;color:#3d4e47;overflow-wrap:anywhere">${escapeHtml(address)}</p>
+  ${order.invoiceNumber ? `<h2 style="margin:22px 0 5px;color:#173a34;font-size:17px">Set up your card after delivery</h2>
+  <p style="margin:0;color:#3d4e47">${order.activationMethod === "ORDER_SECRET" ? "Tap or scan your card and enter the private code included in your package." : "Scan your card and enter the invoice number to request an activation email."}</p>` : ""}`, trackAction);
 }
