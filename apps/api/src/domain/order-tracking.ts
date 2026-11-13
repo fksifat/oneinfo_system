@@ -8,6 +8,7 @@ function signature(orderId: string) {
 }
 
 export const trackingPath = (orderId: string) => `/#track/${orderId}.${signature(orderId)}`;
+export const invoicePath = (orderId: string) => `/#invoice/${orderId}.${signature(orderId)}`;
 export const trackingUrl = (orderId: string) => config.STOREFRONT_URL ? new URL(trackingPath(orderId), config.STOREFRONT_URL).href : undefined;
 
 export function trackingOrderId(token: string) {

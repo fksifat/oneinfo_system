@@ -605,6 +605,7 @@ export type OrderReceipt = OrderTracking & {
   totalMinor: number;
   confirmationEmail?: "accepted" | "failed";
   trackingPath?: string;
+  invoicePath?: string;
   reviewInviteSentAt?: string | null;
   qrAllocation?: { required: number; assigned: number; pending: number; status: "AWAITING_QR" | "PARTIAL" | "ASSIGNED" };
 
