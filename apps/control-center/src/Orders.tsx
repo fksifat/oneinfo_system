@@ -3,7 +3,7 @@ import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api } from "./api.js";
-import { OrderTrackingPipeline } from "./OrderTrackingPipeline.js";
+import { OrderTrackingPipeline, type OrderStage } from "./OrderTrackingPipeline.js";
 
 const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
@@ -12,6 +12,17 @@ const path = "/api/v1/orders";
 const searchFields = ["payment", "delivery", "qr"] as const;
 const needsPacking = (order: StoreOrder) => order.activationMethod === "ORDER_SECRET" ? !order.packedAt : Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
+const stageActionTitles: Record<OrderStage, string> = {
+  payment: "Order received", packing: "Prepare the cards", qc: "NFC & quality checks",
+  processing: "Order processing", shipping: "Courier handoff", delivery: "Delivery confirmation",
+};
+
+function nextOrderStage(order: StoreOrder): OrderStage {
+  if (order.status === "CANCELLED" || order.status === "AWAITING_PAYMENT" || order.paymentStatus === "PENDING_VERIFICATION") return "payment";
+  if (order.status === "SHIPPED" || order.status === "DELIVERED") return "delivery";
+  if (needsPacking(order) || order.qrAllocation?.status === "AWAITING_QR" && !order.invoiceNumber) return "packing";
+  return order.status === "RECEIVED" ? "processing" : "shipping";
+}
 
 function getInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -42,10 +53,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   const activeFilters = useRef(filters);
   const [saving, setSaving] = useState(false);
   const [orderError, setOrderError] = useState("");
+  const [selectedStages, setSelectedStages] = useState<Partial<Record<string, OrderStage>>>({});
+  const [actionNotice, setActionNotice] = useState<{ orderId: string; stage: OrderStage; text: string; error?: boolean }>();
   const [ratesError, setRatesError] = useState("");
 
   const [message, setMessage] = useState("");
-  const [orderMessage, setOrderMessage] = useState("");
   const [coupons, setCoupons] = useState<StoreCoupon[]>([]);
   const [couponCode, setCouponCode] = useState("");
   const [couponPercent, setCouponPercent] = useState("");
@@ -53,6 +65,10 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   const [savingCoupon, setSavingCoupon] = useState(false);
   const [couponError, setCouponError] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
+
+  function selectStage(orderId: string, stage: OrderStage) {
+    setSelectedStages(previous => ({ ...previous, [orderId]: stage }));
+  }
 
   function readOrders(filters: AdminOrderSearch, beforeId?: string) {
     type Page = { items: StoreOrder[]; hasMore: boolean; supportsSearch?: boolean };
@@ -208,13 +224,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
   async function verifyPayment(order: StoreOrder) {
     if (verifyingPayment || !order.transactionId || !order.paymentAmountMinor) return;
     if (!window.confirm(`Confirm you received ${bdt(order.paymentAmountMinor)} in bKash for transaction ${order.transactionId}.`)) return;
+    selectStage(order.id, "payment");
     setVerifyingPayment(order.id);
-    setOrderError("");
+    setActionNotice(undefined);
     try {
       const updated = await api<OrderReceipt>(`${path}/admin/${order.id}/verify-payment`, token, { method: "POST" });
       setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated } : item));
+      setActionNotice({ orderId: order.id, stage: "payment", text: "bKash payment verified." });
     } catch (error) {
-      setOrderError(error instanceof Error ? error.message : "Could not verify payment.");
+      setActionNotice({ orderId: order.id, stage: "payment", text: error instanceof Error ? error.message : "Could not verify payment.", error: true });
     } finally {
       setVerifyingPayment(undefined);
     }
@@ -222,24 +240,27 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
 
   async function markDelivered(order: StoreOrder) {
     if (delivering) return;
-    setDelivering(order.id); setOrderError(""); setOrderMessage("");
+    selectStage(order.id, "delivery");
+    setDelivering(order.id); setActionNotice(undefined);
     try {
       const result = await api<{ delivered: boolean; invitation: string }>(`/api/v1/reviews/admin/orders/${order.id}/deliver`, token, { method: "POST" });
       setItems(previous => previous.map(item => item.id === order.id ? { ...item, status: "DELIVERED", deliveredAt: item.deliveredAt ?? new Date().toISOString(), ...(result.invitation === "sent" ? { reviewInviteSentAt: new Date().toISOString() } : {}) } : item));
-      setOrderMessage(result.invitation === "sent" ? "Order marked delivered; review email sent." : result.invitation === "already-sent" ? "Order is delivered; review email was already sent." : "Order marked delivered. Review email could not be sent; use this action to retry.");
-    } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not mark order delivered."); }
+      setActionNotice({ orderId: order.id, stage: "delivery", text: result.invitation === "sent" ? "Order marked delivered and review email sent." : result.invitation === "already-sent" ? "The review email was already sent." : "Order marked delivered. Use Retry review invitation to send the email again." });
+    } catch (error) { setActionNotice({ orderId: order.id, stage: "delivery", text: error instanceof Error ? error.message : "Could not mark order delivered.", error: true }); }
     finally { setDelivering(undefined); }
   }
 
   async function updateFulfillment(order: StoreOrder, status: "PROCESSING" | "SHIPPED", trackingId?: string) {
     if (delivering) return;
-    setDelivering(order.id); setOrderError(""); setOrderMessage("");
+    const stage = status === "PROCESSING" ? "processing" : "shipping";
+    selectStage(order.id, stage);
+    setDelivering(order.id); setActionNotice(undefined);
     try {
       const updated = await api<OrderReceipt & { shippingEmail?: string }>(`${path}/admin/${order.id}/fulfillment`, token,
         { method: "POST", body: JSON.stringify({ status, trackingId }) });
       setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated } : item));
-      setOrderMessage(updated.shippingEmail === "failed" ? "Shipping saved. The email could not be sent." : "Order status updated.");
-    } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not update order status."); }
+      setActionNotice({ orderId: order.id, stage, text: updated.shippingEmail === "failed" ? "Shipping saved. The email could not be sent." : "Order status updated." });
+    } catch (error) { setActionNotice({ orderId: order.id, stage, text: error instanceof Error ? error.message : "Could not update order status.", error: true }); }
     finally { setDelivering(undefined); }
   }
 
@@ -248,12 +269,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
     if (delivering) return;
     const data = new FormData(event.currentTarget);
     const input = { codCollectedMinor: Math.round(Number(data.get("collected")) * 100), codSettledMinor: Math.round(Number(data.get("settled")) * 100) };
-    setDelivering(order.id); setOrderError(""); setOrderMessage("");
+    setDelivering(order.id); setActionNotice(undefined);
     try {
       const updated = await api<typeof input>(`${path}/admin/${order.id}/cod`, token, { method: "PUT", body: JSON.stringify(input) });
       setItems(previous => previous.map(item => item.id === order.id ? { ...item, ...updated } : item));
-      setOrderMessage("COD collection and settlement saved.");
-    } catch (error) { setOrderError(error instanceof Error ? error.message : "Could not save COD amounts."); }
+      setActionNotice({ orderId: order.id, stage: "delivery", text: "COD collection and settlement saved." });
+    } catch (error) { setActionNotice({ orderId: order.id, stage: "delivery", text: error instanceof Error ? error.message : "Could not save COD amounts.", error: true }); }
     finally { setDelivering(undefined); }
   }
 
@@ -312,11 +333,21 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
       )}
 
       {orderError && <p className="store-order-notice is-error" role="alert">{orderError}</p>}
-      {orderMessage && <p className="store-order-notice" role="status">{orderMessage}</p>}
       {!items.length && <p className="empty">{loading ? "Loading orders…" : "No orders received yet."}</p>}
 
       <div className="store-orders-stack">
-        {items.map(order => <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
+        {items.map(order => {
+          const deepLink = requestedOrder === order.id ? requestedTask : null;
+          const stage = selectedStages[order.id] ?? (deepLink === "print" ? "packing" : deepLink === "packing" || deepLink === "payment" ? deepLink : nextOrderStage(order));
+          const actionId = `order-actions-${order.id}`;
+          const closed = order.status === "CANCELLED" || order.status === "AWAITING_PAYMENT";
+          const paid = order.paymentStatus !== "PENDING_VERIFICATION";
+          const notice = actionNotice?.orderId === order.id && actionNotice.stage === stage ? actionNotice : undefined;
+          const chooseStage = (value: OrderStage) => {
+            selectStage(order.id, value);
+            requestAnimationFrame(() => document.getElementById(actionId)?.focus());
+          };
+          return <details className="store-order" key={order.id} open={requestedOrder === order.id || undefined}>
           <summary>
             <div className="store-order-summary-left">
               <span className="store-order-avatar" aria-hidden="true">{getInitials(order.customer.name)}</span>
@@ -350,13 +381,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
           </summary>
 
           <div className="store-order-content">
-            <div className="order-work-panels">
-              {!order.invoiceNumber && <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
-                startCardId={requestedOrder === order.id ? params.get("card") : null} initiallyOpen={requestedOrder === order.id && requestedTask === "print"} />}
-              <OrderPacking order={order} token={token} onChange={() => loadOrders()} initiallyOpen={Boolean(order.invoiceNumber) || (requestedOrder === order.id && requestedTask === "packing")} />
-            </div>
-
-            <OrderTrackingPipeline order={order} compact />
+            <OrderTrackingPipeline order={order} compact selectedStage={stage} controls={actionId} onStageSelect={chooseStage} />
 
             <div className="order-info-cards">
               <div className="order-info-card">
@@ -431,26 +456,52 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
               </ul>
             </div>
 
-            <div className="store-order-actions-bar">
+            <section className="store-order-actions-bar order-stage-actions" id={actionId} tabIndex={-1} aria-labelledby={`${actionId}-title`}>
+              <h3 id={`${actionId}-title`}>{stageActionTitles[stage]}</h3>
+              {notice && <p className={`store-order-notice${notice.error ? " is-error" : ""}`} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
+              {closed && <p>{order.status === "CANCELLED" ? "This order was cancelled." : "Waiting for the customer to submit payment details."}</p>}
+              {stage === "payment" && !closed && (paid ? <p>{order.paymentStatus === "VERIFIED" ? "bKash payment is verified." : "Order received. No advance payment is required."}</p>
+                : <p>Check the bKash transaction before verifying payment.</p>)}
+              <div className="order-work-panels" hidden={stage !== "packing" || closed}>
+                {!order.invoiceNumber && <OrderPrint order={order} token={token} onChange={() => void loadOrders()}
+                  startCardId={deepLink === "print" ? params.get("card") : null} initiallyOpen />}
+                <OrderPacking order={order} token={token} onChange={() => loadOrders()} initiallyOpen />
+                {!closed && (order.status === "SHIPPED" || order.status === "DELIVERED") && <p>The order has left packing.</p>}
+              </div>
+              {stage === "qc" && !closed && <>
+                <p>{order.activationMethod === "ORDER_SECRET"
+                  ? "Use printed, NFC-written and QC-passed stock. Confirm the package after checking the cards you're sending."
+                  : "Verify each physical card in the production console. The timeline updates when its quality check passes."}</p>
+                <div className="store-order-actions"><a href="#production">Open NFC &amp; QR operations</a>
+                  {order.activationMethod !== "ORDER_SECRET" && <a href="?work=qc#tracking">Open the QC work queue</a>}
+                  {order.activationMethod === "ORDER_SECRET" && <button type="button" className="button-action button-action-primary" onClick={() => chooseStage("packing")}>Open packing checklist</button>}
+                </div>
+              </>}
+              {stage === "processing" && !closed && order.status !== "RECEIVED" && <p>Processing started.</p>}
+              {(stage === "shipping" || stage === "delivery") && !closed && order.status !== "DELIVERED" && (!paid || needsPacking(order)) && (
+                <p>{!paid ? "Verify bKash payment before continuing." : "Confirm packing before continuing."} <button type="button" className="button-action button-action-primary"
+                  onClick={() => chooseStage(paid ? "packing" : "payment")}>{paid ? "Open packing checklist" : "Open payment verification"}</button></p>
+              )}
+              {stage === "shipping" && order.status === "DELIVERED" && <p>{order.courierTrackingId ? `Courier tracking ID ${order.courierTrackingId}` : "This order was delivered."}</p>}
               <div className="store-order-actions">
-                {order.trackingPath && order.status === "RECEIVED" && (
+                {stage === "processing" && order.trackingPath && order.status === "RECEIVED" && (
                   <button className="button-action button-action-primary" type="button" disabled={Boolean(delivering)} onClick={() => void updateFulfillment(order, "PROCESSING")}>
                     <span aria-hidden="true">▶</span> Start processing
                   </button>
                 )}
-                {order.status !== "CANCELLED" && order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" && (
+                {stage === "payment" && !closed && order.transactionId && !paid && (
                   <button className="button-action button-action-verify" type="button" disabled={Boolean(verifyingPayment)} onClick={() => void verifyPayment(order)}>
                     <span aria-hidden="true">✓</span> {verifyingPayment === order.id ? "Verifying…" : "Verify bKash payment"}
                   </button>
                 )}
-                {!["AWAITING_PAYMENT", "CANCELLED"].includes(order.status) && (
-                  <button className="button-action button-action-delivered" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt) || needsPacking(order)} onClick={() => void markDelivered(order)}>
+                {stage === "delivery" && !closed && (order.status === "DELIVERED" || paid && !needsPacking(order)) && (
+                  <button className="button-action button-action-delivered" type="button" disabled={Boolean(delivering) || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
                     <span aria-hidden="true">★</span> {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
                   </button>
                 )}
               </div>
 
-              {order.trackingPath && !["DELIVERED", "CANCELLED", "AWAITING_PAYMENT"].includes(order.status) && order.paymentStatus !== "PENDING_VERIFICATION" && (
+              {stage === "shipping" && order.trackingPath && !closed && order.status !== "DELIVERED" && paid && !needsPacking(order) && (
                 <form className="order-inline-action-form" onSubmit={event => {
                   event.preventDefault(); void updateFulfillment(order, "SHIPPED", String(new FormData(event.currentTarget).get("trackingId")));
                 }}>
@@ -458,13 +509,13 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                     <span>Courier tracking ID</span>
                     <input name="trackingId" maxLength={100} required defaultValue={order.courierTrackingId ?? ""} placeholder="Tracking ID…" />
                   </label>
-                  <button type="submit" className="button-action button-action-ship" disabled={Boolean(delivering) || needsPacking(order)}>
+                  <button type="submit" className="button-action button-action-ship" disabled={Boolean(delivering)}>
                     {order.status === "SHIPPED" ? "Update tracking ID" : "Mark shipped"}
                   </button>
                 </form>
               )}
 
-              {order.trackingPath && order.status === "DELIVERED" && order.paymentMethod === "COD" && (
+              {stage === "delivery" && order.trackingPath && order.status === "DELIVERED" && order.paymentMethod === "COD" && (
                 <form className="order-inline-action-form" onSubmit={event => void saveCod(event, order)}>
                   <label className="order-inline-field">
                     <span>Courier collected (৳)</span>
@@ -477,7 +528,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
                   <button type="submit" className="button-action button-action-cod" disabled={Boolean(delivering)}>Save COD amounts</button>
                 </form>
               )}
-            </div>
+            </section>
 
             {order.cancellationReason && <p className="order-cancellation-notice">Cancellation: {order.cancellationReason}</p>
             }
@@ -512,7 +563,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange }: { token: s
 
             {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} />}
           </div>
-        </details>)}
+        </details>;
+        })}
       </div>
 
       {hasMore && <div className="store-order-pagination"><button className="quiet" type="button" disabled={loading} onClick={() => void loadOrders(items.at(-1)?.id)}>{loading ? "Loading…" : "Load older orders"}</button></div>}

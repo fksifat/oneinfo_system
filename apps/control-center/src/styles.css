@@ -1611,6 +1611,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 16px;
 }
+.order-work-panels[hidden] { display: none; }
 .order-print,
 .order-packing {
   background: #ffffff;
@@ -1868,6 +1869,19 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   flex-direction: column;
   gap: 12px;
 }
+.order-stage-actions {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface, #fff);
+  scroll-margin-block: 24px;
+}
+.order-stage-actions h3, .order-stage-actions > p { margin: 0; }
+.order-stage-actions:focus-visible, button.pipeline-card:focus-visible {
+  outline: 2px solid #27849a;
+  outline-offset: 3px;
+}
+.order-stage-actions > p .button-action { margin: 8px 0 0 4px; }
 .store-order-actions {
   display: flex;
   align-items: center;
@@ -2322,6 +2336,15 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   flex-direction: column;
   gap: 4px;
 }
+button.pipeline-card {
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.pipeline-instruction { margin: 0 0 10px; color: var(--text-muted); font-size: .78rem; }
+.pipeline-stage-item button.pipeline-card:hover { border-color: #27849a; }
+.pipeline-stage-item button.pipeline-card[aria-pressed="true"] { box-shadow: inset 0 -3px #27849a; }
 .pipeline-card-top {
   display: flex;
   align-items: center;
