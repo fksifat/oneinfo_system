@@ -647,6 +647,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const tracking = await request("/api/v1/orders/tracking", { token: placed.trackingPath.split("#track/")[1] });
     expect(tracking).toMatchObject({ activationMethod: "ORDER_SECRET", packedAt: expect.any(String) });
     expect(JSON.stringify(tracking)).not.toContain(codes[0].secretCode);
+    const invoice = await request("/api/v1/orders/invoice", { token: placed.invoicePath.split("#invoice/")[1] });
+    expect(JSON.stringify(invoice)).not.toContain(codes[0].secretCode);
   });
 
   it("binds any ready card to its code's existing temporary profile and keeps multiple profiles independently editable", async () => {

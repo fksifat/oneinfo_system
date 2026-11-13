@@ -220,6 +220,10 @@ try {
           await click('Print activation slips');
           assert.equal(await evaluate(`window.__activationSlipHtml.includes(document.querySelector('.order-packing code').textContent)`),true);
           assert.equal(await evaluate(`(window.__activationSlipHtml.match(/<article>/g)||[]).length`),1);
+          await evaluate(`window.open=()=>({opener:null,document:{body:{},write(html){window.__invoiceHtml=html},close(){},querySelector(){return {addEventListener(){}}}}})`);
+          await click('Print invoice with activation codes');
+          await until(`!!window.__invoiceHtml`);
+          assert.equal(await evaluate(`window.__invoiceHtml.includes(document.querySelector('.order-packing code').textContent)&&window.__invoiceHtml.includes('class="invoice-logo"')&&window.__invoiceHtml.includes('Print or save PDF')`),true);
           await evaluate(`window.open=window.__originalOpen`);
           await evaluate(`document.querySelector('.order-packing input[type=checkbox]').click()`);await click('Confirm package');
           await until(`document.querySelector('.order-packing')?.textContent.includes('Package confirmed.')`);
