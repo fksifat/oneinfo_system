@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import { openConsole } from "./desktop.mjs";
-import { databaseTunnelSettings, databasePortOpen } from "./ssh-database.mjs";
+import { databaseTunnelSettings, databasePortOpen, databaseResponding } from "./ssh-database.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -160,7 +160,7 @@ export async function main() {
         if (await databasePortOpen(tunnel.port)) throw new Error(`Database tunnel port ${tunnel.port} is already in use. Stop its previous tunnel and retry.`);
         const child = startService("database-tunnel", [join(root, "scripts/ssh-database.mjs")]);
         const deadline = Date.now() + 30_000;
-        while (!await databasePortOpen(tunnel.port)) {
+        while (!await databasePortOpen(tunnel.port) || !await databaseResponding(env.DATABASE_URL)) {
           if (Date.now() > deadline || child.exitCode !== null || child.signalCode !== null) throw new Error("Database SSH tunnel did not start. Check SSH access and .oneinfo/logs/database-tunnel.log.");
           await delay(200);
         }

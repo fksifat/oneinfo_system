@@ -15,6 +15,7 @@ import android.nfc.NfcAdapter
 import android.nfc.Tag
 import android.nfc.tech.Ndef
 import android.nfc.tech.NdefFormatable
+import android.nfc.tech.MifareClassic
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -78,8 +79,8 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     @Volatile private var qcSessionId: String? = null
     private var lastTagResult: JSONObject? = null
 
-    enum class TaskMode { WRITE, READ, UTILITY_WRITE, VERIFY_NFC, VERIFY_CAMERA }
-    data class Task(val sessionId: String, val mode: TaskMode, val expiresAt: Instant, val expectedUrl: String? = null, val recordType: String = "URL")
+    enum class TaskMode { WRITE, READ, UTILITY_WRITE, PROTECTION, VERIFY_NFC, VERIFY_CAMERA }
+    data class Task(val sessionId: String, val mode: TaskMode, val expiresAt: Instant, val expectedUrl: String? = null, val recordType: String = "URL", val protectionOperation: String? = null, val keyHex: String? = null)
     class ApiException(val statusCode: Int, message: String) : Exception(message)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -343,7 +344,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
                     })
                 }
                 val current = activeTask
-                if (current != null && current.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE) && !processingTag.get()) {
+                if (current != null && current.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE, TaskMode.PROTECTION) && !processingTag.get()) {
                     val remote = request("GET", "/device/read-tasks/${current.sessionId}")
                     if (remote.optString("state") !in listOf("PENDING", "READING")) {
                         activeTask = null
@@ -438,6 +439,13 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     private fun acceptUtility(response: JSONObject) {
         val utility = response.optJSONObject("utility") ?: JSONObject().put("operation", "READ")
+        if (utility.optString("operation") in listOf("CLASSIC_PROTECT", "CLASSIC_UNPROTECT")) {
+            activeTask = Task(response.getString("sessionId"), TaskMode.PROTECTION, Instant.parse(response.getString("expiresAt")),
+                utility.getString("expectedUrl"), protectionOperation = utility.getString("operation"), keyHex = utility.getString("keyHex"))
+            main.post { showPanel(R.id.toolsPanel) }
+            setStatus("${if (utility.getString("operation") == "CLASSIC_PROTECT") "Enable" else "Remove"} password protection: hold the selected card against the phone until completion. Keep its password saved; if interrupted, retry with the SAME password.")
+            return
+        }
         val erase = utility.optString("operation") == "ERASE"
         val write = utility.optString("operation") in listOf("WRITE", "ERASE")
         activeTask = Task(response.getString("sessionId"), if (write) TaskMode.UTILITY_WRITE else TaskMode.READ,
@@ -448,7 +456,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
 
     private fun cancelUtility() {
         val task = activeTask ?: return
-        if (task.mode !in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE) || processingTag.get() || pendingResult != null) return
+        if (task.mode !in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE, TaskMode.PROTECTION) || processingTag.get() || pendingResult != null) return
         startingVerification = true
         setStatus("Stopping waiting task…")
         executor.execute {
@@ -508,6 +516,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         if (task.mode == TaskMode.VERIFY_NFC) return verifyNfc(task, tag)
         if (task.mode == TaskMode.READ) return readTag(task, tag)
         if (task.mode == TaskMode.UTILITY_WRITE) return writeUtility(task, tag)
+        if (task.mode == TaskMode.PROTECTION) return protectTag(task, tag)
         var connection: Ndef? = null
         try {
             val expectedUrl = task.expectedUrl ?: throw IllegalStateException("WRITE_FAILED")
@@ -595,7 +604,42 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
             findViewById<TextView>(R.id.tagDetails).text = "UID: ${body.optString("uid")}\nType: ${body.optString("ndefType", "Not NDEF formatted")}\nWritable: ${body.optString("writable", "Unknown")}\nSize: ${body.optString("messageSize", "0")} / ${body.optString("maxSize", "unknown")} bytes\nTechnologies: ${body.optJSONArray("techList")}\n\n$content" + if (body.has("errorCode")) "\n\nError: ${body.optString("errorCode")}" else ""
             updateActions()
         }
-        setStatus(if (body.has("errorCode")) "NFC tool failed: ${body.optString("errorCode")}. Sending result…" else "Tag ${if (task.recordType == "EMPTY") "erased and verified empty" else if (task.mode == TaskMode.UTILITY_WRITE) "written and read back" else "read"}. Sending details to the PC…")
+        setStatus(if (body.has("errorCode")) "NFC tool failed: ${body.optString("errorCode")}. Sending result…" else if (task.mode == TaskMode.PROTECTION) "Password protection ${if (task.protectionOperation == "CLASSIC_PROTECT") "enabled" else "removed"}; public read verified. Sending result to PC…" else "Tag ${if (task.recordType == "EMPTY") "erased and verified empty" else if (task.mode == TaskMode.UTILITY_WRITE) "written and read back" else "read"}. Sending details to the PC…")
+    }
+
+    private fun protectTag(task: Task, tag: Tag) {
+        executor.execute {
+            try {
+                if (request("GET", "/device/read-tasks/${task.sessionId}").getString("state") != "READING") throw IllegalStateException("OPERATION_CANCELLED")
+                val before = inspectTag(tag)
+                val records = before.getJSONArray("records")
+                if (records.length() != 1 || records.getJSONObject(0).optString("uri") != task.expectedUrl) throw IllegalStateException("WRONG_CARD_LINK")
+                val classic = MifareClassic.get(tag) ?: throw IllegalStateException("MIFARE_CLASSIC_NOT_SUPPORTED")
+                val protect = task.protectionOperation == "CLASSIC_PROTECT"
+                val verified = classic.use {
+                    it.connect()
+                    ClassicProtection.apply(object : ClassicProtection.Card {
+                        override val size get() = classic.size
+                        override fun authenticate(sector: Int, key: ByteArray, keyB: Boolean): Boolean {
+                            val accepted = if (keyB) classic.authenticateSectorWithKeyB(sector, key) else classic.authenticateSectorWithKeyA(sector, key)
+                            if (!accepted) { classic.close(); classic.connect() }
+                            return accepted
+                        }
+                        override fun read(block: Int) = classic.readBlock(block)
+                        override fun write(block: Int, bytes: ByteArray) = classic.writeBlock(block, bytes)
+                    }, task.keyHex ?: throw IllegalStateException("MISSING_PROTECTION_PASSWORD"), protect)
+                }
+                val after = inspectTag(tag)
+                val saved = after.getJSONArray("records")
+                if (saved.length() != 1 || saved.getJSONObject(0).optString("uri") != task.expectedUrl) throw IllegalStateException("PROTECTION_INTERRUPTED_RETRY_SAME_PASSWORD")
+                after.getJSONObject("deviceMetadata").put("protectionMethod", "MIFARE_CLASSIC_KEY_B_V1")
+                    .put("protectionOperation", if (protect) "PROTECT" else "UNPROTECT").put("protectionVerified", true).put("sectorsVerified", verified)
+                finishUtility(task, after)
+            } catch (error: Exception) {
+                val code = error.message?.takeIf { it.matches(Regex("[A-Z_]+")) } ?: "PROTECTION_FAILED_CHECK_TAG_AND_RETRY_SAME_PASSWORD"
+                finishUtility(task, tagBase(tag).put("errorCode", code))
+            } finally { processingTag.set(false); main.post { updateActions() } }
+        }
     }
 
     private fun readTag(task: Task, tag: Tag) {
@@ -779,7 +823,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         findViewById<Button>(R.id.eraseTag).isEnabled = idle
         findViewById<Button>(R.id.pairButton).isEnabled = activeTask == null && pendingResult == null && !startingVerification
         findViewById<Button>(R.id.scanPairingQr).isEnabled = activeTask == null && pendingResult == null && !startingVerification && !cameraScanning
-        findViewById<Button>(R.id.cancelTask).visibility = if (activeTask?.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE)) View.VISIBLE else View.GONE
+        findViewById<Button>(R.id.cancelTask).visibility = if (activeTask?.mode in listOf(TaskMode.READ, TaskMode.UTILITY_WRITE, TaskMode.PROTECTION)) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.cancelTask).isEnabled = !processingTag.get() && pendingResult == null && !startingVerification
         findViewById<Button>(R.id.copyResult).isEnabled = lastTagResult != null
         findViewById<Button>(R.id.shareResult).isEnabled = lastTagResult != null
