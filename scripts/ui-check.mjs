@@ -32,7 +32,7 @@ try {
   const adminTestPassword = 'isolated browser administrator password';
   const {hashPassword}=await import(pathToFileURL(join(root,'apps/api/dist/domain/customer-auth.js')).href);
   config.ADMIN_EMAIL='admin-ui@example.com';config.ADMIN_PASSWORD_HASH=await hashPassword(adminTestPassword);
-  Object.assign(config,{BREVO_SMTP_USER:undefined,BREVO_SMTP_KEY:undefined,RESEND_API_KEY:'browser-test',ORDER_EMAIL_FROM:'Oneinfo <test@example.com>',STOREFRONT_URL:'http://127.0.0.1:5174'});
+  Object.assign(config,{BREVO_SMTP_USER:undefined,BREVO_SMTP_KEY:undefined,RESEND_API_KEY:'browser-test',ORDER_EMAIL_FROM:'Oneinfo <test@example.com>',STOREFRONT_URL:'http://127.0.0.1:5174',CRM_LEAD_WEBHOOK_URL:'https://crm.example.com/leads'});
   const [binary, args] = npmCommand(['run', 'db:migrate']);
   const migration = spawnSync(binary, args, { cwd: root, env: process.env, encoding: 'utf8' });
   assert.equal(migration.status, 0, migration.stderr);
@@ -68,8 +68,9 @@ try {
   for(const {createdAt,updatedAt,...product} of catalog.items)await connection.db.insert(schema.products).values(product).onConflictDoUpdate({target:schema.products.id,set:product});
   await connection.db.insert(schema.storeShippingSettings).values({id:'default',rates:{insideDhaka:6000,subDhaka:10000,outsideDhaka:12000},codAdvanceTaka:0}).onConflictDoUpdate({target:schema.storeShippingSettings.id,set:{codAdvanceTaka:0}});
   const nativeFetch=globalThis.fetch;
-  const emails=[];
+  const emails=[],crmForwards=[];
   globalThis.fetch=(url,...args)=>{
+    if(String(url)===config.CRM_LEAD_WEBHOOK_URL){crmForwards.push(JSON.parse(args[0].body));return Promise.resolve(Response.json({accepted:true}));}
     if(String(url)!=='https://api.resend.com/emails')return nativeFetch(url,...args);
     emails.push(JSON.parse(args[0].body));
     return Promise.resolve(Response.json({id:'ui-test-email'}));
@@ -282,6 +283,11 @@ try {
       assert.equal(await evaluate(`document.querySelector('.selected-production-card').textContent.includes(${JSON.stringify(detail.cards[0].publicSlug)})`),true);
       await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:scannedQr},deviceHeaders);
       await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(target.publicSlug)})`);
+      await command('Page.navigate',{url:`http://127.0.0.1:5173/?batch=${batch.id}#tools`});
+      await until(`document.querySelector('.batch-toolbar select')?.value===${JSON.stringify(batch.id)}&&document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
+      await delay(2500);
+      assert.equal(await evaluate(`location.hash`),'#tools');
+      assert.equal(await evaluate(`document.querySelector('.batch-toolbar select').value`),batch.id);
       for(const item of detail.cards)await connection.db.delete(schema.cardEvents).where(eq(schema.cardEvents.cardId,item.id));
       await set('.batch-toolbar select',batch.id);await until(`document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
       console.log('Phone QR auto-selects batch/card, clears filters, opens Production, and preserves later manual selection PASS');
@@ -443,7 +449,13 @@ try {
     await inspect('customer-share-contact-'+width);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await fill('Your Full Name','Browser Visitor');await click('Send my contact');
+  await fill('Your Full Name','Browser Visitor');await fill('Email','visitor@example.com');await click('Send my contact');
+  assert.equal(await evaluate(`document.querySelector('input[name=consent]').checked`),false);
+  assert.equal(await evaluate(`document.querySelector('.share-contact form').checkValidity()`),false);
+  assert.equal(contactAttempts.length,0);
+  assert.equal(await evaluate(`document.querySelector('input[name=crmAllowed]').checked`),false);
+  await evaluate(`document.querySelector('input[name=consent]').click()`);
+  await fill('Email','');await click('Send my contact');
   await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
@@ -453,6 +465,7 @@ try {
   contactFailure='none';await click('Send my contact');await until(`document.querySelector('.share-contact [role=status]')?.textContent.includes('private inbox')`);
   assert.equal(contactAttempts[2].requestId,contactAttempts[3].requestId);
   const savedContacts=await connection.db.select().from(schema.customerContactLeads);assert.equal(savedContacts.length,1);assert.equal(savedContacts[0].phone,'+8801712345678');
+  assert.equal(savedContacts[0].crmAllowed,false);assert.equal(contactAttempts.every(item=>item.consent===true&&item.crmAllowed===false),true);assert.equal(crmForwards.length,0);
   await click('Manage this card');
   await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
   await until(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('Contacts'))`);

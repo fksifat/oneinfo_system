@@ -728,8 +728,8 @@ export function ShareContact({
     const fields = new FormData(event.currentTarget);
     const result = ShareContactSchema.safeParse({
       ...Object.fromEntries(fields),
-      consent: true,
-      crmAllowed: Boolean(crmEnabled),
+      consent: fields.get("consent") === "on",
+      crmAllowed: crmEnabled && fields.get("crmAllowed") === "on",
       requestId: crypto.randomUUID(),
     });
     if (!result.success) {
@@ -824,6 +824,8 @@ export function ShareContact({
               />
             </div>
 
+            <label className="share-contact-choice"><input type="checkbox" name="consent" required /><span>Share these details with the cardholder so they can follow up.</span></label>
+            {crmEnabled && <label className="share-contact-choice"><input type="checkbox" name="crmAllowed" /><span>Also allow the cardholder to forward my details to their CRM.</span></label>}
             {error && <p className="form-error-alert share-contact-error" role="alert">{error}</p>}
 
             <button type="submit" className="submit-lead-btn share-contact-submit" disabled={busy}>

@@ -20,7 +20,6 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
   currentBatchId.current = batchId;
   const [batch, setBatch] = useState<Batch | null>(null);
   const [selectedId, setSelectedId] = useState(() => new URLSearchParams(location.search).get("card") ?? "");
-  const deepLinked = useRef(Boolean(selectedId));
   const [expected, setExpected] = useState<ExpectedCard | null>(null);
   const [checking, setChecking] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -62,10 +61,7 @@ export function ProductionDesk({ visible, credentials, busy, onBusy, onMessage, 
         if (disposed) return;
         setExpected(expected ?? null);
         if (!scan || scan.id === lastPhoneScan.current) return;
-        if (deepLinked.current) {
-          deepLinked.current = false;
-          if (Date.parse(scan.scannedAt) < performance.timeOrigin) { lastPhoneScan.current = scan.id; return; }
-        }
+        if (Date.parse(scan.scannedAt) < performance.timeOrigin) { lastPhoneScan.current = scan.id; return; }
         if (expected && expected.cardId !== scan.cardId) return;
         const loaded = await api<Batch>(`/api/v1/production/batches/${scan.batchId}?preview=svg`, {}, credentials);
         if (disposed) return;

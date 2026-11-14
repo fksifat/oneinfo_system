@@ -8755,3 +8755,6 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   }
 }
 
+
+.share-contact-choice { display:flex; align-items:flex-start; gap:10px; font-size:.85rem; line-height:1.5; font-weight:400; }
+.share-contact-choice input[type=checkbox] { width:18px; height:18px; margin:2px 0 0; padding:0; flex-shrink:0; }

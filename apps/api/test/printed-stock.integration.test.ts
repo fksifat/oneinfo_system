@@ -1485,6 +1485,36 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect((await make("reserved-name", "Admin")).handle).toBe("AdminProfile");
   });
 
+  it("counts split custom designs together when validating, reserving and releasing variant stock", async () => {
+    const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
+    try {
+      await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 5 })) }).where(eq(schema.products.id, productId));
+      const original = orderPayload();
+      const payload = { ...original, items: [
+        { ...original.items[0]!, quantity: 2, customization: { name: "First design" } },
+        { ...original.items[0]!, quantity: 4, customization: { name: "Second design" } },
+      ] };
+      expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload })).statusCode).toBe(409);
+      const stock = async () => (await client.db.select().from(schema.products).where(eq(schema.products.id, productId)))[0]!.variants[0]!.stockQuantity;
+      expect(await stock()).toBe(5);
+      payload.items[1]!.quantity = 3;
+      const placed = await request("/api/v1/orders", payload);
+      expect(await stock()).toBe(0);
+      const [stored] = await client.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id, placed.id));
+      expect(stored!.stockReservations).toEqual([{ productId, variantId, quantity: 5 }]);
+      expect((await request("/api/v1/orders", payload)).id).toBe(placed.id);
+      expect(await stock()).toBe(0);
+      await request(`/api/v1/orders/admin/${placed.id}/cancel`, { reason: "Customer cancelled both designs" });
+      expect(await stock()).toBe(5);
+      await request(`/api/v1/orders/admin/${placed.id}/cancel`, { reason: "Customer cancelled both designs" });
+      expect(await stock()).toBe(5);
+      const another = await request("/api/v1/orders", { ...payload, requestId: randomUUID() });
+      await client.db.update(schema.storeOrders).set({ stockReservations: [{ productId, variantId, quantity: 2 }, { productId, variantId, quantity: 3 }] }).where(eq(schema.storeOrders.id, another.id));
+      expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${another.id}/cancel`, headers, payload: { reason: "Legacy stock needs reconciliation" } })).statusCode).toBe(409);
+      expect(await stock()).toBe(0);
+    } finally { await client.db.update(schema.products).set({ variants: catalog!.variants }).where(eq(schema.products.id, productId)); }
+  });
+
   it("reserves stock before payment, freezes the total, and releases stock once on cancellation", async () => {
     const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
     try {
