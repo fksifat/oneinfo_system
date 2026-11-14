@@ -191,6 +191,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (!order) conflict("Order not found.");
       if (order.cancelledAt) return receipt(order);
       if (!order.stockReservations) conflict("This older order needs a manual stock check before cancellation. Contact support to reconcile its inventory.");
+      if (new Set(order.stockReservations.map(line => `${line.productId}:${line.variantId}`)).size !== order.stockReservations.length) {
+        conflict("This older order has split stock reservations. Reconcile its inventory before cancellation.");
+      }
       if (order.shippedAt || order.deliveredAt) conflict("A shipped order requires a return, not cancellation.");
       if (order.transactionId && !refundConfirmed) conflict("Check the payment and resolve any refund before cancelling.");
       const allocated = await tx.select({ card: cards }).from(orderCardAllocations).innerJoin(cards, eq(cards.id, orderCardAllocations.cardId))
@@ -402,11 +405,16 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
       const catalog = await tx.select().from(products).where(and(eq(products.status, "PUBLISHED"),
         inArray(products.id, input.items.map(item => item.productId)))).orderBy(asc(products.id)).for("update");
+      const requestedQuantities = new Map<string, number>();
+      for (const line of input.items) {
+        const key = `${line.productId}:${line.variantId}`;
+        requestedQuantities.set(key, (requestedQuantities.get(key) ?? 0) + line.quantity);
+      }
       const items = input.items.map(line => {
         const product = catalog.find(item => item.id === line.productId);
         const variant = product?.variants.find(item => item.id === line.variantId);
         if (!product || !variant?.available) conflict("An item in your cart is no longer available.");
-        if (variant.stockQuantity !== undefined && line.quantity > variant.stockQuantity) conflict("There are not enough units of an item in your cart.");
+        if (variant.stockQuantity !== undefined && requestedQuantities.get(`${line.productId}:${line.variantId}`)! > variant.stockQuantity) conflict("There are not enough units of an item in your cart.");
         const hasLogo = line.customization?.hasOneinfoLogo !== false && line.customization?.brandingMode !== "without-logo";
         const unitPriceMinor = variantPriceForBranding(variant, hasLogo);
         if (unitPriceMinor !== line.unitPriceMinor) conflict("An item price changed. Review your updated cart and try again.");
@@ -429,17 +437,17 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       const awaitingPayment = reserving && paymentAmountMinor > 0;
       const [order] = await tx.insert(storeOrders).values({
         activationMethod: "ORDER_SECRET", requestId, requestHash, customer: input.customer, deliveryAddress: input.deliveryAddress,
-        stockReservations: items.filter(line => catalog.find(product => product.id === line.productId)?.variants.find(variant => variant.id === line.variantId)?.stockQuantity !== undefined).map(({ productId, variantId, quantity }) => ({ productId, variantId, quantity })),
+        stockReservations: catalog.flatMap(product => product.variants.filter(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`))
+          .map(variant => ({ productId: product.id, variantId: variant.id, quantity: requestedQuantities.get(`${product.id}:${variant.id}`)! }))),
         items, shippingZone: zone, subtotalMinor, shippingMinor, couponCode: input.coupon?.code, discountMinor,
         paymentMethod, paymentAmountMinor, transactionId, awaitingPayment,
         invoiceNumber: awaitingPayment ? null : await nextInvoiceNumber(tx),
       }).onConflictDoNothing({ target: storeOrders.transactionId }).returning();
       if (!order) conflict("This bKash transaction ID is already linked to an order.");
       for (const product of catalog) {
-        const quantities = new Map(items.filter(item => item.productId === product.id).map(item => [item.variantId, item.quantity]));
-        if (!product.variants.some(variant => variant.stockQuantity !== undefined && quantities.has(variant.id))) continue;
-        const variants = product.variants.map(variant => variant.stockQuantity !== undefined && quantities.has(variant.id)
-          ? { ...variant, stockQuantity: variant.stockQuantity - (quantities.get(variant.id) ?? 0) } : variant);
+        if (!product.variants.some(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`))) continue;
+        const variants = product.variants.map(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`)
+          ? { ...variant, stockQuantity: variant.stockQuantity - requestedQuantities.get(`${product.id}:${variant.id}`)! } : variant);
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
       }
       await createOrderProfiles(tx, order);

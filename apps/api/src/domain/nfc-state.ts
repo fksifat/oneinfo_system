@@ -41,6 +41,7 @@ export interface ReadSession {
   stationId: string;
   state: "PENDING" | "READING" | "COMPLETED" | "FAILED" | "CANCELLED";
   utility?: NfcUtilityInput;
+  protection?: { cardId: string; expectedUrl: string; operation: "PROTECT" | "UNPROTECT"; encryptedKey: string; operatorId: string };
   deviceId?: string;
   result?: NfcReadResultInput;
   createdAt: Date;

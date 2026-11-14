@@ -1,3 +1,28 @@
+# Full project audit — 14 November 2026
+
+Reviewed `65cd835` on top of `origin/main` (`eee8105`): storefront customization/checkout/tracking/invoices, Admin and customer/company profile interfaces, authentication/authorization, contact exchange, activation/ownership, production stock, QR/NFC operations and protection, local backups, migrations, dependencies and deployment safeguards. Existing editor settings and all live business records were preserved. Synthetic writes, emails, payments and NFC results ran only in disposable test fixtures; live checks were read-only.
+
+## Confirmed findings and fixes
+
+| Priority | Problem | Fix and evidence |
+|---|---|---|
+| P1 | Checkout permits multiple custom designs of one variant, but validated each line separately and reserved only the final line's quantity. Split designs could exceed available stock and leave incorrect reservation/cancellation counts. | Aggregate quantity by product/variant before validating and decrementing stock, and persist one reservation per variant. Regression rejects 2+4 units against stock 5, reserves exactly 2+3, preserves retry idempotency, and restores exactly 5 once on cancellation. Legacy orders with ambiguous duplicate reservations now require manual reconciliation instead of changing stock; a read-only live check found **0** affected open orders. |
+| P1 | Profile redesign hard-coded contact consent and automatically granted CRM permission whenever CRM was configured, without asking the visitor. | Restore required contact-sharing consent and a separate optional CRM checkbox, unchecked by default. Browser regression verifies unchecked consent blocks submission, normal sharing stores CRM permission as false, retry IDs remain stable, and no CRM request occurs. |
+| P2 | On page load, the latest historical phone QR event could override an explicitly chosen batch and switch the operator away from another tab. Only card-specific deep links previously ignored old events. | Ignore scan events predating the current page load for every console entry point. Browser regression navigates to an explicit batch on NFC tools while an older scan exists and verifies both batch and tab remain selected; fresh scans still select their batch/card and open Production. |
+
+## Verification
+
+- Full typecheck and build pass; **132 API unit tests**, desktop bridge checks and **33 Node checks** pass.
+- **72 disposable PostgreSQL workflows** plus guarded QR/NFC smoke pass, including split-design stock, activation, payment/packing, contact isolation, company handover, deletion safeguards and NFC protection result validation.
+- Isolated Chrome checks pass at **320/390/768/1440px** across Admin, storefront, checkout/tracking/invoices, production/printing/backups, activation/photo upload/editing, contact exchange and company management. Screenshots were inspected for the consent controls. No live customer data or credentials were put in browser fixtures.
+- Android companion unit tests (**6**, including Classic protection preflight/interruption checks) and APK build pass. No real tag was rewritten or password-protected during this audit.
+- **5 deployment/rollback/archive checks** pass. Hosted API and website return HTTP 200; dedicated Oneinfo API/PostgreSQL containers are healthy. No unrelated VPS service was changed.
+- Production dependency audit: **0 vulnerabilities**. **4 moderate development-only entries** remain in the Drizzle/esbuild loader chain. npm proposes a breaking Drizzle downgrade; it was not forced. Keep development/migration tooling private pending a compatible upstream fix.
+
+These fixes require no schema migration or historical business-data rewrite. Physical phone/tag/printer behavior, Windows/macOS launch behavior, real payment/email provider delivery and full VPS disaster recovery remain untested here. Public profiles and existing QR/NFC links were not rewritten. Earlier audit history follows.
+
+---
+
 # Full project audit — 13 November 2026
 
 Pulled `origin/main` through `a4c80ed` before review. Preserved local editor settings and existing customer, card, order and media data. Reviewed storefront checkout/customization/invoices, Admin and customer/company profiles, authentication, activation and QR/NFC production, local backups, dependencies, migrations and deployment safeguards.

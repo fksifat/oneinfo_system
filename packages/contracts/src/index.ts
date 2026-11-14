@@ -56,6 +56,13 @@ export const VerificationMethodSchema = z.enum(["QR_CAMERA", "NFC_READ"]);
 export const CreateVerificationSchema = z.object({ cardId: z.uuid(), method: VerificationMethodSchema });
 export const StartQrVerificationSchema = z.object({ scanId: z.uuid(), scannedValue: HttpUrlSchema });
 export const ScanActionSchema = z.object({ scanId: z.uuid() });
+export const NfcProtectionSchema = z.object({
+  cardId: z.uuid(), operation: z.enum(["PROTECT", "UNPROTECT"]),
+  keyHex: z.string().regex(/^[0-9a-fA-F]{12}$/, "Use exactly 12 hexadecimal characters")
+    .transform(value => value.toUpperCase())
+    .refine(value => !["FFFFFFFFFFFF", "000000000000", "A0A1A2A3A4A5", "D3F7D3F7D3F7"].includes(value), "Choose a private key, not a default NFC key"),
+  confirmed: z.literal(true),
+});
 export const NfcUtilitySchema = z.union([
   z.object({ operation: z.literal("READ") }),
   z.object({ operation: z.literal("ERASE"), overwriteConfirmed: z.literal(true) }),

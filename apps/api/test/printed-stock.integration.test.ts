@@ -80,6 +80,45 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
 
+  it("keeps protection keys private and records protection only after the assigned phone verifies the matching card", async () => {
+    const card = await readyForClaim();
+    const input = { cardId: card.id, operation: "PROTECT", keyHex: "49C26785A1FE", confirmed: true };
+    const url = "/api/v1/local-nfc/protection-sessions";
+    expect((await app.inject({ method: "POST", url, payload: input })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...input, confirmed: false } })).statusCode).toBe(400);
+    const pairing = await request("/api/v1/local-nfc/pairings", {});
+    const paired = await request("/api/v1/local-nfc/devices/pair", { pairingCode: pairing.pairingCode, deviceName: "Protection phone" });
+    const deviceHeaders = { "x-oneinfo-device-token": paired.deviceToken };
+    const result = { uid: "7470CE64", techList: ["android.nfc.tech.MifareClassic", "android.nfc.tech.Ndef"], ndefFormatted: true,
+      records: [{ tnf: 1, type: "U", idHex: "", payloadHex: "00", uri: card.canonicalUrl }],
+      deviceMetadata: { protectionVerified: true, protectionMethod: "MIFARE_CLASSIC_KEY_B_V1", protectionOperation: "PROTECT", sectorsVerified: 16 } };
+    const submit = (id: string, body: object) => app.inject({ method: "POST", url: `/api/v1/local-nfc/device/read-tasks/${id}/result`, headers: deviceHeaders, payload: body });
+    const next = () => app.inject({ url: "/api/v1/local-nfc/device/read-tasks/next", headers: deviceHeaders });
+    const started = await request(url, input);
+    for (const publicResult of [started, await request(`/api/v1/local-nfc/read-sessions/${started.id}`), await request("/api/v1/local-nfc/utility-sessions")]) {
+      expect(JSON.stringify(publicResult)).not.toContain(input.keyHex);
+      expect(JSON.stringify(publicResult)).not.toContain("encryptedKey");
+    }
+    expect((await next()).json()).toMatchObject({ sessionId: started.id, utility: { operation: "CLASSIC_PROTECT", keyHex: input.keyHex, expectedUrl: card.canonicalUrl } });
+    expect((await app.inject({ method: "POST", url: `/api/v1/local-nfc/utility-sessions/${started.id}/cancel`, headers, payload: {} })).statusCode).toBe(409);
+    expect((await submit(started.id, { ...result, deviceMetadata: {} })).json().state).toBe("FAILED");
+    const mismatch = await request(url, input); await next();
+    expect((await submit(mismatch.id, { ...result, records: [{ ...result.records[0], uri: "https://wrong.example/card" }] })).json().state).toBe("FAILED");
+    expect(await client.db.select().from(schema.cardEvents).where(eq(schema.cardEvents.eventType, "NFC_WRITE_PROTECTED"))).toHaveLength(0);
+    const valid = await request(url, input); await next();
+    expect((await submit(valid.id, result)).json().state).toBe("COMPLETED");
+    expect((await submit(valid.id, result)).json().state).toBe("COMPLETED");
+    expect((await request(`/api/v1/production/batches/${card.batchId}/verification-status`)).items[0].writeProtection).toBe("PROTECTED");
+    const removed = await request(url, { ...input, operation: "UNPROTECT" }); await next();
+    expect((await submit(removed.id, { ...result, deviceMetadata: { ...result.deviceMetadata, protectionOperation: "UNPROTECT" } })).json().state).toBe("COMPLETED");
+    expect((await request(`/api/v1/production/batches/${card.batchId}`)).cards[0].writeProtection).toBe("UNPROTECTED");
+    const events = await client.db.select().from(schema.cardEvents).where(eq(schema.cardEvents.eventType, "NFC_WRITE_PROTECTED"));
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain(input.keyHex);
+    const pending = await request(url, input);
+    await request(`/api/v1/local-nfc/utility-sessions/${pending.id}/cancel`, {});
+  });
+
   it("limits database backup listing to a local administrator with a valid station", async () => {
     const path = "/api/v1/production/backups";
     const original = process.env.ONEINFO_BACKUP_DIR;
@@ -266,6 +305,24 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(await client.db.select().from(schema.storeOrders)).toHaveLength(1);
     expect(allocations).toHaveLength(removed.statusCode === 200 ? 0 : 1);
     expect(rows).toHaveLength(allocations.length);
+  });
+
+  it("loads lightweight batch previews while preserving protected original PNG downloads", async () => {
+    const created = await batch(2, false);
+    const pending = await request(`/api/v1/production/batches/${created.id}?preview=svg`);
+    expect(pending.cards.every((card: any) => card.imageData === null)).toBe(true);
+    await request(`/api/v1/production/batches/${created.id}/generate-qr`, {});
+    const original = await request(`/api/v1/production/batches/${created.id}`);
+    const preview = await request(`/api/v1/production/batches/${created.id}?preview=svg`);
+    expect(preview.cards).toHaveLength(2);
+    for (const card of preview.cards) {
+      expect(card.imageData).toMatch(/^data:image\/svg\+xml;base64,/);
+      const path = `/api/v1/production/batches/${created.id}/cards/${card.id}/qr-image`;
+      expect((await app.inject({ url: path })).statusCode).toBe(401);
+      expect(await request(path)).toEqual({ imageData: original.cards.find((item: any) => item.id === card.id).imageData });
+      expect((await app.inject({ url: `/api/v1/production/batches/${randomUUID()}/cards/${card.id}/qr-image`, headers })).statusCode).toBe(404);
+    }
+    expect(await request(`/api/v1/production/batches/${created.id}`)).toEqual(original);
   });
 
   it("exports every generated QR as SVG and EPS in a protected ZIP without changing stock", async () => {
@@ -1426,6 +1483,36 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     await app.inject({ method: "PATCH", url: `/api/v1/profiles/${owner.id}`, headers, payload: { published: false } });
     expect((await app.inject({ url: `/api/v1/profiles/handle/${owner.handle}` })).statusCode).toBe(404);
     expect((await make("reserved-name", "Admin")).handle).toBe("AdminProfile");
+  });
+
+  it("counts split custom designs together when validating, reserving and releasing variant stock", async () => {
+    const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
+    try {
+      await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 5 })) }).where(eq(schema.products.id, productId));
+      const original = orderPayload();
+      const payload = { ...original, items: [
+        { ...original.items[0]!, quantity: 2, customization: { name: "First design" } },
+        { ...original.items[0]!, quantity: 4, customization: { name: "Second design" } },
+      ] };
+      expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload })).statusCode).toBe(409);
+      const stock = async () => (await client.db.select().from(schema.products).where(eq(schema.products.id, productId)))[0]!.variants[0]!.stockQuantity;
+      expect(await stock()).toBe(5);
+      payload.items[1]!.quantity = 3;
+      const placed = await request("/api/v1/orders", payload);
+      expect(await stock()).toBe(0);
+      const [stored] = await client.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id, placed.id));
+      expect(stored!.stockReservations).toEqual([{ productId, variantId, quantity: 5 }]);
+      expect((await request("/api/v1/orders", payload)).id).toBe(placed.id);
+      expect(await stock()).toBe(0);
+      await request(`/api/v1/orders/admin/${placed.id}/cancel`, { reason: "Customer cancelled both designs" });
+      expect(await stock()).toBe(5);
+      await request(`/api/v1/orders/admin/${placed.id}/cancel`, { reason: "Customer cancelled both designs" });
+      expect(await stock()).toBe(5);
+      const another = await request("/api/v1/orders", { ...payload, requestId: randomUUID() });
+      await client.db.update(schema.storeOrders).set({ stockReservations: [{ productId, variantId, quantity: 2 }, { productId, variantId, quantity: 3 }] }).where(eq(schema.storeOrders.id, another.id));
+      expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${another.id}/cancel`, headers, payload: { reason: "Legacy stock needs reconciliation" } })).statusCode).toBe(409);
+      expect(await stock()).toBe(0);
+    } finally { await client.db.update(schema.products).set({ variants: catalog!.variants }).where(eq(schema.products.id, productId)); }
   });
 
   it("reserves stock before payment, freezes the total, and releases stock once on cancellation", async () => {

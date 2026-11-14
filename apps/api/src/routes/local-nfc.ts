@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { openNfcState, type NfcDevice, type BridgeSession, type ReadSession, type VerificationSession } from "../domain/nfc-state.js";
 import { lanPairing } from "../domain/lan-connection.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
+import { encryptNfcKey, decryptNfcKey } from "../domain/nfc-protection.js";
 import QRCode from "qrcode";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -18,6 +19,7 @@ import {
   StartQrVerificationSchema,
   ScanActionSchema,
   NfcUtilitySchema,
+  NfcProtectionSchema,
   type NfcUtilityInput,
   type NfcBridgeResultInput,
   type NfcReadResultInput,
@@ -39,6 +41,7 @@ export function forgetProductionCards(cardIds: string[]) {
   const ids = new Set(cardIds);
   for (const [station, target] of expectedCards) if (ids.has(target.cardId)) expectedCards.delete(station);
   let changed = false;
+  for (const [id, session] of readSessions) if (session.protection && ids.has(session.protection.cardId)) { readSessions.delete(id); changed = true; }
   for (const entries of [sessions, verificationSessions, qrScans]) {
     for (const [id, value] of entries) if (ids.has(value.cardId)) { entries.delete(id); changed = true; }
   }
@@ -115,6 +118,11 @@ function createUtility(stationId: string, utility: NfcUtilityInput, deviceId?: s
   return session;
 }
 
+function publicReadSession(session: ReadSession) {
+  const { protection, ...safe } = session;
+  return { ...safe, ...(protection ? { protection: { cardId: protection.cardId, operation: protection.operation } } : {}) };
+}
+
 async function createVerification(stationId: string, input: { cardId: string; method: "QR_CAMERA" | "NFC_READ" }, deviceId?: string, id: string = randomUUID()) {
   checkExpectedCard(stationId, input.cardId);
   const [card] = await db.select().from(cards).where(eq(cards.id, input.cardId)).limit(1);
@@ -135,6 +143,20 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip) && request.protocol !== "https") return reply.code(403).send({ message: "Use the secure LAN connection." });
   });
   app.addHook("onSend", async (_request, _reply, payload) => { store.save(); return payload; });
+  app.post("/protection-sessions", async (request, reply) => {
+    const operator = await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR"]);
+    const station = await requireStation(request);
+    const input = parseBody(NfcProtectionSchema, request.body);
+    const [card] = await db.select().from(cards).where(eq(cards.id, input.cardId)).limit(1);
+    if (!card || card.qrStatus !== "GENERATED" || card.nfcStatus !== "WRITTEN") throw Object.assign(new Error("Write and verify this card's NFC link before changing protection."), { statusCode: 409 });
+    checkExpectedCard(station.stationId, card.id);
+    assertStationIdle(station.stationId);
+    const session: ReadSession = { id: randomUUID(), stationId: station.stationId, state: "PENDING", createdAt: new Date(),
+      expiresAt: new Date(Date.now() + 2 * 60_000), protection: { cardId: card.id, expectedUrl: card.canonicalUrl,
+        operation: input.operation, encryptedKey: encryptNfcKey(input.keyHex), operatorId: operator.operatorId } };
+    readSessions.set(session.id, session);
+    return sendCreated(reply, publicReadSession(session));
+  });
   app.get("/device/status", async (request) => {
     const device = await requireDevice(request);
     return { name: device.name, stationId: device.stationId };
@@ -156,7 +178,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     const station = await requireStation(request);
     prune();
     return { items: [...readSessions.values()].filter((session) => session.stationId === station.stationId)
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20) };
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 20).map(publicReadSession) };
   });
 
   app.post("/utility-sessions/:sessionId/cancel", async (request) => {
@@ -165,6 +187,8 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     const { sessionId } = request.params as { sessionId: string };
     const session = readSessions.get(sessionId);
     if (!session || session.stationId !== station.stationId) throw Object.assign(new Error("Operation not found"), { statusCode: 404 });
+    if (session.protection) await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR"]);
+    if (session.protection && session.state === "READING") throw Object.assign(new Error("The phone has received the protection request. Cancel from the phone before tapping, or wait for completion."), { statusCode: 409 });
     if (["PENDING", "READING"].includes(session.state)) session.state = "CANCELLED";
     return { state: session.state };
   });
@@ -508,7 +532,7 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!session || session.stationId !== station.stationId) {
       throw Object.assign(new Error("NFC read session not found or expired"), { statusCode: 404 });
     }
-    return session;
+    return publicReadSession(session);
   });
 
   app.get("/sessions/:sessionId", async (request) => {
@@ -544,7 +568,9 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!task) return { task: null };
     task.state = "READING";
     task.deviceId = device.id;
-    return { sessionId: task.id, expiresAt: task.expiresAt, utility: task.utility ?? { operation: "READ" } };
+    return { sessionId: task.id, expiresAt: task.expiresAt, utility: task.protection
+      ? { operation: task.protection.operation === "PROTECT" ? "CLASSIC_PROTECT" : "CLASSIC_UNPROTECT", expectedUrl: task.protection.expectedUrl, keyHex: decryptNfcKey(task.protection.encryptedKey) }
+      : task.utility ?? { operation: "READ" } };
   });
 
   app.post("/device/tasks/:sessionId/result", async (request) => {
@@ -583,6 +609,14 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
       throw Object.assign(new Error("NFC read task is not assigned to this device"), { statusCode: 404 });
     }
     let result = parseBody(NfcReadResultSchema, request.body);
+    if (!result.errorCode && session.protection) {
+      const proof = result.deviceMetadata;
+      if (!result.uid || result.records.length !== 1 || result.records[0]?.uri !== session.protection.expectedUrl ||
+          proof.protectionVerified !== true || proof.protectionMethod !== "MIFARE_CLASSIC_KEY_B_V1" ||
+          proof.protectionOperation !== session.protection.operation || proof.sectorsVerified !== 16) {
+        result = { ...result, errorCode: "PROTECTION_NOT_VERIFIED" };
+      }
+    }
     if (!result.errorCode && session.utility?.operation === "ERASE") {
       const record = result.records[0];
       const empty = result.ndefFormatted && (result.records.length === 0 || (result.records.length === 1 && record?.tnf === 0 &&
@@ -597,6 +631,13 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (session.state !== "READING") {
       if (JSON.stringify(session.result) === JSON.stringify(result)) return { accepted: true, state: session.state };
       throw Object.assign(new Error("NFC result is already finalized"), { statusCode: 409 });
+    }
+    if (!result.errorCode && session.protection) {
+      await db.insert(cardEvents).values({ id: session.id, cardId: session.protection.cardId,
+        eventType: session.protection.operation === "PROTECT" ? "NFC_WRITE_PROTECTED" : "NFC_WRITE_UNPROTECTED",
+        newState: session.protection.operation === "PROTECT" ? "PROTECTED" : "UNPROTECTED",
+        actorId: session.protection.operatorId, stationId: session.stationId,
+        metadata: { uid: result.uid, method: "MIFARE_CLASSIC_KEY_B_V1" } }).onConflictDoNothing();
     }
     session.result = result;
     session.state = result.errorCode ? "FAILED" : "COMPLETED";

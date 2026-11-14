@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type Credentials } from "./api.js";
 import { DatabaseBackups } from "./DatabaseBackups.js";
 import { NfcTools } from "./NfcTools.js";
@@ -52,6 +52,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState(() => ["tools", "connection", "backups"].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : "production");
   const [devices, setDevices] = useState<{ id: string; name: string; online: boolean; lastSeenAt: string }[]>([]);
   const [connectionError, setConnectionError] = useState("");
+  const jobsPending = useRef(false);
 
   const configured = Boolean(credentials.accessToken && credentials.stationKey);
   const pairingExpired = pairing ? Date.parse(pairing.expiresAt) <= Date.now() : false;
@@ -113,14 +114,15 @@ export function App() {
   };
 
   const refreshJobs = useCallback(async (quiet = false) => {
-    if (!configured) return;
+    if (!configured || jobsPending.current) return;
+    jobsPending.current = true;
     try {
       const response = await stationApi<{ items: QueueItem[] }>("/api/v1/production/jobs");
       setJobs(response.items);
       if (!quiet) setMessage(`${response.items.length} available or assigned jobs`);
     } catch (error) {
       if (!quiet) setMessage(error instanceof Error ? error.message : "Could not load jobs");
-    }
+    } finally { jobsPending.current = false; }
   }, [configured, credentials]);
 
   useEffect(() => {
