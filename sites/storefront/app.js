@@ -686,8 +686,7 @@ import "./invoice.css";
           </div>
         </div>
       ` : `
-        <div class="mini-product-card ${v.appearance}-card is-essential-card is-catalog-card ${isLight ? 'is-light-surface' : 'is-dark-surface'}" style="--essential-color:${surfaceBg}; background:${surfaceBg};" aria-label="${escapeHtml(p.name)} — ${escapeHtml(v.name)}">
-          <div class="card-surface-glare" aria-hidden="true"></div>
+        <div class="mini-product-card ${v.appearance}-card is-essential-card ${isLight ? 'is-light-surface' : 'is-dark-surface'}" style="--essential-color:${surfaceBg}; background:${surfaceBg};" aria-label="${escapeHtml(p.name)} — ${escapeHtml(v.name)}">
           <img class="card-center-logo" src="${logoUrl}" alt="Oneinfo" />
         </div>
       `;
