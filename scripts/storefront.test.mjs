@@ -591,6 +591,7 @@ test("original card design renders flat physical card with centered Oneinfo logo
   assert.doesNotMatch(appSrc, /card-surface-glare/);
 
   const homeCss = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(homeCss, /\.product-grid \.product-art\s*\{[^}]*background:\s*#ffffff/);
   assert.match(homeCss, /\.product-art \.mini-product-card\.is-essential-card/);
   assert.match(homeCss, /\.mini-product-card\.is-essential-card \.card-center-logo/);
   assert.match(homeCss, /transform:\s*none/);
@@ -601,4 +602,7 @@ test("original card design renders flat physical card with centered Oneinfo logo
   assert.match(adminSrc, /card-mini-center-logo/);
   assert.match(adminSrc, /original-card-art/);
   assert.match(adminSrc, /card-preview-center-logo/);
+
+  const adminCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(adminCss, /\.catalog-card-visual\s*\{[^}]*background-color:\s*#ffffff/);
 });
