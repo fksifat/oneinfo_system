@@ -3,6 +3,18 @@ import { useCallback, useEffect, useLayoutEffect, useState, useRef } from "react
 import { printFinish, ProductImageSchema, ProductInputSchema, productMedia, discountPercent, variantPrice, type Product, type ProductInput, type ProductVariant } from "@oneinfo/contracts";
 import { api, productMediaUrl } from "./api.js";
 import { ProductMediaEditor } from "./ProductMediaEditor.js";
+import oneinfoLogo from "./assets/oneinfo-logo.svg";
+
+function isColorLight(hex?: string): boolean {
+  if (!hex || !hex.startsWith("#")) return false;
+  const clean = hex.replace("#", "");
+  const num = parseInt(clean, 16);
+  if (isNaN(num)) return false;
+  const r = (num >> 16) & 255;
+  const g = (num >> 8) & 255;
+  const b = num & 255;
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.65;
+}
 
 type VariantDraft = Omit<ProductVariant, "priceMinor" | "salePriceMinor" | "withoutLogoPriceMinor" | "withoutLogoSalePriceMinor"> & {
   regular: string;
@@ -185,21 +197,27 @@ export function Products({ token }: { token: string }) {
         const totalCount = p.variants.length;
         const isReady = readyCount === totalCount && totalCount > 0;
         const primary = p.variants[0];
-        const isLight = primary?.appearance === "light" || primary?.colorHex?.toLowerCase() === "#ffffff";
+        const isLight = primary?.appearance === "light" || (primary?.colorHex ? isColorLight(primary.colorHex) : false);
+        const cardBg = primary?.colorHex || (isLight ? "#e8e5e0" : "#121316");
 
         return (
           <article className="product-admin-card" key={p.id}>
-            <div className="catalog-card-visual" style={{ background: primary?.colorHex || "#121316" }}>
-              <div className={`card-preview-mini ${isLight ? "is-light-card" : ""}`}>
-                <div className="card-mini-chip" aria-hidden="true"></div>
-                <div className="card-mini-brand">Oneinfo</div>
-                <div className="card-mini-nfc" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M6 9a5 5 0 0 1 0 6" />
-                    <path d="M10 6a9 9 0 0 1 0 12" />
-                    <path d="M14 3a13 13 0 0 1 0 18" />
-                  </svg>
-                </div>
+            <div className="catalog-card-visual">
+              <div
+                className={`card-preview-mini ${isLight ? "is-light-card" : "is-dark-card"}`}
+                style={{
+                  background: isLight
+                    ? `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.45) 0%, rgba(0, 0, 0, 0.08) 100%), ${cardBg}`
+                    : `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.22) 0%, rgba(0, 0, 0, 0.32) 100%), ${cardBg}`
+                }}
+              >
+                <div className="card-mini-glare" aria-hidden="true" />
+                <img
+                  src={oneinfoLogo}
+                  alt="Oneinfo"
+                  className="card-mini-center-logo"
+                  style={{ filter: isLight ? "none" : "brightness(0) invert(1)" }}
+                />
               </div>
             </div>
 
@@ -383,7 +401,35 @@ export function Products({ token }: { token: string }) {
             {editing.featured && <label className="full">Highlight badge<input maxLength={40} placeholder="e.g. Most popular" value={editing.badge} onChange={e => setEditing({...editing,badge:e.target.value})} /></label>}
           </div></section>
         </div><aside className="catalog-preview"><p>Card preview</p>{preview && previewPrice && <>
-          <div className={`catalog-preview-art ${preview.appearance}`} style={{background:preview.colorHex}}><span>ONEINFO</span><strong>YOUR NAME</strong><small>SMART BUSINESS CARD</small>{previewImage && ProductImageSchema.safeParse(previewImage).success && <img src={productMediaUrl(previewImage)} referrerPolicy="no-referrer" alt={preview.name} onError={e => { e.currentTarget.style.visibility="hidden"; }} onLoad={e => { e.currentTarget.style.visibility="visible"; }} />}</div>
+          {editing.customizable ? (
+            <div className={`catalog-preview-art ${preview.appearance}`} style={{background:preview.colorHex}}>
+              <span>ONEINFO</span>
+              <strong>YOUR NAME</strong>
+              <small>SMART BUSINESS CARD</small>
+              {previewImage && ProductImageSchema.safeParse(previewImage).success && (
+                <img src={productMediaUrl(previewImage)} referrerPolicy="no-referrer" alt={preview.name} onError={e => { e.currentTarget.style.visibility="hidden"; }} onLoad={e => { e.currentTarget.style.visibility="visible"; }} />
+              )}
+            </div>
+          ) : (
+            <div
+              className={`catalog-preview-art original-card-art ${isColorLight(preview.colorHex) || preview.appearance === "light" ? "is-light-card" : "is-dark-card"}`}
+              style={{
+                background: (isColorLight(preview.colorHex) || preview.appearance === "light")
+                  ? `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.45) 0%, rgba(0, 0, 0, 0.08) 100%), ${preview.colorHex || "#e8e5e0"}`
+                  : `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.22) 0%, rgba(0, 0, 0, 0.32) 100%), ${preview.colorHex || "#121316"}`
+              }}
+            >
+              <div className="card-mini-glare" aria-hidden="true" />
+              <img
+                src={oneinfoLogo}
+                alt="Oneinfo"
+                className="card-preview-center-logo"
+                style={{
+                  filter: (isColorLight(preview.colorHex) || preview.appearance === "light") ? "none" : "brightness(0) invert(1)"
+                }}
+              />
+            </div>
+          )}
           <h3>{editing.name || "Your product name"}</h3><p>{preview.name || "Colour name"}</p>
           <div className="catalog-preview-price"><strong>{preview.regular ? money.format(variantPrice(previewPrice) / 100) : "Set a price"}</strong>{previewPrice.salePriceMinor !== null && previewPrice.salePriceMinor > 0 && previewPrice.salePriceMinor < previewPrice.priceMinor && <><del>{money.format(previewPrice.priceMinor / 100)}</del><span>{discountPercent(previewPrice) > 0 ? `${discountPercent(previewPrice)}% off` : "On sale"}</span></>}</div>
           <small>Discount is calculated automatically from this colour’s prices.</small>

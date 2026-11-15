@@ -487,7 +487,7 @@ import "./invoice.css";
       const model = models.find(({variant,media}) => variant.id === selectedModel?.variantId && media.id === selectedModel.mediaId)
         ?? models.find(({variant,index}) => variant.id === v.id && index === preferred)
         ?? models.find(({variant}) => variant.id === v.id) ?? models[0];
-      const imageUrl = !detail ? variantCover(v) : item?.type === "image" ? item.url : "";
+      const imageUrl = !detail ? "" : item?.type === "image" ? item.url : "";
       const drivePreview = detail && item?.type === "video" ? driveVideoPreview(item.url) : null;
       const hasMedia = imageUrl || (detail && item?.type === "video");
       const quantity = quantities.get(p.id) ?? 1;
@@ -502,7 +502,7 @@ import "./invoice.css";
       const regWithLogo = variantRegularPriceForBranding(v, true);
       const priceWithoutLogo = variantPriceForBranding(v, false);
       const regWithoutLogo = variantRegularPriceForBranding(v, false);
-      const isLight = isCustomizable ? isColorLight(custom.surfaceColor) : (v.appearance === "light");
+      const isLight = isCustomizable ? isColorLight(custom.surfaceColor) : (v.appearance === "light" || isColorLight(v.colorHex));
       const surfaceBg = isCustomizable ? escapeHtml(custom.surfaceColor) : escapeHtml(v.colorHex);
       const cardAccent = isCustomizable ? escapeHtml(custom.accentColor) : 'var(--accent)';
       const layoutClass = isCustomizable ? `layout-${escapeHtml(custom.layout || 'left')}` : "";
@@ -686,14 +686,9 @@ import "./invoice.css";
           </div>
         </div>
       ` : `
-        <div class="mini-product-card ${v.appearance}-card" style="background:${surfaceBg};">
-          <div class="card-header-row">
-            <img class="mini-product-logo" src="${logoUrl}" alt="Oneinfo logo" />
-            <span class="card-nfc-wave" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
-            </span>
-          </div>
-          <strong>${escapeHtml(p.name)}</strong>
+        <div class="mini-product-card ${v.appearance}-card is-essential-card is-catalog-card ${isLight ? 'is-light-surface' : 'is-dark-surface'}" style="--essential-color:${surfaceBg}; background:${surfaceBg};" aria-label="${escapeHtml(p.name)} — ${escapeHtml(v.name)}">
+          <div class="card-surface-glare" aria-hidden="true"></div>
+          <img class="card-center-logo" src="${logoUrl}" alt="Oneinfo" />
         </div>
       `;
 
