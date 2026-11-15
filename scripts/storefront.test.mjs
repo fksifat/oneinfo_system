@@ -573,3 +573,13 @@ test("stock management and out-of-stock indicators across storefront and admin",
   assert.match(productsAdminSrc, /variant-heading-stock/);
   assert.match(productsAdminSrc, /stock-status-pill/);
 });
+
+test("single colour variant omits '1 option' text and places swatch icon on right", () => {
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /is-single-option-swatch/);
+  assert.match(appSrc, /is-single-colour/);
+  assert.doesNotMatch(appSrc, /1 option/);
+
+  const homeCss = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(homeCss, /\.is-single-option-swatch/);
+});
