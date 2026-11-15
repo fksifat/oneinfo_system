@@ -283,9 +283,9 @@ input:focus, textarea:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rg
 
 @keyframes ping { 50% { transform: scale(1.35); opacity: .65; } }
 
-@media (max-width: 1050px) {
+@media (max-width: 900px) {
   .product-grid { grid-template-columns: 1fr 1fr; }
-  .product:last-child { grid-column: 1 / -1; width: calc(50% - 11px); }
+  .product:last-child { grid-column: auto; width: auto; }
   .footer-main-grid { grid-template-columns: 1fr 1fr; }
 }
 
