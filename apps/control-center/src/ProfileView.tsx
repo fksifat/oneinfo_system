@@ -272,11 +272,13 @@ function WebsiteFavicon({ url, label }: { url?: string | undefined; label?: stri
         />
       )}
       {(!loaded || failed || !faviconUrl) && (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none" className="link-fallback-globe">
-          <circle cx="20" cy="20" r="19" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.12))" />
-          <ellipse cx="20" cy="20" rx="8" ry="19" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.4" />
-          <line x1="1" y1="20" x2="39" y2="20" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.4" />
-          <path d="M4.5 12h31M4.5 28h31" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.2" strokeOpacity="0.75" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" className="link-fallback-globe">
+          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.12))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.3))" strokeWidth="1.2" />
+          <g stroke="var(--profile-accent, #dfb877)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" transform="translate(4.8, 4.8) scale(0.6)">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="2" y1="12" x2="22" y2="12" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </g>
         </svg>
       )}
     </div>
@@ -287,144 +289,149 @@ export function SocialBrandIcon({ kind, url, label }: { kind: string; url?: stri
   switch (kind) {
     case "whatsapp":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#25D366" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#25D366" />
           <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M20 7.5c-6.9 0-12.5 5.6-12.5 12.5 0 2.2.6 4.4 1.7 6.3L7.5 32.5l6.4-1.7c1.8 1 3.9 1.6 6.1 1.6 6.9 0 12.5-5.6 12.5-12.5S26.9 7.5 20 7.5zm7.3 17.7c-.3.9-1.5 1.6-2.4 1.7-.6.1-1.4.1-2.3-.2-.5-.2-1.3-.5-2.2-.9-3.9-1.7-6.4-5.6-6.6-5.9-.2-.3-1.6-2.1-1.6-4s1.1-2.9 1.4-3.3c.4-.4.8-.5 1.1-.5.3 0 .5 0 .7.01.2.01.5-.08.8.6.3.7 1.1 2.7 1.2 2.9.1.2.1.4 0 .6-.1.2-.2.4-.4.6-.2.2-.4.4-.5.6-.2.2-.4.4-.2.8.2.4 1.1 1.8 2.3 2.9 1.6 1.4 3 1.9 3.4 2.1.4.2.7.2.9-.1.3-.3 1.1-1.3 1.4-1.7.3-.4.6-.3 1.1-.2.4.2 2.8 1.3 3.3 1.5.5.2.8.4 1 .6.1.2.1 1.4-.2 2.2z"
             fill="#ffffff"
+            d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"
+            transform="translate(3.84, 3.84) scale(0.68)"
           />
         </svg>
       );
     case "facebook":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#1877F2" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#1877F2" />
           <path
-            d="M22.5 35V20.8h4.7l.7-5.5h-5.4v-3.5c0-1.6.4-2.7 2.7-2.7h2.9V4.2c-.5-.1-2.2-.2-4.2-.2-4.2 0-7 2.6-7 7.2v4.1H12v5.5h4.7V35h5.8z"
+            d="M13.65 19.5v-6.9h2.32l.35-2.7h-2.67V8.18c0-.78.22-1.31 1.34-1.31h1.43V4.46c-.25-.03-1.1-.11-2.09-.11-2.07 0-3.48 1.26-3.48 3.58v2.07H8.5v2.7h2.35v6.9h2.8z"
             fill="#ffffff"
           />
         </svg>
       );
     case "instagram":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
           <defs>
-            <radialGradient id="igIconGrad" cx="30%" cy="105%" r="120%">
+            <radialGradient id="igIconGrad" cx="20%" cy="100%" r="130%">
               <stop offset="0%" stopColor="#fdf497" />
-              <stop offset="10%" stopColor="#fdf497" />
+              <stop offset="8%" stopColor="#fdf497" />
               <stop offset="35%" stopColor="#fd5949" />
               <stop offset="60%" stopColor="#d6249f" />
               <stop offset="100%" stopColor="#285AEB" />
             </radialGradient>
           </defs>
-          <rect width="40" height="40" rx="10" fill="url(#igIconGrad)" />
-          <rect x="9.5" y="9.5" width="21" height="21" rx="6" stroke="#ffffff" strokeWidth="2.3" fill="none" />
-          <circle cx="20" cy="20" r="5" stroke="#ffffff" strokeWidth="2.3" fill="none" />
-          <circle cx="25.5" cy="14.5" r="1.3" fill="#ffffff" />
+          <rect width="24" height="24" rx="6" fill="url(#igIconGrad)" />
+          <path
+            d="M7.0301.084c-1.2768.0602-2.1487.264-2.911.5634-.7888.3075-1.4575.72-2.1228 1.3877-.6652.6677-1.075 1.3368-1.3802 2.127-.2954.7638-.4956 1.6365-.552 2.914-.0564 1.2775-.0689 1.6882-.0626 4.947.0062 3.2586.0206 3.6671.0825 4.9473.061 1.2765.264 2.1482.5635 2.9107.308.7889.72 1.4573 1.388 2.1228.6679.6655 1.3365 1.0743 2.1285 1.38.7632.295 1.6361.4961 2.9134.552 1.2773.056 1.6884.069 4.9462.0627 3.2578-.0062 3.668-.0207 4.9478-.0814 1.28-.0607 2.147-.2652 2.9098-.5633.7889-.3086 1.4578-.72 2.1228-1.3881.665-.6682 1.0745-1.3378 1.3795-2.1284.2957-.7632.4966-1.636.552-2.9124.056-1.2809.0692-1.6898.063-4.948-.0063-3.2583-.021-3.6668-.0817-4.9465-.0607-1.2797-.264-2.1487-.5633-2.9117-.3084-.7889-.72-1.4568-1.3876-2.1228C21.2982 1.33 20.628.9208 19.8378.6165 19.074.321 18.2017.1197 16.9244.0645 15.6471.0093 15.236-.005 11.977.0014 8.718.0076 8.31.0215 7.0301.0839m.1402 21.6932c-1.17-.0509-1.8053-.2453-2.2287-.408-.5606-.216-.96-.4771-1.3819-.895-.422-.4178-.6811-.8186-.9-1.378-.1644-.4234-.3624-1.058-.4171-2.228-.0595-1.2645-.072-1.6442-.079-4.848-.007-3.2037.0053-3.583.0607-4.848.05-1.169.2456-1.805.408-2.2282.216-.5613.4762-.96.895-1.3816.4188-.4217.8184-.6814 1.3783-.9003.423-.1651 1.0575-.3614 2.227-.4171 1.2655-.06 1.6447-.072 4.848-.079 3.2033-.007 3.5835.005 4.8495.0608 1.169.0508 1.8053.2445 2.228.408.5608.216.96.4754 1.3816.895.4217.4194.6816.8176.9005 1.3787.1653.4217.3617 1.056.4169 2.2263.0602 1.2655.0739 1.645.0796 4.848.0058 3.203-.0055 3.5834-.061 4.848-.051 1.17-.245 1.8055-.408 2.2294-.216.5604-.4763.96-.8954 1.3814-.419.4215-.8181.6811-1.3783.9-.4224.1649-1.0577.3617-2.2262.4174-1.2656.0595-1.6448.072-4.8493.079-3.2045.007-3.5825-.006-4.848-.0608M16.953 5.5864A1.44 1.44 0 1 0 18.39 4.144a1.44 1.44 0 0 0-1.437 1.4424M5.8385 12.012c.0067 3.4032 2.7706 6.1557 6.173 6.1493 3.4026-.0065 6.157-2.7701 6.1506-6.1733-.0065-3.4032-2.771-6.1565-6.174-6.1498-3.403.0067-6.156 2.771-6.1496 6.1738M8 12.0077a4 4 0 1 1 4.008 3.9921A3.9996 3.9996 0 0 1 8 12.0077"
+            fill="#ffffff"
+            transform="translate(4.56, 4.56) scale(0.62)"
+          />
         </svg>
       );
     case "linkedin":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <rect width="40" height="40" rx="9" fill="#0A66C2" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <rect width="24" height="24" rx="5" fill="#0A66C2" />
           <path
-            d="M12.5 16.5h4.2V30h-4.2V16.5zm2.1-6.8c1.3 0 2.4 1.1 2.4 2.4s-1.1 2.4-2.4 2.4-2.4-1.1-2.4-2.4 1.1-2.4 2.4-2.4zm7 6.8h4v1.8h.1c.6-1.1 2-2.2 4.1-2.2 4.4 0 5.2 2.9 5.2 6.6V30h-4.2v-6.8c0-1.6 0-3.7-2.3-3.7s-2.6 1.8-2.6 3.6V30h-4.3V16.5z"
+            d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564z"
             fill="#ffffff"
           />
         </svg>
       );
     case "github":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#24292e" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#181717" />
           <path
-            fillRule="evenodd"
-            clipRule="evenodd"
-            d="M20 9c-6.1 0-11 4.9-11 11 0 4.9 3.2 9 7.6 10.4.6.1.8-.2.8-.5v-2c-3.1.7-3.7-1.3-3.7-1.3-.5-1.3-1.2-1.6-1.2-1.6-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 .1.7 2.3 2.7 2.3.9 0 1.7-.2 2.2-.5.1-.7.4-1.2.7-1.5-2.5-.3-5.1-1.2-5.1-5.5 0-1.2.4-2.2 1.2-3-.1-.3-.5-1.4.1-3 0 0 .9-.3 3.1 1.1.9-.2 1.9-.4 2.8-.4s1.9.1 2.8.4c2.1-1.4 3.1-1.1 3.1-1.1.6 1.5.2 2.7.1 3 .7.8 1.2 1.8 1.2 3 0 4.3-2.6 5.2-5.1 5.5.4.3.7 1 .7 2v3c0 .3.2.6.8.5 4.4-1.5 7.6-5.6 7.6-10.4 0-6.1-4.9-11-11-11z"
+            d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
             fill="#ffffff"
+            transform="translate(3.84, 3.84) scale(0.68)"
           />
         </svg>
       );
     case "youtube":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <rect x="3" y="7" width="34" height="26" rx="8" fill="#FF0000" />
-          <polygon points="16,14 27,20 16,26" fill="#ffffff" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <path
+            d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"
+            fill="#FF0000"
+          />
+          <polygon points="9.545,8.432 15.818,12 9.545,15.568" fill="#ffffff" />
         </svg>
       );
     case "twitter":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#000000" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#000000" />
           <path
-            d="M25.7 12h2.5l-5.5 6.3 6.5 8.6h-5.1l-4-5.2-4.6 5.2h-2.5l5.9-6.8L17 12h5.2l3.6 4.8L25.7 12zm-.9 13.4h1.4L15.3 13.4h-1.5l11 12z"
+            d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"
             fill="#ffffff"
+            transform="translate(4.8, 4.8) scale(0.6)"
           />
         </svg>
       );
     case "telegram":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#2AABEE" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#2AABEE" />
           <path
-            d="M28.3 11.7c.3-.1.6 0 .8.2.2.2.3.5.2.8l-3.2 15.1c-.1.5-.4.8-.8.9-.4.1-.9 0-1.2-.3l-4.5-3.3-2.2 2.1c-.3.3-.7.4-1.1.3-.4-.1-.7-.4-.7-.8v-3.8l8.8-8-10.9 6.8-4.5-1.4c-.5-.2-.8-.6-.8-1.1 0-.5.4-.9.9-1.1l19.1-7.3z"
+            d="M18.8 6.5c.3-.1.6 0 .8.2.2.2.3.5.2.8l-2.4 11.3c-.1.4-.4.6-.7.7-.3.1-.7 0-.9-.2l-3.4-2.5-1.7 1.6c-.2.2-.5.3-.8.2-.3-.1-.5-.3-.5-.6v-2.9l6.6-6-8.2 5.1-3.4-1.1c-.4-.1-.6-.5-.6-.9 0-.4.3-.7.7-.8l14.4-5.8z"
             fill="#ffffff"
           />
         </svg>
       );
     case "tiktok":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#000000" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#000000" />
           <path
-            d="M25.5 15.2c-1.4-.4-2.5-1.5-2.8-2.9v-.3h-3.4v13.5c0 1.8-1.4 3.2-3.2 3.2s-3.2-1.4-3.2-3.2 1.4-3.2 3.2-3.2c.4 0 .7.1 1.1.2v-3.6c-.4 0-.7-.1-1.1-.1-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7v-7.1c1.4 1 3.1 1.6 4.9 1.6v-3.5c-.8 0-1.5-.2-2.2-.6z"
+            d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"
             fill="#ffffff"
+            transform="translate(4.8, 4.8) scale(0.6)"
           />
         </svg>
       );
     case "map":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#EA4335" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#EA4335" />
           <path
-            d="M20 10c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"
+            d="M12 5c-2.76 0-5 2.24-5 5 0 3.75 5 9 5 9s5-5.25 5-9c0-2.76-2.24-5-5-5zm0 7.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"
             fill="#ffffff"
           />
         </svg>
       );
     case "music":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#1DB954" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#1DB954" />
           <path
-            d="M27.8 24.3c-.3.5-.9.7-1.4.4-3.9-2.4-8.8-2.9-14.6-1.6-.6.1-1.1-.2-1.2-.8-.1-.6.2-1.1.8-1.2 6.3-1.4 11.7-.8 16 1.8.5.3.7.9.4 1.4zm1.8-4c-.4.6-1.2.8-1.8.4-4.5-2.8-11.3-3.6-16.6-2-.7.2-1.4-.2-1.6-.9-.2-.7.2-1.4.9-1.6 6.1-1.8 13.6-.9 18.7 2.2.6.4.8 1.2.4 1.9zm.2-4.2C24.4 13.2 16.3 13 11.6 14.4c-.8.2-1.7-.2-1.9-1.1-.2-.8.2-1.7 1.1-1.9 5.4-1.6 14.3-1.4 20.3 2.2.7.4 1 1.4.5 2.1-.4.7-1.3.9-2 .4z"
+            d="M17.8 15.3c-.2.3-.6.4-1 .2-2.6-1.6-6-1.9-9.8-1.1-.4.1-.7-.2-.8-.5-.1-.4.2-.7.5-.8 4.2-.9 8-.6 10.9 1.2.3.2.4.6.2 1zm1.2-2.7c-.3.4-.8.5-1.2.3-3-1.9-7.6-2.4-11.2-1.3-.5.1-.9-.1-1.1-.6-.1-.5.1-.9.6-1.1 4.1-1.2 9.2-.6 12.6 1.5.4.2.5.8.3 1.2zm.1-2.8C15.5 7.8 10.1 7.7 7 8.6c-.6.2-1.1-.1-1.3-.7-.2-.5.1-1.1.7-1.3 3.6-1.1 9.6-.9 13.6 1.5.5.3.7.9.3 1.4-.3.5-.9.7-1.3.3z"
             fill="#ffffff"
           />
         </svg>
       );
     case "calendar":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#006BFF" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#006BFF" />
           <path
-            d="M26.2 18.4c-.4-.4-1.1-.5-1.5-.1-.4.4-.5 1.1-.1 1.5 1.4 1.5 1.4 3.9 0 5.4-1.5 1.5-3.9 1.5-5.4 0-1.5-1.5-1.5-3.9 0-5.4.4-.4.4-1.1 0-1.5-.4-.4-1.1-.4-1.5 0-2.3 2.3-2.3 6 0 8.3 2.3 2.3 6 2.3 8.3 0 2.4-2.3 2.4-6 .2-8.2z"
+            d="M16 11c-.3-.3-.7-.3-1 0s-.3.7 0 1c.9 1 .9 2.6 0 3.6-1 1-2.6 1-3.6 0-1-1-1-2.6 0-3.6.3-.3.3-.7 0-1-.3-.3-.7-.3-1 0-1.5 1.5-1.5 4 0 5.5 1.5 1.5 4 1.5 5.5 0 1.6-1.5 1.6-4-.1-5.5z"
             fill="#ffffff"
           />
-          <circle cx="20" cy="12" r="1.5" fill="#ffffff" />
-          <circle cx="20" cy="28" r="1.5" fill="#ffffff" />
+          <circle cx="12" cy="7.5" r="1" fill="#ffffff" />
+          <circle cx="12" cy="17.5" r="1" fill="#ffffff" />
         </svg>
       );
     case "design":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="#EA4C89" />
-          <circle cx="20" cy="20" r="10.5" stroke="#ffffff" strokeWidth="1.8" fill="none" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="12" fill="#EA4C89" />
+          <circle cx="12" cy="12" r="7" stroke="#ffffff" strokeWidth="1.3" fill="none" />
           <path
-            d="M10 20c4.5-1 9.5-1 14-3.5M15 11c3.5 4 6.5 9 8 18M28 15c-3 3-7 5.5-14 6"
+            d="M5 12c3-.7 6.5-.7 9.5-2.5M8.5 6c2.4 2.7 4.4 6 5.5 12M17.5 8.5c-2 2-4.7 3.7-9.5 4"
             stroke="#ffffff"
-            strokeWidth="1.8"
+            strokeWidth="1.3"
             strokeLinecap="round"
             fill="none"
           />
@@ -432,30 +439,30 @@ export function SocialBrandIcon({ kind, url, label }: { kind: string; url?: stri
       );
     case "portfolio":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.5" />
-          <rect x="11.5" y="15.5" width="17" height="13" rx="2" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" fill="none" />
-          <path d="M15.5 15.5V12.5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v3" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M11.5 20.5h17" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.4" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
+          <rect x="7" y="9.5" width="10" height="8" rx="1.5" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" fill="none" />
+          <path d="M9.5 9.5V7.5a1.5 1.5 0 0 1 1.5-1.5h2a1.5 1.5 0 0 1 1.5 1.5v2" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinecap="round" />
+          <path d="M7 12.5h10" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" />
         </svg>
       );
     case "shop":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.5" />
-          <path d="M13 14l-2 4v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V18l-2-4H13z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinejoin="round" fill="none" />
-          <line x1="11" y1="18" x2="29" y2="18" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.5" />
-          <path d="M16 21a4 4 0 0 0 8 0" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinecap="round" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
+          <path d="M7.5 9l-1.5 3v6a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5V12l-1.5-3H7.5z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
+          <line x1="6" y1="12" x2="18" y2="12" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" />
+          <path d="M9.5 14a2.5 2.5 0 0 0 5 0" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinecap="round" />
         </svg>
       );
     case "document":
       return (
-        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
-          <circle cx="20" cy="20" r="20" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.5" />
-          <path d="M14 11h8l6 6v12a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V13a2 2 0 0 1 2-2z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinejoin="round" fill="none" />
-          <polyline points="22 11 22 17 28 17" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
-          <line x1="16" y1="22" x2="24" y2="22" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.5" strokeLinecap="round" />
-          <line x1="16" y1="25" x2="21" y2="25" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.5" strokeLinecap="round" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
+          <path d="M8.5 6.5h4.5l3.5 3.5v7.5a1.5 1.5 0 0 1-1.5 1.5H8.5a1.5 1.5 0 0 1-1.5-1.5v-9.5a1.5 1.5 0 0 1 1.5-1.5z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
+          <polyline points="13 6.5 13 10 16.5 10" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.2" strokeLinejoin="round" fill="none" />
+          <line x1="9.5" y1="13" x2="14.5" y2="13" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" strokeLinecap="round" />
+          <line x1="9.5" y1="15.5" x2="13" y2="15.5" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" strokeLinecap="round" />
         </svg>
       );
     case "globe":
@@ -700,7 +707,7 @@ export function ProfileView({
           )}
         </section>
 
-        {/* Primary CTA Row: Save to Contacts (.vcf) + Share Button on the right */}
+        {/* Primary CTA Row: Save Contact (.vcf) + Sleek Share Icon Button on the right */}
         <div className="profile-save-cta-wrapper">
           <a
             className="save-contact-cta"
@@ -711,10 +718,7 @@ export function ProfileView({
             <div className="cta-icon">
               <SaveContactIcon />
             </div>
-            <div className="cta-text">
-              <span className="cta-primary">Save to Contacts</span>
-              <span className="cta-secondary">Direct download to phone address book</span>
-            </div>
+            <span className="cta-primary">Save Contact</span>
           </a>
 
           <button
@@ -725,9 +729,8 @@ export function ProfileView({
             aria-label={copyFeedback ? "Link Copied" : "Share Profile"}
           >
             <div className="share-btn-icon">
-              <ShareIcon />
+              {copyFeedback ? <SuccessCheckIcon /> : <ShareIcon />}
             </div>
-            <span className="share-btn-text">{copyFeedback ? "Copied!" : "Share"}</span>
           </button>
         </div>
 
@@ -748,12 +751,13 @@ export function ProfileView({
         )}
 
         {/* Social Media & Links Section */}
-        {(profile.website || links.length > 0) && (
+        {((profile.website && detectSocialBrand(profile.website, websiteLabel).kind !== "whatsapp") ||
+          links.some((l) => detectSocialBrand(l.url, l.label).kind !== "whatsapp")) && (
           <section className="profile-social-section" aria-label="Social Media & Links">
             <h2 className="section-label">SOCIAL & WEB LINKS</h2>
 
             <div className="social-links-grid">
-              {profile.website && (
+              {profile.website && detectSocialBrand(profile.website, websiteLabel).kind !== "whatsapp" && (
                 <a
                   href={profile.website}
                   target="_blank"
@@ -775,31 +779,33 @@ export function ProfileView({
                 </a>
               )}
 
-              {links.map((link) => {
-                const brand = detectSocialBrand(link.url, link.label);
-                return (
-                  <a
-                    key={link.id ?? link.url}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="social-card"
-                    title={link.label || brand.name}
-                    onClick={() => onActivity?.("LINK", link.id)}
-                  >
-                    <div className={`social-card-icon is-${brand.kind}`}>
-                      <SocialBrandIcon kind={brand.kind} url={link.url} label={link.label} />
-                    </div>
-                    <div className="social-card-details">
-                      <span className="social-card-name">{link.label}</span>
-                      <span className="social-card-url">{link.url.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>
-                    </div>
-                    <div className="social-card-arrow" aria-hidden="true">
-                      <ArrowUpRightIcon />
-                    </div>
-                  </a>
-                );
-              })}
+              {links
+                .filter((link) => detectSocialBrand(link.url, link.label).kind !== "whatsapp")
+                .map((link) => {
+                  const brand = detectSocialBrand(link.url, link.label);
+                  return (
+                    <a
+                      key={link.id ?? link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="social-card"
+                      title={link.label || brand.name}
+                      onClick={() => onActivity?.("LINK", link.id)}
+                    >
+                      <div className={`social-card-icon is-${brand.kind}`}>
+                        <SocialBrandIcon kind={brand.kind} url={link.url} label={link.label} />
+                      </div>
+                      <div className="social-card-details">
+                        <span className="social-card-name">{link.label}</span>
+                        <span className="social-card-url">{link.url.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>
+                      </div>
+                      <div className="social-card-arrow" aria-hidden="true">
+                        <ArrowUpRightIcon />
+                      </div>
+                    </a>
+                  );
+                })}
             </div>
           </section>
         )}
