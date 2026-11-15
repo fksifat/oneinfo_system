@@ -229,7 +229,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
           codAdvanceInsideDhaka,
         }),
       });
-      setPaymentMessage("COD advance settings saved.");
+      setPaymentMessage("COD advance saved.");
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : "Could not save payment settings.");
     } finally {
