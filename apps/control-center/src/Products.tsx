@@ -207,11 +207,10 @@ export function Products({ token }: { token: string }) {
                 className={`card-preview-mini ${isLight ? "is-light-card" : "is-dark-card"}`}
                 style={{
                   background: isLight
-                    ? `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.45) 0%, rgba(0, 0, 0, 0.08) 100%), ${cardBg}`
-                    : `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.22) 0%, rgba(0, 0, 0, 0.32) 100%), ${cardBg}`
+                    ? `radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 50%, rgba(0, 0, 0, 0.05) 100%), ${cardBg}`
+                    : `radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(0, 0, 0, 0.2) 100%), ${cardBg}`
                 }}
               >
-                <div className="card-mini-glare" aria-hidden="true" />
                 <img
                   src={oneinfoLogo}
                   alt="Oneinfo"
@@ -415,11 +414,10 @@ export function Products({ token }: { token: string }) {
               className={`catalog-preview-art original-card-art ${isColorLight(preview.colorHex) || preview.appearance === "light" ? "is-light-card" : "is-dark-card"}`}
               style={{
                 background: (isColorLight(preview.colorHex) || preview.appearance === "light")
-                  ? `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.45) 0%, rgba(0, 0, 0, 0.08) 100%), ${preview.colorHex || "#e8e5e0"}`
-                  : `radial-gradient(circle at 50% 48%, rgba(255, 255, 255, 0.22) 0%, rgba(0, 0, 0, 0.32) 100%), ${preview.colorHex || "#121316"}`
+                  ? `radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.15) 50%, rgba(0, 0, 0, 0.05) 100%), ${preview.colorHex || "#e8e5e0"}`
+                  : `radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.05) 45%, rgba(0, 0, 0, 0.2) 100%), ${preview.colorHex || "#121316"}`
               }}
             >
-              <div className="card-mini-glare" aria-hidden="true" />
               <img
                 src={oneinfoLogo}
                 alt="Oneinfo"

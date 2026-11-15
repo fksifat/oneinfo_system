@@ -584,18 +584,20 @@ test("single colour variant omits '1 option' text and places swatch icon on righ
   assert.match(homeCss, /\.is-single-option-swatch/);
 });
 
-test("original card design renders floating physical card with centered Oneinfo logo and dynamic admin color", () => {
+test("original card design renders flat physical card with centered Oneinfo logo and dynamic admin color", () => {
   const appSrc = readFileSync("sites/storefront/app.js", "utf8");
   assert.match(appSrc, /is-essential-card/);
   assert.match(appSrc, /card-center-logo/);
-  assert.match(appSrc, /card-surface-glare/);
+  assert.doesNotMatch(appSrc, /card-surface-glare/);
 
   const homeCss = readFileSync("sites/storefront/home.css", "utf8");
   assert.match(homeCss, /\.product-art \.mini-product-card\.is-essential-card/);
   assert.match(homeCss, /\.mini-product-card\.is-essential-card \.card-center-logo/);
+  assert.match(homeCss, /transform:\s*none/);
 
   const adminSrc = readFileSync("apps/control-center/src/Products.tsx", "utf8");
   assert.doesNotMatch(adminSrc, /card-mini-chip/);
+  assert.doesNotMatch(adminSrc, /card-mini-glare/);
   assert.match(adminSrc, /card-mini-center-logo/);
   assert.match(adminSrc, /original-card-art/);
   assert.match(adminSrc, /card-preview-center-logo/);
