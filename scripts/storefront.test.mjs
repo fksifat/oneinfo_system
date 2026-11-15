@@ -662,3 +662,22 @@ test("customer profile simplifies Save Contact button, makes share button compac
   assert.match(stylesCss, /\.profile-save-cta-wrapper\s*\{[^}]*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*10px;/);
   assert.match(stylesCss, /flex:\s*0 0 48px !important;\s*width:\s*48px !important;\s*height:\s*48px !important;/);
 });
+
+test("quick connect action row uses authentic real SVGs for Call, Email, WhatsApp, and Address label", () => {
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  // Label updated to Address
+  assert.match(profileViewSrc, /<span className="action-text">Address<\/span>/);
+  assert.doesNotMatch(profileViewSrc, /<span className="action-text">Map<\/span>/);
+
+  // Real WhatsApp SVG with speech bubble and phone
+  assert.match(profileViewSrc, /M380\.9 97\.1C339 55\.1 283\.2 32 223\.9 32/);
+
+  // Real Phone handset SVG
+  assert.match(profileViewSrc, /M164\.9 24\.6c-7\.7-18\.6-28-28\.5/);
+
+  // Real Email envelope SVG
+  assert.match(profileViewSrc, /M48 64C21\.5 64 0 85\.5 0 112/);
+
+  // Real Address location dot SVG
+  assert.match(profileViewSrc, /M215\.7 499\.2C267 435 384 279\.4/);
+});
