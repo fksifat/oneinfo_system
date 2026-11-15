@@ -50,6 +50,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   const [supportsSearch, setSupportsSearch] = useState(false);
   const [rates, setRates] = useState<Record<ShippingZone, string>>();
   const [codAdvance, setCodAdvance] = useState<string>();
+  const [codAdvanceInsideDhaka, setCodAdvanceInsideDhaka] = useState(true);
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
@@ -104,8 +105,13 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   async function loadRates() {
     setRatesError("");
     try {
-      const { rates, codAdvanceTaka } = await api<{ rates: ShippingRates; codAdvanceTaka: number }>(`${path}/shipping`);
+      const { rates, codAdvanceTaka, codAdvanceInsideDhaka } = await api<{
+        rates: ShippingRates;
+        codAdvanceTaka: number;
+        codAdvanceInsideDhaka?: boolean;
+      }>(`${path}/shipping`);
       setCodAdvance(String(CodAdvanceSchema.parse(codAdvanceTaka)));
+      setCodAdvanceInsideDhaka(codAdvanceInsideDhaka !== false);
       setRates({ insideDhaka: String(rates.insideDhaka / 100), subDhaka: String(rates.subDhaka / 100), outsideDhaka: String(rates.outsideDhaka / 100) });
     } catch {
       setRatesError("Could not load delivery rates.");
@@ -218,9 +224,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
     try {
       await api(`${path}/admin/payment`, token, {
         method: "PUT",
-        body: JSON.stringify({ codAdvanceTaka: CodAdvanceSchema.parse(Number(codAdvance)) }),
+        body: JSON.stringify({
+          codAdvanceTaka: CodAdvanceSchema.parse(Number(codAdvance)),
+          codAdvanceInsideDhaka,
+        }),
       });
-      setPaymentMessage("COD advance saved.");
+      setPaymentMessage("COD advance settings saved.");
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : "Could not save payment settings.");
     } finally {
@@ -770,11 +779,25 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
       <header className="store-settings-heading"><h2 id="store-settings-title">Checkout settings</h2><button className="quiet" type="button" aria-label="Close checkout settings" onClick={() => settingsDialog.current?.close()}>×</button></header>
       <section className="store-settings-card">
         <div className="panel-head"><div><h2>Payment</h2><p>bKash {bkashNumber}</p></div></div>
-        {codAdvance !== undefined && <form className="store-order-rates" onSubmit={savePayment}>
-        <label>COD advance (BDT)<input type="number" min="0" max="10000" step="1" required value={codAdvance}
-          onChange={event => setCodAdvance(event.target.value)} disabled={savingPayment} /></label>
-        <button disabled={savingPayment}>{savingPayment ? "Saving…" : "Save payment settings"}</button>
-      </form>}
+        {codAdvance !== undefined && <form className="store-payment-form" onSubmit={savePayment}>
+          <div className="store-payment-row">
+            <label>COD advance (BDT)<input type="number" min="0" max="10000" step="1" required value={codAdvance}
+              onChange={event => setCodAdvance(event.target.value)} disabled={savingPayment} /></label>
+            <button disabled={savingPayment}>{savingPayment ? "Saving…" : "Save payment settings"}</button>
+          </div>
+          <label className="store-cod-toggle">
+            <input
+              type="checkbox"
+              checked={codAdvanceInsideDhaka}
+              onChange={event => setCodAdvanceInsideDhaka(event.target.checked)}
+              disabled={savingPayment}
+            />
+            <span className="store-cod-toggle-text">
+              <strong>COD advance Inside Dhaka: {codAdvanceInsideDhaka ? "ON" : "OFF"}</strong>
+              <small>{codAdvanceInsideDhaka ? "Advance required for Inside Dhaka COD orders" : "No advance required for Inside Dhaka COD orders (orders place directly)"}</small>
+            </span>
+          </label>
+        </form>}
         {paymentMessage && <p className="store-order-feedback" role="status">{paymentMessage}</p>}
         {paymentError && <p className="store-order-feedback is-error" role="alert">{paymentError}</p>}
       </section>

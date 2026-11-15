@@ -1,4 +1,4 @@
-import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
+import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
 import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
@@ -3325,14 +3325,19 @@ import "./invoice.css";
     $(".order-refresh-rates").hidden = !zone || !shippingFailed;
     const total = subtotal + (fee ?? 0) - discount;
     const method = orderForm.elements.paymentMethod.value;
+    const codAdvanceTaka = paymentSettings?.codAdvanceTaka ?? defaultCodAdvanceTaka;
+    const codAdvanceInsideDhaka = paymentSettings?.codAdvanceInsideDhaka ?? defaultCodAdvanceInsideDhaka;
     const dueNow = paymentSettings && typeof fee === "number" && !applyingCoupon
-      ? paymentDueNow(total, method, paymentSettings.codAdvanceTaka) : null;
+      ? paymentDueNow(total, method, codAdvanceTaka, { zone, codAdvanceInsideDhaka }) : null;
     $(".order-payable span").textContent = typeof fee !== "number" ? "Total before shipping"
       : dueNow === 0 && method === "COD" ? "Total due on delivery" : "Order total";
     $(".order-payable strong").textContent = money.format(total / 100);
-    const codAdvanceTaka = paymentSettings?.codAdvanceTaka ?? defaultCodAdvanceTaka;
-    const codAdvance = typeof fee === "number" ? paymentDueNow(total, "COD", codAdvanceTaka) / 100 : codAdvanceTaka;
-    $(".order-cod-advance").textContent = codAdvance > 0 ? `Pay ${money.format(codAdvance)} to confirm order` : "";
+    const codAdvance = typeof fee === "number"
+      ? paymentDueNow(total, "COD", codAdvanceTaka, { zone, codAdvanceInsideDhaka }) / 100
+      : codAdvanceTaka;
+    $(".order-cod-advance").textContent = codAdvance > 0
+      ? `Pay ${money.format(codAdvance)} to confirm order`
+      : (typeof fee === "number" && zone === "insideDhaka" && !codAdvanceInsideDhaka ? "No advance required" : "");
     const needsPayment = dueNow > 0;
     orderSubmit.textContent = needsPayment ? "Pay" : "Place order";
     $(".order-due-now").hidden = !needsPayment;
@@ -3351,7 +3356,11 @@ import "./invoice.css";
         const checkout = await response.json();
         shippingRates = ShippingRatesSchema.parse(checkout.rates);
         if (typeof checkout.bkashNumber !== "string" || !/^01\d{9}$/.test(checkout.bkashNumber)) throw new Error("Invalid bKash number");
-        paymentSettings = { bkashNumber: checkout.bkashNumber, codAdvanceTaka: CodAdvanceSchema.parse(checkout.codAdvanceTaka) };
+        paymentSettings = {
+          bkashNumber: checkout.bkashNumber,
+          codAdvanceTaka: CodAdvanceSchema.parse(checkout.codAdvanceTaka),
+          codAdvanceInsideDhaka: checkout.codAdvanceInsideDhaka !== false,
+        };
         $("#order-email-hint").textContent = checkout.confirmationEmailEnabled
           ? "We’ll email your order details to this address." : "We use this email for your order details.";
         shippingFailed = false;
@@ -3610,7 +3619,12 @@ import "./invoice.css";
     const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
     const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
     if (appliedCoupon) request.coupon = { code: appliedCoupon.code, discountMinor: discount };
-    const amountMinor = paymentDueNow(subtotal + request.shippingMinor - discount, method.data, paymentSettings.codAdvanceTaka);
+    const amountMinor = paymentDueNow(
+      subtotal + request.shippingMinor - discount,
+      method.data,
+      paymentSettings.codAdvanceTaka,
+      { zone, codAdvanceInsideDhaka: paymentSettings.codAdvanceInsideDhaka }
+    );
     request.payment = { method: method.data, amountMinor };
     if (amountMinor > 0) {
       const previous = arisepayDraft?.request;
