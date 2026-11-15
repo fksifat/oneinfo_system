@@ -65,12 +65,14 @@ export function openNfcState(filename: string | null) {
     pairings: new Map<string, Pairing>(), devices: new Map<string, NfcDevice>(),
     sessions: new Map<string, BridgeSession>(), readSessions: new Map<string, ReadSession>(),
     verificationSessions: new Map<string, VerificationSession>(),
+    protectionPasswords: new Map<string, { encryptedKey: string; kind: "CUSTOM" | "KEY"; updatedAt: Date }>(),
     qrScans: new Map<string, { id: string; cardId: string; deviceId: string; expectedUrl: string; expiresAt: Date }>(),
   };
   let previous: Buffer | undefined;
   if (filename && existsSync(filename)) {
     previous = readFileSync(filename);
     const saved = deserialize(previous) as { version: number; state: typeof state };
+    if (saved.version === 1 && saved.state && saved.state.protectionPasswords === undefined) saved.state.protectionPasswords = new Map();
     if (saved.version !== 1 || Object.keys(state).some(key => !(saved.state?.[key as keyof typeof state] instanceof Map))) throw new Error("NFC state cannot be loaded. Restore the workstation state backup.");
     state = saved.state;
   }

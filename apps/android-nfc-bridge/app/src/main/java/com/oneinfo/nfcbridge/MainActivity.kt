@@ -1,6 +1,7 @@
 package com.oneinfo.nfcbridge
 
 import android.app.Activity
+import android.app.PendingIntent
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -45,7 +46,7 @@ import android.net.Network
 import android.util.Base64
 import java.security.SecureRandom
 
-class MainActivity : Activity(), NfcAdapter.ReaderCallback {
+class MainActivity : Activity() {
     @Volatile private var workstationUrl = "http://127.0.0.1:3001"
     @Volatile private var workstationFingerprint: String? = null
     @Volatile private var connectionGeneration = 0
@@ -72,6 +73,10 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     }
     private val processingTag = AtomicBoolean(false)
     private val nfcAdapter by lazy { NfcAdapter.getDefaultAdapter(this) }
+    private val nfcDispatchIntent by lazy {
+        PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+    }
     @Volatile private var startingVerification = false
     @Volatile private var cameraScanning = false
     @Volatile private var scannedCard: JSONObject? = null
@@ -154,12 +159,21 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
     override fun onResume() {
         super.onResume()
         findViewById<TextView>(R.id.nfcStatus).text = if (nfcAdapter?.isEnabled == true) "NFC is on · Ready to scan" else "NFC is off · Enable it before scanning"
-        nfcAdapter?.enableReaderMode(this, this, NfcAdapter.FLAG_READER_NFC_A or NfcAdapter.FLAG_READER_NFC_B or NfcAdapter.FLAG_READER_NFC_F or NfcAdapter.FLAG_READER_NFC_V, null)
+        // Claim every foreground tag, including existing URL/text tags, before normal app/link dispatch.
+        if (nfcAdapter?.isEnabled == true) nfcAdapter?.enableForegroundDispatch(this, nfcDispatchIntent, null, null)
     }
 
     override fun onPause() {
-        nfcAdapter?.disableReaderMode(this)
+        nfcAdapter?.disableForegroundDispatch(this)
         super.onPause()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action !in listOf(NfcAdapter.ACTION_TAG_DISCOVERED, NfcAdapter.ACTION_TECH_DISCOVERED, NfcAdapter.ACTION_NDEF_DISCOVERED, Intent.ACTION_VIEW)) return
+        val tag = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(NfcAdapter.EXTRA_TAG, Tag::class.java)
+            else @Suppress("DEPRECATION") (intent.getParcelableExtra(NfcAdapter.EXTRA_TAG) as? Tag)
+        if (tag != null) executor.execute { handleTag(tag) }
     }
 
     override fun onDestroy() {
@@ -451,7 +465,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         activeTask = Task(response.getString("sessionId"), if (write) TaskMode.UTILITY_WRITE else TaskMode.READ,
             Instant.parse(response.getString("expiresAt")), if (write) utility.optString("value", "") else null, if (erase) "EMPTY" else utility.optString("recordType", "URL"))
         main.post { showPanel(R.id.toolsPanel) }
-        setStatus(if (erase) "Ready to erase NDEF content. Tap ONLY the tag you want to empty." else if (write) "Ready to replace NDEF content with ${utility.getString("recordType")}: ${utility.getString("value").take(120)}. Tap the target tag." else "Ready to read. Tap an NFC tag to inspect it.")
+        setStatus(if (erase) "Ready to erase NDEF content. Lift the tag away, then tap ONLY the tag you want to empty." else if (write) "Ready to replace NDEF content with ${utility.getString("recordType")}: ${utility.getString("value").take(120)}. Keep this app open. Lift the tag away, then tap it again." else "Ready to read. Lift the tag away, then tap it to inspect it.")
     }
 
     private fun cancelUtility() {
@@ -502,7 +516,7 @@ class MainActivity : Activity(), NfcAdapter.ReaderCallback {
         setStatus("Saving QC approval…")
     }
 
-    override fun onTagDiscovered(tag: Tag) {
+    private fun handleTag(tag: Tag) {
         val task = activeTask ?: return setStatus("No NFC job is waiting on the workstation.")
         if (task.expiresAt.isBefore(Instant.now())) {
             activeTask = null

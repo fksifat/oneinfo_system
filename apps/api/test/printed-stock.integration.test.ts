@@ -119,6 +119,47 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     await request(`/api/v1/local-nfc/utility-sessions/${pending.id}/cancel`, {});
   });
 
+  it("reuses a saved custom password across cards without exposing it or changing existing card keys", async () => {
+    const path = "/api/v1/local-nfc/protection-password";
+    const station = await request("/api/v1/production/stations/register", { stationCode: "SHARED-PASSWORD-TEST", name: "Shared password test" });
+    const ownHeaders = { ...headers, "x-station-key": station.stationCredential };
+    const call = async (url: string, payload?: object, method = payload ? "POST" : "GET") => {
+      const response = await app.inject({ method: method as "GET" | "POST" | "PUT", url, headers: ownHeaders, ...(payload ? { payload } : {}) });
+      expect(response.statusCode, response.body).toBeLessThan(300); return response.json();
+    };
+    expect((await app.inject({ url: path })).statusCode).toBe(401);
+    expect(await call(path)).toMatchObject({ saved: false });
+    const password = "Shared production password 2026";
+    const saved = await call(path, { password, confirmed: true }, "PUT");
+    expect(saved).toMatchObject({ saved: true, kind: "CUSTOM" });
+    for (const value of [saved, await call(path)]) {
+      expect(JSON.stringify(value)).not.toContain(password); expect(JSON.stringify(value)).not.toContain("encryptedKey");
+    }
+    expect(await request(path)).toMatchObject({ saved: false });
+    const pairing = await call("/api/v1/local-nfc/pairings", {});
+    const device = await call("/api/v1/local-nfc/devices/pair", { pairingCode: pairing.pairingCode, deviceName: "Shared password phone" });
+    const phoneHeaders = { "x-oneinfo-device-token": device.deviceToken };
+    const next = async () => (await app.inject({ url: "/api/v1/local-nfc/device/read-tasks/next", headers: phoneHeaders })).json();
+    const cancel = async (id: string) => app.inject({ method: "POST", url: `/api/v1/local-nfc/device/read-tasks/${id}/cancel`, headers: phoneHeaders, payload: {} });
+    const first = await readyForClaim(), second = await readyForClaim();
+    const start = (cardId: string) => call("/api/v1/local-nfc/protection-sessions", { cardId, operation: "PROTECT", useSavedPassword: true, confirmed: true });
+    const a = await start(first.id);
+    expect((await app.inject({ method: "PUT", url: path, headers: ownHeaders, payload: { password: "Different shared password", confirmed: true } })).statusCode).toBe(409);
+    const firstTask = await next(); expect(firstTask.sessionId).toBe(a.id);
+    await cancel(a.id);
+    const b = await start(second.id); const secondTask = await next();
+    expect(secondTask.utility.keyHex).toBe(firstTask.utility.keyHex);
+    expect(secondTask.utility.expectedUrl).toBe(second.canonicalUrl);
+    expect(secondTask.utility.keyHex).toMatch(/^[A-F0-9]{12}$/);
+    await cancel(b.id);
+    await call(path, { password: "Different shared password", confirmed: true }, "PUT");
+    const oldCard = await call("/api/v1/local-nfc/protection-sessions", { cardId: first.id, operation: "UNPROTECT", password, confirmed: true });
+    expect((await next()).utility.keyHex).toBe(firstTask.utility.keyHex);
+    await cancel(oldCard.id);
+    const c = await start(second.id); expect((await next()).utility.keyHex).not.toBe(firstTask.utility.keyHex); await cancel(c.id);
+    expect(await client.db.select().from(schema.cardEvents).where(eq(schema.cardEvents.eventType, "NFC_WRITE_PROTECTED"))).toHaveLength(0);
+  });
+
   it("limits database backup listing to a local administrator with a valid station", async () => {
     const path = "/api/v1/production/backups";
     const original = process.env.ONEINFO_BACKUP_DIR;
