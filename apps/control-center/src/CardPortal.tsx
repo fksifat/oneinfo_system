@@ -741,9 +741,13 @@ export function CardPortal({
                       Public email
                       <input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} />
                     </label>
-                    <label className="studio-col-span-2">
-                      Website
+                    <label>
+                      Website URL
                       <input type="url" maxLength={500} value={profile.website} placeholder="https://..." onChange={event => update("website", event.target.value)} />
+                    </label>
+                    <label>
+                      Website label
+                      <input maxLength={40} value={profile.modeContent?.websiteLabel ?? ""} placeholder="Official Website" onChange={event => update("modeContent", { ...profile.modeContent, websiteLabel: event.target.value })} />
                     </label>
                   </div>
                   <label className="studio-bio-label">

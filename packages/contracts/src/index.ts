@@ -159,7 +159,11 @@ export const profileModes = ["BUSINESS", "EVENT", "PORTFOLIO"] as const;
 export { contactVcard } from "./contact.js";
 export const profileSources = ["NFC", "QR", "DIRECT"] as const;
 export const ProfileModeContentSchema = z.object({ title: z.string().trim().max(120), description: z.string().trim().max(600) });
-export const ProfileModesSchema = z.object({ EVENT: ProfileModeContentSchema.optional(), PORTFOLIO: ProfileModeContentSchema.optional() });
+export const ProfileModesSchema = z.object({
+  EVENT: ProfileModeContentSchema.optional(),
+  PORTFOLIO: ProfileModeContentSchema.optional(),
+  websiteLabel: z.string().trim().max(60).optional(),
+});
 export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true }).extend({
   profileMode: z.enum(profileModes).default("BUSINESS"), modeContent: ProfileModesSchema.default({}),
 });

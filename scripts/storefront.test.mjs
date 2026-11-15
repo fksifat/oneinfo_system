@@ -618,3 +618,26 @@ test("recover account password screen matches luxury portal auth design and omit
   assert.match(accountAccessSrc, /Powered by AriseStudio/);
   assert.doesNotMatch(accountAccessSrc, /Back to sign in/i);
 });
+
+test("customer profile social links omit box background, render authentic brand icons, allow custom website label, and themes are cohesive", () => {
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  assert.match(profileViewSrc, /websiteLabel = profile\.modeContent\?\.websiteLabel\?\.trim\(\) \|\| "Official Website"/);
+  assert.match(profileViewSrc, /#25D366/); // WhatsApp official color
+  assert.match(profileViewSrc, /#1877F2/); // Facebook official color
+  assert.match(profileViewSrc, /igIconGrad/); // Instagram official gradient
+  assert.match(profileViewSrc, /#0A66C2/); // LinkedIn official color
+  assert.match(profileViewSrc, /coverWire-/); // Theme-dynamic cover wire
+  assert.match(profileViewSrc, /coverShine-/); // Theme-dynamic cover shine
+
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  assert.match(cardPortalSrc, /Website URL/);
+  assert.match(cardPortalSrc, /Website label/);
+  assert.match(cardPortalSrc, /modeContent.*websiteLabel/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.social-card-icon\s*\{[^}]*background:\s*transparent !important/);
+  assert.match(stylesCss, /\.social-card-icon\s*\{[^}]*border:\s*none !important/);
+  assert.match(stylesCss, /--profile-accent-gradient/);
+  assert.match(stylesCss, /--profile-accent-border/);
+  assert.match(stylesCss, /--profile-accent-glow/);
+});
