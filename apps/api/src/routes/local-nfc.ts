@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { openNfcState, type NfcDevice, type BridgeSession, type ReadSession, type VerificationSession } from "../domain/nfc-state.js";
 import { lanPairing } from "../domain/lan-connection.js";
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
-import { encryptNfcKey, decryptNfcKey } from "../domain/nfc-protection.js";
+import { encryptNfcKey, decryptNfcKey, resolveNfcKey } from "../domain/nfc-protection.js";
 import QRCode from "qrcode";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -20,6 +20,7 @@ import {
   ScanActionSchema,
   NfcUtilitySchema,
   NfcProtectionSchema,
+  SaveNfcProtectionPasswordSchema,
   type NfcUtilityInput,
   type NfcBridgeResultInput,
   type NfcReadResultInput,
@@ -33,7 +34,7 @@ import { parseBody, sendCreated } from "../http.js";
 
 const stateFile = process.env.NFC_STATE_FILE ?? fileURLToPath(new URL("../../../../.oneinfo/nfc-state.bin", import.meta.url));
 const store = openNfcState(config.NODE_ENV === "test" ? null : stateFile);
-const { pairings, devices, sessions, readSessions, verificationSessions, qrScans } = store.state;
+const { pairings, devices, sessions, readSessions, verificationSessions, qrScans, protectionPasswords } = store.state;
 // shortcut: the lock is local to the workstation API, just like a pending phone operation.
 const expectedCards = new Map<string, { cardId: string; slug: string; expiresAt: number }>();
 
@@ -143,6 +144,23 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(request.ip) && request.protocol !== "https") return reply.code(403).send({ message: "Use the secure LAN connection." });
   });
   app.addHook("onSend", async (_request, _reply, payload) => { store.save(); return payload; });
+  app.get("/protection-password", async request => {
+    await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR"]);
+    const station = await requireStation(request);
+    const saved = protectionPasswords.get(station.stationId);
+    return { saved: Boolean(saved), kind: saved?.kind ?? null, updatedAt: saved?.updatedAt ?? null };
+  });
+  app.put("/protection-password", async request => {
+    await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR"]);
+    const station = await requireStation(request);
+    assertStationIdle(station.stationId);
+    const input = parseBody(SaveNfcProtectionPasswordSchema, request.body);
+    const keyHex = await resolveNfcKey(input);
+    assertStationIdle(station.stationId);
+    const saved = { encryptedKey: encryptNfcKey(keyHex), kind: input.password !== undefined ? "CUSTOM" as const : "KEY" as const, updatedAt: new Date() };
+    protectionPasswords.set(station.stationId, saved);
+    return { saved: true, kind: saved.kind, updatedAt: saved.updatedAt };
+  });
   app.post("/protection-sessions", async (request, reply) => {
     const operator = await requireOperator(request, ["SUPER_ADMIN", "PRODUCTION_OPERATOR"]);
     const station = await requireStation(request);
@@ -151,9 +169,13 @@ export const localNfcRoutes: FastifyPluginAsync = async (app) => {
     if (!card || card.qrStatus !== "GENERATED" || card.nfcStatus !== "WRITTEN") throw Object.assign(new Error("Write and verify this card's NFC link before changing protection."), { statusCode: 409 });
     checkExpectedCard(station.stationId, card.id);
     assertStationIdle(station.stationId);
+    const saved = protectionPasswords.get(station.stationId);
+    if (input.useSavedPassword && !saved) throw Object.assign(new Error("Save a workstation protection password first."), { statusCode: 409 });
+    const keyHex = input.useSavedPassword ? decryptNfcKey(saved!.encryptedKey) : await resolveNfcKey(input);
+    assertStationIdle(station.stationId);
     const session: ReadSession = { id: randomUUID(), stationId: station.stationId, state: "PENDING", createdAt: new Date(),
       expiresAt: new Date(Date.now() + 2 * 60_000), protection: { cardId: card.id, expectedUrl: card.canonicalUrl,
-        operation: input.operation, encryptedKey: encryptNfcKey(input.keyHex), operatorId: operator.operatorId } };
+        operation: input.operation, encryptedKey: encryptNfcKey(keyHex), operatorId: operator.operatorId } };
     readSessions.set(session.id, session);
     return sendCreated(reply, publicReadSession(session));
   });

@@ -268,6 +268,15 @@ try {
     await until(`!![...document.querySelectorAll('.batch-toolbar select option')].find(o=>o.value===${JSON.stringify(batch.id)})`);
     await set('.batch-toolbar select',batch.id);await until(`!!document.querySelector('.selected-production-card')`);
     if(width===1440){
+      const sharedPassword='Browser-only shared NFC password';
+      await until(`!!document.querySelector('.nfc-protection input[type=password]')&&!document.querySelector('.nfc-protection fieldset').disabled`);
+      await fill('Your custom password',sharedPassword);
+      await evaluate(`document.querySelector('.nfc-protection input[type=checkbox]').click()`);
+      await click('Save password for all cards');
+      await until(`document.querySelector('.nfc-protection input[type=checkbox]')?.checked&&!document.querySelector('.nfc-protection input[type=password]')`);
+      assert.equal(await evaluate(`JSON.stringify(localStorage).includes(${JSON.stringify(sharedPassword)})`),false);
+      await reload();
+      await until(`document.querySelector('.nfc-protection input[type=checkbox]')?.checked&&!document.querySelector('.nfc-protection input[type=password]')`);
       const scannedBatch=await api('/api/v1/production/batches',{batchCode:'PHONE-SCAN-QA',productVariantId:'ONEINFO-NFC-CARD',quantity:2},headers);
       await api(`/api/v1/production/batches/${scannedBatch.id}/generate-qr`,{},headers);
       const detail=await api(`/api/v1/production/batches/${scannedBatch.id}`,null,headers);
@@ -277,6 +286,8 @@ try {
       const scannedQr=target.canonicalUrl.replace(/\?source=nfc$/,'?source=qr');
       await api('/api/v1/local-nfc/device/resolve-qr',{scanId:crypto.randomUUID(),scannedValue:scannedQr},deviceHeaders);
       await until(`location.hash==='#production'&&document.querySelector('.batch-toolbar select').value===${JSON.stringify(scannedBatch.id)}&&document.querySelector('.selected-production-card')?.textContent.includes(${JSON.stringify(target.publicSlug)})`);
+      await until(`document.querySelector('.nfc-protection input[type=checkbox]')?.checked&&!document.querySelector('.nfc-protection input[type=password]')`);
+      console.log('Shared NFC password survives refresh/card changes without plaintext browser storage PASS');
       assert.equal(await evaluate(`document.querySelector('.card-search input').value`),'');
       assert.equal(await evaluate(`document.querySelector('.card-search select').value`),'all');
       await evaluate(`document.querySelector('.production-card-list button').click()`);await delay(2500);

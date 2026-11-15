@@ -56,13 +56,21 @@ export const VerificationMethodSchema = z.enum(["QR_CAMERA", "NFC_READ"]);
 export const CreateVerificationSchema = z.object({ cardId: z.uuid(), method: VerificationMethodSchema });
 export const StartQrVerificationSchema = z.object({ scanId: z.uuid(), scannedValue: HttpUrlSchema });
 export const ScanActionSchema = z.object({ scanId: z.uuid() });
-export const NfcProtectionSchema = z.object({
-  cardId: z.uuid(), operation: z.enum(["PROTECT", "UNPROTECT"]),
-  keyHex: z.string().regex(/^[0-9a-fA-F]{12}$/, "Use exactly 12 hexadecimal characters")
+export const NfcProtectionKeySchema = z.string().regex(/^[0-9a-fA-F]{12}$/, "Use exactly 12 hexadecimal characters")
     .transform(value => value.toUpperCase())
-    .refine(value => !["FFFFFFFFFFFF", "000000000000", "A0A1A2A3A4A5", "D3F7D3F7D3F7"].includes(value), "Choose a private key, not a default NFC key"),
+    .refine(value => !["FFFFFFFFFFFF", "000000000000", "A0A1A2A3A4A5", "D3F7D3F7D3F7"].includes(value), "Choose a private key, not a default NFC key");
+const protectionCredentials = {
+  keyHex: NfcProtectionKeySchema.optional(),
+  password: z.string().min(8).max(128).refine(value => value.trim().length > 0, "Enter a password").optional(),
+};
+export const NfcProtectionSchema = z.object({
+  cardId: z.uuid(), operation: z.enum(["PROTECT", "UNPROTECT"]), ...protectionCredentials,
+  useSavedPassword: z.literal(true).optional(),
   confirmed: z.literal(true),
-});
+}).refine(value => [value.keyHex, value.password, value.useSavedPassword].filter(value => value !== undefined).length === 1,
+  "Use one password source: saved password, custom password, or existing NFC key");
+export const SaveNfcProtectionPasswordSchema = z.object({ ...protectionCredentials, confirmed: z.literal(true) })
+  .refine(value => Number(value.keyHex !== undefined) + Number(value.password !== undefined) === 1, "Enter a custom password or existing NFC key");
 export const NfcUtilitySchema = z.union([
   z.object({ operation: z.literal("READ") }),
   z.object({ operation: z.literal("ERASE"), overwriteConfirmed: z.literal(true) }),

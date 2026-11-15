@@ -1,10 +1,12 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deserialize, serialize } from "node:v8";
 import { createHash, X509Certificate } from "node:crypto";
 import { createServer, request } from "node:https";
 import { expect, it } from "vitest";
 import { openNfcState } from "../src/domain/nfc-state.js";
+import { encryptNfcKey, decryptNfcKey } from "../src/domain/nfc-protection.js";
 import { configureLanConnection, lanPairing, loadLanIdentity, privateIpv4 } from "../src/domain/lan-connection.js";
 
 it("restores device authentication, one-use pairing and pending tag work after a restart", () => {
@@ -24,6 +26,26 @@ it("restores device authentication, one-use pairing and pending tag work after a
     expect(openNfcState(path).state.pairings.has("123456")).toBe(false);
     writeFileSync(path, "corrupted");
     expect(() => openNfcState(path)).toThrow();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+it("upgrades old workstation files without losing pairing and keeps shared passwords encrypted across restart", () => {
+  const directory = mkdtempSync(join(tmpdir(), "oneinfo-old-state-")), path = join(directory, "state.bin");
+  try {
+    const store = openNfcState(path), now = new Date();
+    store.state.pairings.set("123456", { code: "123456", secretHash: "existing-secret-hash", stationId: "station", operatorId: "operator", expiresAt: now });
+    store.save();
+    const old = deserialize(readFileSync(path)); delete old.state.protectionPasswords;
+    writeFileSync(path, serialize(old));
+    const upgraded = openNfcState(path);
+    expect(upgraded.state.pairings.get("123456")?.secretHash).toBe("existing-secret-hash");
+    expect(upgraded.state.protectionPasswords.size).toBe(0);
+    upgraded.state.protectionPasswords.set("station", { encryptedKey: encryptNfcKey("49C26785A1FE"), kind: "CUSTOM", updatedAt: now });
+    upgraded.save();
+    expect(readFileSync(path).includes(Buffer.from("49C26785A1FE"))).toBe(false);
+    const saved = openNfcState(path).state.protectionPasswords.get("station")!;
+    expect(decryptNfcKey(saved.encryptedKey)).toBe("49C26785A1FE");
+    expect(saved.updatedAt).toEqual(now);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
