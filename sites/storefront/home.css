@@ -100,6 +100,83 @@
 .collection-heading { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 28px; }
 .collection-heading h2 { margin: 0; }
 .collection-heading > p { max-width: 440px; margin: 0 auto; font-size: .9375rem; line-height: 1.6; text-align: center; }
+
+.product-category-filters {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 900px;
+  margin: 0 auto 30px;
+  padding: 4px;
+}
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 18px;
+  border-radius: 9999px;
+  border: 1px solid var(--line, #e5e5e7);
+  background: white;
+  color: var(--muted, #646467);
+  font-size: 0.86rem;
+  font-weight: 550;
+  cursor: pointer;
+  transition: all var(--dur-fast, 0.15s) ease;
+  user-select: none;
+  font-family: inherit;
+}
+.category-pill:hover {
+  border-color: var(--line-strong, #a1a1a6);
+  color: var(--ink, #121316);
+  background: #fbfbfa;
+}
+.category-pill.is-active {
+  background: var(--ink, #121316);
+  border-color: var(--ink, #121316);
+  color: white;
+  box-shadow: 0 2px 8px rgba(18, 19, 22, 0.12);
+}
+.category-pill-label {
+  letter-spacing: -0.01em;
+}
+.category-pill-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+}
+.category-pill.is-active .category-pill-count {
+  background: rgba(255, 255, 255, 0.22);
+  color: white;
+}
+@media (max-width: 600px) {
+  .product-category-filters {
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-inline: 16px;
+    margin-bottom: 22px;
+    scrollbar-width: none;
+  }
+  .product-category-filters::-webkit-scrollbar {
+    display: none;
+  }
+  .category-pill {
+    flex-shrink: 0;
+    padding: 7px 14px;
+    font-size: 0.8125rem;
+  }
+}
 .products { font-family: inherit; }
 .product-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); justify-content: center; gap: 24px; max-width: 1040px; margin-inline: auto; }
 @media (max-width: 900px) {

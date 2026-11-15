@@ -195,12 +195,67 @@ import "./invoice.css";
     if (before !== JSON.stringify(cart)) toast("Cart updated to the latest products and prices");
   }
 
+  let selectedCategory = "all";
+
+  function productCategory(p) {
+    if (typeof p.category === "string" && p.category.trim()) return p.category.trim();
+    if (typeof p.name === "string" && p.name.trim()) return p.name.trim();
+    return "Cards";
+  }
+
+  function renderCategoryFilters() {
+    const container = $(".product-category-filters");
+    if (!container) return;
+    if (!products.length) {
+      container.hidden = true;
+      return;
+    }
+    const categoryMap = new Map();
+    for (const p of products) {
+      const cat = productCategory(p);
+      categoryMap.set(cat, (categoryMap.get(cat) || 0) + 1);
+    }
+    const categories = Array.from(categoryMap.keys());
+    if (categories.length <= 1) {
+      container.hidden = true;
+      return;
+    }
+    container.hidden = false;
+
+    if (selectedCategory !== "all" && !categories.includes(selectedCategory)) {
+      selectedCategory = "all";
+    }
+
+    const items = [
+      { id: "all", label: "All cards", count: products.length },
+      ...categories.map(cat => ({ id: cat, label: cat, count: categoryMap.get(cat) })),
+    ];
+
+    container.innerHTML = items.map(item => `
+      <button type="button"
+        class="category-pill ${item.id === selectedCategory ? "is-active" : ""}"
+        role="tab"
+        aria-selected="${item.id === selectedCategory ? "true" : "false"}"
+        data-category="${escapeHtml(item.id)}">
+        <span class="category-pill-label">${escapeHtml(item.label)}</span>
+        <span class="category-pill-count">${item.count}</span>
+      </button>
+    `).join("");
+  }
+
   function renderProducts() {
     const focused = document.activeElement;
     const focusedProduct = focused?.closest(".product-grid .product")?.dataset.id;
     const focusedVariant = focused?.dataset.variant;
     const focusedLink = focused?.classList.contains("product-link");
-    $(".product-grid").innerHTML = products.map(p => productMarkup(p)).join("");
+
+    renderCategoryFilters();
+
+    const filtered = selectedCategory === "all"
+      ? products
+      : products.filter(p => productCategory(p) === selectedCategory);
+
+    $(".product-grid").innerHTML = filtered.map(p => productMarkup(p)).join("");
     renderRoute();
     if (focusedProduct) {
       const card = $$(".product-grid .product").find(el => el.dataset.id === focusedProduct);
@@ -2464,6 +2519,14 @@ import "./invoice.css";
     finally { addingToCart = false; renderRoute(); }
   }
   $(".product-grid").addEventListener("click", event => void handleProductClick(event));
+  $(".product-category-filters")?.addEventListener("click", event => {
+    const pill = event.target.closest(".category-pill");
+    if (!pill) return;
+    const cat = pill.dataset.category;
+    if (!cat || cat === selectedCategory) return;
+    selectedCategory = cat;
+    renderProducts();
+  });
   $("#product-detail").addEventListener("click", event => void handleProductClick(event));
   $("#product-detail").addEventListener("input", event => {
     const fontSelect = event.target.closest("[data-custom-font-select]");

@@ -530,3 +530,21 @@ test("admin card preview and storefront accurately reflect exact design, custom 
   assert.match(appSrc, /logoPos = \(ep\.logo && ep\.logo\.x != null/);
   assert.match(appSrc, /namePos = \(ep\.name && ep\.name\.x != null/);
 });
+
+test("storefront supports product category filter pills and admin category assignment", () => {
+  const indexHtml = readFileSync("sites/storefront/index.html", "utf8");
+  assert.match(indexHtml, /class="product-category-filters"/);
+
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /function productCategory/);
+  assert.match(appSrc, /function renderCategoryFilters/);
+  assert.match(appSrc, /category-pill/);
+
+  const homeCss = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(homeCss, /\.product-category-filters/);
+  assert.match(homeCss, /\.category-pill/);
+
+  const productsAdminSrc = readFileSync("apps/control-center/src/Products.tsx", "utf8");
+  assert.match(productsAdminSrc, /placeholder="e\.g\. Essential, Signature, Metal Card"/);
+  assert.match(productsAdminSrc, /catalog-category-pill/);
+});

@@ -619,6 +619,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   color: #047857;
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
+.catalog-category-pill {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid rgba(29, 78, 216, 0.2);
+}
 .catalog-highlight {
   font-size: .68rem;
   font-weight: 800;
@@ -1093,6 +1098,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   background: #ecfdf5;
   color: #047857;
   border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.catalog-category-pill {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid rgba(29, 78, 216, 0.2);
 }
 .review-status-wrap .pill.is-rejected {
   background: #fef2f2;
