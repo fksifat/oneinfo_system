@@ -155,6 +155,13 @@
       "when": 1794228000000,
       "tag": "0021_product_customization",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1794765000000,
+      "tag": "0022_cod_advance_inside_dhaka",
+      "breakpoints": true
     }
   ]
 }

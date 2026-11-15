@@ -484,12 +484,22 @@ export type ShippingRates = z.infer<typeof ShippingRatesSchema>;
 export const defaultShippingRates: ShippingRates = { insideDhaka: 6000, subDhaka: 10000, outsideDhaka: 12000 };
 export const CodAdvanceSchema = z.number().int().min(0).max(10_000);
 export const defaultCodAdvanceTaka = 100;
+export const defaultCodAdvanceInsideDhaka = true;
 export const bkashNumber = "01760320810";
 export const PaymentMethodSchema = z.enum(["COD", "BKASH"]);
 export const BkashTransactionIdSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{8,20}$/);
 
-export function paymentDueNow(totalMinor: number, method: z.infer<typeof PaymentMethodSchema>, codAdvanceTaka: number) {
-  return method === "BKASH" ? totalMinor : Math.min(totalMinor, codAdvanceTaka * 100);
+export function paymentDueNow(
+  totalMinor: number,
+  method: z.infer<typeof PaymentMethodSchema>,
+  codAdvanceTaka: number,
+  options?: { zone?: ShippingZone | null; codAdvanceInsideDhaka?: boolean }
+) {
+  if (method === "BKASH") return totalMinor;
+  if (options?.zone === "insideDhaka" && options?.codAdvanceInsideDhaka === false) {
+    return 0;
+  }
+  return Math.min(totalMinor, codAdvanceTaka * 100);
 }
 
 export const shippingZoneLabels: Record<ShippingZone, string> = {

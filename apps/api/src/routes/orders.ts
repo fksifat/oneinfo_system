@@ -4,7 +4,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
-  bkashNumber, CodAdvanceSchema, defaultCodAdvanceTaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
+  bkashNumber, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
   ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
   type AdminOrderSearch, type OrderReceipt,
 } from "@oneinfo/contracts";
@@ -29,7 +29,11 @@ const shippingSettingsId = "default";
 
 async function readCheckoutSettings(client: Pick<typeof db, "select"> = db) {
   const [settings] = await client.select().from(storeShippingSettings).where(eq(storeShippingSettings.id, shippingSettingsId));
-  return { rates: settings?.rates ?? defaultShippingRates, codAdvanceTaka: settings?.codAdvanceTaka ?? defaultCodAdvanceTaka };
+  return {
+    rates: settings?.rates ?? defaultShippingRates,
+    codAdvanceTaka: settings?.codAdvanceTaka ?? defaultCodAdvanceTaka,
+    codAdvanceInsideDhaka: settings?.codAdvanceInsideDhaka ?? defaultCodAdvanceInsideDhaka,
+  };
 }
 
 function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
@@ -149,14 +153,17 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   app.put("/admin/payment", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
-    const { codAdvanceTaka } = parseBody(z.object({ codAdvanceTaka: CodAdvanceSchema }), request.body);
+    const { codAdvanceTaka, codAdvanceInsideDhaka } = parseBody(
+      z.object({ codAdvanceTaka: CodAdvanceSchema, codAdvanceInsideDhaka: z.boolean().default(true) }),
+      request.body
+    );
     await db.transaction(async tx => {
-      await tx.insert(storeShippingSettings).values({ id: shippingSettingsId, rates: defaultShippingRates, codAdvanceTaka })
-        .onConflictDoUpdate({ target: storeShippingSettings.id, set: { codAdvanceTaka } });
+      await tx.insert(storeShippingSettings).values({ id: shippingSettingsId, rates: defaultShippingRates, codAdvanceTaka, codAdvanceInsideDhaka })
+        .onConflictDoUpdate({ target: storeShippingSettings.id, set: { codAdvanceTaka, codAdvanceInsideDhaka } });
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_COD_ADVANCE_UPDATED",
-        targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { codAdvanceTaka } });
+        targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { codAdvanceTaka, codAdvanceInsideDhaka } });
     });
-    return { codAdvanceTaka };
+    return { codAdvanceTaka, codAdvanceInsideDhaka };
   });
 
   app.post("/admin/:id/verify-payment", async request => {
@@ -399,7 +406,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       // Keep pending requests from older checkout pages valid during the rollout.
       const zone = dhakaArea ? deliveryZone(district, dhakaArea) : checkoutDeliveryZone(district, addressLine);
       if (!zone) throw Object.assign(new Error("Enter a complete delivery address."), { statusCode: 400 });
-      const { rates, codAdvanceTaka } = await readCheckoutSettings(tx);
+      const { rates, codAdvanceTaka, codAdvanceInsideDhaka } = await readCheckoutSettings(tx);
       const shippingMinor = rates[zone];
       if (shippingMinor !== input.shippingMinor) conflict("Delivery rates changed. Review your updated total and try again.");
 
@@ -429,7 +436,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         if (discountMinor !== input.coupon.discountMinor) conflict("The coupon discount changed. Review your updated total.");
       }
       const paymentMethod = input.payment?.method ?? "COD";
-      const paymentAmountMinor = paymentDueNow(subtotalMinor + shippingMinor - discountMinor, paymentMethod, codAdvanceTaka);
+      const paymentAmountMinor = paymentDueNow(subtotalMinor + shippingMinor - discountMinor, paymentMethod, codAdvanceTaka, { zone, codAdvanceInsideDhaka });
       if ((input.payment?.amountMinor ?? 0) !== paymentAmountMinor) conflict("Payment amount changed. Review the updated amount before paying. If you already paid, contact Oneinfo with your bKash transaction ID.");
       const transactionId = input.payment?.transactionId ?? null;
       if (!reserving && paymentAmountMinor > 0 && !transactionId) conflict("Enter your bKash transaction ID.");
