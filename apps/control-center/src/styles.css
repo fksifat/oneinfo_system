@@ -619,6 +619,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   color: #047857;
   border: 1px solid rgba(16, 185, 129, 0.25);
 }
+.pill.is-out-of-stock {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+.pill.is-partial-out-of-stock {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid rgba(194, 65, 12, 0.25);
+}
 .catalog-category-pill {
   background: #eff6ff;
   color: #1d4ed8;
@@ -677,6 +687,20 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   color: var(--text-muted);
   font-size: .78rem;
   font-weight: 650;
+}
+.catalog-colours-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.catalog-stock-summary {
+  font-size: .78rem;
+  font-weight: 650;
+  color: #059669;
+}
+.catalog-stock-summary.is-out {
+  color: #dc2626;
+  font-weight: 750;
 }
 
 /* Print Readiness Pill */
@@ -774,7 +798,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .variant-header-row:hover { background:#f0f4f5; }
 .variant-editor.is-active .variant-header-row { border-bottom:1px solid #e2eaed; }
 .variant-heading { flex:1; min-width:0; display:flex; align-items:center; gap:10px; padding:14px 12px 14px 14px; border:0; background:transparent; color:#224652; text-align:left; font-size:.8rem; cursor:pointer; }
-.variant-heading > span:nth-last-child(2), .variant-heading-price { margin-left:auto; font-size:.74rem; font-weight:500; color:#4a646f; white-space:nowrap; }
+.variant-heading-meta { margin-left:auto; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.variant-heading > span:nth-last-child(2), .variant-heading-price { font-size:.74rem; font-weight:600; color:#4a646f; white-space:nowrap; }
+.variant-heading-stock { font-size:.72rem; font-weight:650; padding:2px 8px; border-radius:100px; background:#f0fdf4; color:#166534; border:1px solid rgba(22, 101, 52, 0.2); white-space:nowrap; }
+.variant-heading-stock.is-out { background:#fef2f2; color:#dc2626; border-color:rgba(220, 38, 38, 0.25); }
 .variant-heading strong { overflow-wrap:anywhere; }
 .variant-expand-toggle { font-size:1rem; font-weight:600; line-height:1; color:#6b828b; padding:0 4px; }
 .variant-delete-btn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; margin-right:10px; border:1px solid transparent; border-radius:6px; background:transparent; color:#7e949d; cursor:pointer; flex-shrink:0; transition:all .15s ease; }
@@ -785,6 +812,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .colour-input input { width:28px; height:28px; padding:0; border:0; background:none; cursor:pointer; }
 .colour-input span { font-size:.8rem; font-weight:450; }
 .variant-footer { margin-top:20px; padding-top:14px; border-top:1px solid #e8eff1; display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap; }
+.stock-status-pill { display:inline-flex; align-items:center; gap:6px; font-size:.76rem; font-weight:650; padding:5px 11px; border-radius:6px; }
+.stock-status-pill.is-available { background:#f0fdf4; color:#166534; border:1px solid rgba(22, 101, 52, 0.2); }
+.stock-status-pill.is-out { background:#fef2f2; color:#dc2626; border:1px solid rgba(220, 38, 38, 0.25); }
 .catalog-check, .catalog-form-grid label.catalog-check { display:flex; flex-direction:row; align-items:center; gap:9px; font-size:.8rem; font-weight:500; color:#33525e; }
 .catalog-check input { width:17px; height:17px; margin:0; accent-color:#24535a; flex-shrink:0; }
 .catalog-remove-btn { display:inline-flex; align-items:center; gap:6px; padding:7px 12px; border:1px solid #fecaca; border-radius:6px; background:#fff; color:#dc2626; font-size:.76rem; font-weight:500; cursor:pointer; margin-left:auto; transition:all .15s ease; }
@@ -1098,6 +1128,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   background: #ecfdf5;
   color: #047857;
   border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.pill.is-out-of-stock {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.25);
+}
+.pill.is-partial-out-of-stock {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid rgba(194, 65, 12, 0.25);
 }
 .catalog-category-pill {
   background: #eff6ff;

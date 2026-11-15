@@ -206,6 +206,11 @@ export function Products({ token }: { token: string }) {
             <div className="product-admin-card-body">
               <div className="catalog-card-top">
                 <span className={`pill ${p.status === "PUBLISHED" ? "success" : ""}`}>{p.status.toLowerCase()}</span>
+                {p.variants.every(v => !v.available || v.stockQuantity === 0) ? (
+                  <span className="pill is-out-of-stock">Out of stock</span>
+                ) : p.variants.some(v => v.stockQuantity !== undefined && v.stockQuantity === 0) ? (
+                  <span className="pill is-partial-out-of-stock">Partial out of stock</span>
+                ) : null}
                 {p.category && <span className="pill catalog-category-pill">{p.category}</span>}
                 {p.customizable && <span className="pill info">✦ Customizable</span>}
                 {p.featured && <span className="catalog-highlight">★ Homepage highlight</span>}
@@ -219,12 +224,19 @@ export function Products({ token }: { token: string }) {
                   {p.variants.map(v => (
                     <span
                       key={v.id}
-                      title={`${v.name}${v.available ? "" : " · unavailable"}`}
-                      style={{ background: v.colorHex, opacity: v.available ? 1 : 0.35 }}
+                      title={`${v.name}${v.available && v.stockQuantity !== 0 ? (v.stockQuantity !== undefined ? ` · ${v.stockQuantity} in stock` : "") : " · out of stock"}`}
+                      style={{ background: v.colorHex, opacity: v.available && v.stockQuantity !== 0 ? 1 : 0.35 }}
                     />
                   ))}
                 </div>
-                <small>{p.variants.length} {p.variants.length === 1 ? "colour" : "colours"}</small>
+                <div className="catalog-colours-meta">
+                  <small>{p.variants.length} {p.variants.length === 1 ? "colour" : "colours"}</small>
+                  {p.variants.some(v => v.stockQuantity !== undefined) && (
+                    <small className={`catalog-stock-summary ${p.variants.every(v => !v.available || v.stockQuantity === 0) ? "is-out" : ""}`}>
+                      · {p.variants.reduce((sum, v) => sum + (v.stockQuantity ?? 0), 0)} in stock
+                    </small>
+                  )}
+                </div>
               </div>
 
               <div className={`catalog-print-readiness ${isReady ? "is-ready" : "is-incomplete"}`}>
@@ -273,6 +285,7 @@ export function Products({ token }: { token: string }) {
             <div className="variant-list">{editing.variants.map((v, index) => {
               const isOnlyOne = editing.variants.length <= 1;
               const colorLabel = v.name || `Colour ${index + 1}`;
+              const isOutOfStock = !v.available || v.stockQuantity === 0;
               return (
                 <div className={`variant-editor ${activeVariant === v.id ? "is-active" : ""}`} key={v.id}>
                   <div className="variant-header-row">
@@ -285,9 +298,18 @@ export function Products({ token }: { token: string }) {
                     >
                       <span className="variant-dot" style={{ background: v.colorHex }} />
                       <strong>{colorLabel}</strong>
-                      <span className="variant-heading-price">
-                        {v.available ? (v.regular ? money.format(variantPrice(toVariant(v)) / 100) : "Set price") : "Unavailable"}
-                      </span>
+                      <div className="variant-heading-meta">
+                        <span className="variant-heading-price">
+                          {v.regular ? money.format(variantPrice(toVariant(v)) / 100) : "Set price"}
+                        </span>
+                        <span className={`variant-heading-stock ${isOutOfStock ? "is-out" : ""}`}>
+                          {!v.available
+                            ? "Unavailable"
+                            : v.stockQuantity !== undefined
+                            ? (v.stockQuantity === 0 ? "Out of stock (0 pcs)" : `${v.stockQuantity} in stock`)
+                            : "Untracked stock"}
+                        </span>
+                      </div>
                       <span className="variant-expand-toggle" aria-hidden="true">
                         {activeVariant === v.id ? "−" : "+"}
                       </span>
@@ -315,14 +337,36 @@ export function Products({ token }: { token: string }) {
                       <label>Regular price — Without Logo (BDT)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="Default: regular + 500 BDT" value={v.withoutLogoRegular} onChange={e => changeVariant(v.id, { withoutLogoRegular: e.target.value })} /><small>Price when customer selects &ldquo;Without Oneinfo Logo&rdquo;.</small></label>
                       <label>Sale price — Without Logo (BDT)<input type="number" min="0.01" max="1000000" step="0.01" placeholder="Optional sale price" value={v.withoutLogoSale} onChange={e => changeVariant(v.id, { withoutLogoSale: e.target.value })} /><small>Optional discounted price without logo.</small></label>
                     </>}
+                    <label>
+                      <span>Stock quantity (pcs)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={1000000}
+                        step={1}
+                        placeholder="Untracked (leave empty)"
+                        value={v.stockQuantity ?? ""}
+                        onChange={event => changeVariant(v.id, { stockQuantity: event.target.value === "" ? undefined : Math.max(0, parseInt(event.target.value, 10)) })}
+                      />
+                      <small>e.g. 100 pcs. Decrements with orders; shows &ldquo;Out of stock&rdquo; and blocks ordering at 0.</small>
+                    </label>
+                    <label className="catalog-check" style={{ alignSelf: "center", paddingTop: "8px" }}>
+                      <input type="checkbox" checked={v.available} onChange={e => changeVariant(v.id, { available: e.target.checked })} />
+                      Available to order
+                    </label>
                   </div>
                   <div className="catalog-form-grid" hidden={section !== "media"}>
                     <label className="full catalog-default-preview"><span>Default large preview<small>Opens first when this colour is selected.</small></span><select value={v.defaultMediaIndex} onChange={e => changeVariant(v.id, { defaultMediaIndex: Number(e.target.value) })}>{(v.media?.length ? v.media : [null]).map((m, i) => <option value={i} key={m?.id ?? "empty"}>{m ? `${i + 1}. ${m.label || (m.type === "model" ? "3D View" : m.type)}` : "Card illustration"}</option>)}</select></label>
                     <ProductMediaEditor items={v.media ?? []} token={token} onChange={media => changeVariant(v.id, { media, defaultMediaIndex: Math.min(v.defaultMediaIndex, Math.max(0, media.length - 1)), imageUrl: "", backImageUrl: "" })} />
                   </div>{section === "colours" && <PrintSetup slug={editing.slug} appearance={v.appearance} />}
-                  <div className="variant-footer" hidden={section === "media"}><label className="catalog-check"><input type="checkbox" checked={v.available} onChange={e => changeVariant(v.id, { available: e.target.checked })} />Available to order</label>
-                    <label>Stock quantity <input type="number" min={0} max={1000000} step={1} placeholder="Untracked" value={v.stockQuantity ?? ""}
-                      onChange={event => changeVariant(v.id, { stockQuantity: event.target.value === "" ? undefined : Number(event.target.value) })} /></label>
+                  <div className="variant-footer" hidden={section === "media"}>
+                    <span className={`stock-status-pill ${isOutOfStock ? "is-out" : "is-available"}`}>
+                      {!v.available
+                        ? "Marked unavailable (Out of stock)"
+                        : v.stockQuantity !== undefined
+                        ? (v.stockQuantity === 0 ? "Out of stock (0 pcs remaining)" : `In stock (${v.stockQuantity} pcs remaining)`)
+                        : "In stock (Untracked quantity)"}
+                    </span>
                     <button type="button" className="catalog-remove-btn" disabled={isOnlyOne} title={isOnlyOne ? "Product must have at least one colour" : `Remove ${colorLabel}`} onClick={() => removeVariant(v.id, colorLabel)}>
                       <SvgTrashIcon size={14} />
                       <span>Remove colour</span>

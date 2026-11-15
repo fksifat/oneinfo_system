@@ -1,8 +1,10 @@
 import { variantPrice, variantPriceForBranding } from '@oneinfo/contracts';
 
 export function addCartVariant(cart, product, variant, quantity, customization = null) {
-  if (!variant.available || !Number.isInteger(quantity) || quantity < 1 || quantity > 99)
-    throw new RangeError('Choose an available colour and a quantity from 1 to 99.');
+  if (!variant.available)
+    throw new RangeError('This card is currently out of stock.');
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99)
+    throw new RangeError('Choose a quantity from 1 to 99.');
   const customKey = customization ? JSON.stringify(customization) : '';
   const existing = cart.find(item => item.id === product.id && item.variantId === variant.id && (item.customization ? JSON.stringify(item.customization) : '') === customKey);
   if ((existing?.quantity ?? 0) + quantity > 99) throw new RangeError('You can add up to 99 cards of each colour.');

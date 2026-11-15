@@ -454,7 +454,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       for (const product of catalog) {
         if (!product.variants.some(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`))) continue;
         const variants = product.variants.map(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`)
-          ? { ...variant, stockQuantity: variant.stockQuantity - requestedQuantities.get(`${product.id}:${variant.id}`)! } : variant);
+          ? { ...variant, stockQuantity: Math.max(0, variant.stockQuantity - requestedQuantities.get(`${product.id}:${variant.id}`)!) } : variant);
         await tx.update(products).set({ variants, version: product.version + 1, updatedAt: new Date() }).where(eq(products.id, product.id));
       }
       await createOrderProfiles(tx, order);

@@ -548,3 +548,28 @@ test("storefront supports product category filter pills and admin category assig
   assert.match(productsAdminSrc, /placeholder="e\.g\. Essential, Signature, Metal Card"/);
   assert.match(productsAdminSrc, /catalog-category-pill/);
 });
+
+test("stock management and out-of-stock indicators across storefront and admin", () => {
+  const appSrc = readFileSync("sites/storefront/app.js", "utf8");
+  assert.match(appSrc, /out-of-stock-badge/);
+  assert.match(appSrc, /out-of-stock-tag/);
+  assert.match(appSrc, /product-stock-notice/);
+  assert.match(appSrc, /This card is currently out of stock/);
+
+  const homeCss = readFileSync("sites/storefront/home.css", "utf8");
+  assert.match(homeCss, /\.out-of-stock-badge/);
+  assert.match(homeCss, /\.out-of-stock-tag/);
+  assert.match(homeCss, /\.product-stock-notice/);
+
+  const catalogJs = readFileSync("sites/storefront/catalog.js", "utf8");
+  assert.match(catalogJs, /This card is currently out of stock/);
+
+  const iconsSrc = readFileSync("sites/storefront/public/assets/icons.svg", "utf8");
+  assert.match(iconsSrc, /id="alert-circle"/);
+
+  const productsAdminSrc = readFileSync("apps/control-center/src/Products.tsx", "utf8");
+  assert.match(productsAdminSrc, /is-out-of-stock/);
+  assert.match(productsAdminSrc, /Stock quantity \(pcs\)/);
+  assert.match(productsAdminSrc, /variant-heading-stock/);
+  assert.match(productsAdminSrc, /stock-status-pill/);
+});
