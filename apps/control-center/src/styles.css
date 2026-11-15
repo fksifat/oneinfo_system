@@ -3270,12 +3270,12 @@ a.quick-action-btn,
   letter-spacing: 0.02em;
 }
 
-/* Primary CTA Row: Save to Contacts (.vcf) + Share Button */
+/* Primary CTA Row: Save Contact (.vcf) + Share Button */
 .profile-save-cta-wrapper {
   padding: 0 24px;
   margin-bottom: 20px;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   gap: 10px;
 }
 
@@ -3284,10 +3284,11 @@ a.quick-action-btn,
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 10px 18px;
-  border-radius: 16px;
+  gap: 8px;
+  height: 48px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
   background: var(--profile-accent-gradient, var(--profile-accent));
   color: var(--profile-accent-ink);
   text-decoration: none;
@@ -3309,17 +3310,19 @@ a.quick-action-btn,
 .card-portal button.save-cta-share-btn,
 button.save-cta-share-btn,
 .save-cta-share-btn {
-  flex: 0 0 auto;
+  flex: 0 0 48px !important;
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  max-width: 48px !important;
+  max-height: 48px !important;
   display: flex !important;
-  flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 3px !important;
-  min-width: 66px;
-  min-height: 52px !important;
   margin: 0 !important;
-  padding: 6px 12px !important;
-  border-radius: 16px !important;
+  padding: 0 !important;
+  border-radius: 14px !important;
   background: var(--profile-link-bg) !important;
   border: 1.5px solid var(--profile-accent-border) !important;
   color: var(--profile-text) !important;
@@ -3353,7 +3356,6 @@ button.save-cta-share-btn,
   background: var(--profile-link-hover) !important;
 }
 
-
 .save-cta-share-btn:active {
   transform: translateY(0);
 }
@@ -3365,45 +3367,33 @@ button.save-cta-share-btn,
 }
 
 .share-btn-icon {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .share-btn-icon svg {
-  width: 19px;
-  height: 19px;
-}
-
-.share-btn-text {
-  font-size: 0.68rem;
-  font-weight: 750;
-  letter-spacing: 0.02em;
+  width: 18px;
+  height: 18px;
 }
 
 .cta-icon {
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.cta-text {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
+.cta-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .cta-primary {
-  font-size: 0.94rem;
-  font-weight: 800;
-  line-height: 1.2;
-}
-
-.cta-secondary {
-  font-size: 0.68rem;
-  font-weight: 600;
-  opacity: 0.8;
-  line-height: 1.2;
-  margin-top: 1px;
+  font-size: 0.95rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 /* Detailed About / Description Section */

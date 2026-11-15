@@ -641,3 +641,24 @@ test("customer profile social links omit box background, render authentic brand 
   assert.match(stylesCss, /--profile-accent-border/);
   assert.match(stylesCss, /--profile-accent-glow/);
 });
+
+test("customer profile simplifies Save Contact button, makes share button compact, filters WhatsApp from social links, and uses authentic official vector SVGs", () => {
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  // Clean Save Contact text and no subtext
+  assert.match(profileViewSrc, /<span className="cta-primary">Save Contact<\/span>/);
+  assert.doesNotMatch(profileViewSrc, /Direct download to phone address book/);
+  assert.doesNotMatch(profileViewSrc, /Save to Contacts/);
+
+  // WhatsApp excluded from social & web links grid
+  assert.match(profileViewSrc, /links\s*\.filter\(\(link\)\s*=>\s*detectSocialBrand\(link\.url,\s*link\.label\)\.kind\s*!==\s*"whatsapp"\)/);
+
+  // Authentic brand vector paths
+  assert.match(profileViewSrc, /M20\.447 20\.452h-3\.554v-5\.569/); // Official LinkedIn path
+  assert.match(profileViewSrc, /M12 \.297c-6\.63 0-12 5\.373/); // Official GitHub Octocat path
+  assert.match(profileViewSrc, /M7\.0301\.084c-1\.2768/); // Official Instagram camera path
+
+  // Compact share button styles
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.profile-save-cta-wrapper\s*\{[^}]*display:\s*flex;\s*align-items:\s*center;\s*gap:\s*10px;/);
+  assert.match(stylesCss, /flex:\s*0 0 48px !important;\s*width:\s*48px !important;\s*height:\s*48px !important;/);
+});
