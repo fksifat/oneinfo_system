@@ -747,7 +747,7 @@ import "./invoice.css";
         ${detail ? `</div><div class="product-details-copy">` : ""}
         <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price">${!v.available ? `<span class="out-of-stock-tag">Out of stock</span>` : ""}<strong>${money.format(activePrice / 100)}</strong>${sale && v.available ? `<del aria-label="Regular price ${money.format(activeRegular / 100)}">${money.format(activeRegular / 100)}</del>` : ""}${detail && sale && v.available ? `<span class="purchase-saving">Save ${money.format((activeRegular - activePrice) / 100)}</span>` : ''}</div></div>
         ${!isCustomizable ? `
-          <div class="product-colours">
+          <div class="product-colours ${!detail && p.variants.length === 1 ? 'is-single-colour' : ''}">
             <div class="colour-caption">
               <span>${detail ? 'Colour. <span>Choose your finish.</span>' : (p.customizable ? 'Colour: <strong>Limitless</strong>' : `Colour: <strong>${escapeHtml(v.name)}</strong>${!v.available ? ' <span class="out-of-stock-caption">(Out of stock)</span>' : ''}`)}</span>
               ${detail ? "" : (p.customizable ? `
@@ -755,7 +755,11 @@ import "./invoice.css";
                   ${icon("infinity")}
                   <span>options</span>
                 </span>
-              ` : `<span>${p.variants.length} ${p.variants.length === 1 ? "option" : "options"}</span>`)}
+              ` : (p.variants.length > 1 ? `<span>${p.variants.length} options</span>` : `
+                <div class="colour-options is-single-option-swatch" role="group" aria-label="${escapeHtml(p.name)} colour">
+                  <button type="button" class="colour-swatch ${!v.available ? "unavailable is-out-of-stock" : ""}" style="--swatch:${escapeHtml(v.colorHex)}" data-variant="${escapeHtml(v.id)}" aria-label="${escapeHtml(v.name)}${v.available ? "" : " — Out of stock"}" aria-pressed="true" title="${escapeHtml(v.name)}${v.available ? "" : " — Out of stock"}"><span aria-hidden="true"></span></button>
+                </div>
+              `))}
             </div>
             ${p.customizable && !detail ? `
               <div class="colour-options is-limitless-palette" role="group" aria-label="${escapeHtml(p.name)} customizable themes">
@@ -767,9 +771,9 @@ import "./invoice.css";
                 <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#f4efe6" title="Satin Frost"></a>
                 <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#182232" title="Royal Navy"></a>
               </div>
-            ` : `
+            ` : (detail || p.variants.length > 1 ? `
               <div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable is-out-of-stock" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — Out of stock"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — Out of stock"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Out of stock</small>' : ''}</b>` : ''}</button>`).join("")}</div>
-            `}
+            ` : "")}
           </div>
         ` : ""}
         ${detail && p.customizable ? `
