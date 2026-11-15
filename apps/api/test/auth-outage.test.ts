@@ -6,7 +6,7 @@ import { config } from "../src/config.js";
 
 const query = vi.hoisted(() => vi.fn());
 vi.mock("../src/db/client.js", () => ({ db: { select: () => ({ from: () => ({ where: () => ({ limit: query }) }) }) } }));
-import { issueOperatorToken, requireOperator, requireStation } from "../src/auth.js";
+import { issueOperatorToken, optionalOperator, requireOperator, requireStation } from "../src/auth.js";
 import { issueCustomerToken, requireCustomer } from "../src/domain/customer-auth.js";
 afterEach(() => vi.resetAllMocks());
 const request = (token: string) => ({ headers: { authorization: `Bearer ${token}` } }) as FastifyRequest;
@@ -16,6 +16,7 @@ it("keeps operator/customer sessions when their database lookup fails", async ()
   query.mockRejectedValue(outage);
   const token = await issueOperatorToken({ operatorId: randomUUID(), email: "test@example.com", role: "SUPER_ADMIN" });
   await expect(requireOperator(request(token))).rejects.toBe(outage);
+  await expect(optionalOperator(request(token))).rejects.toBe(outage);
   await expect(requireCustomer(request(await issueCustomerToken(randomUUID())))).rejects.toBe(outage);
 });
 
@@ -27,4 +28,12 @@ it("rejects malformed signed identities and station IDs before querying PostgreS
   await expect(requireCustomer(request(await issueCustomerToken("invalid-uuid")))).rejects.toMatchObject({ statusCode: 401 });
   await expect(requireStation({ headers: { "x-station-key": `${"-".repeat(36)}.secret` } } as FastifyRequest)).rejects.toMatchObject({ statusCode: 401 });
   expect(query).not.toHaveBeenCalled();
+});
+
+it("keeps public preview limited to profile readers while treating invalid credentials as anonymous", async () => {
+  const operatorId = randomUUID();
+  const token = await issueOperatorToken({operatorId,email:"writer@example.com",role:"PRODUCTION_OPERATOR"});
+  query.mockResolvedValue([{ id: operatorId, role: "PRODUCTION_OPERATOR", active: true }]);
+  expect(await optionalOperator(request(token))).toBeNull();
+  expect(await optionalOperator(request("invalid"))).toBeNull();
 });

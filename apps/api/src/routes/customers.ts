@@ -36,7 +36,7 @@ function liveRecipient(tx: Transaction, cardSlug: string) {
     .innerJoin(customerAccounts, contactOwner)
     .innerJoin(customerProfiles, eq(cards.profileId, customerProfiles.id))
     .where(and(eq(cards.publicSlug, cardSlug), eq(cards.lifecycleStatus, "ACTIVATED"), eq(cards.qcStatus, "PASSED"),
-      eq(customerAccounts.active, true), publicProfileAvailable()))
+      isNotNull(cardBatches.printConfirmedAt), eq(customerAccounts.active, true), publicProfileAvailable()))
     .limit(1).for("share", { of: cards });
 }
 
@@ -145,7 +145,7 @@ export const customerRoutes: FastifyPluginAsync = async app => {
       .where(eq(cards.publicSlug, cardSlug)).limit(1);
     if (!row) fail("Card not found", 404);
     const { card } = row;
-    if ((!row.confirmed && card.lifecycleStatus !== "ACTIVATED") || (card.qcStatus !== "PASSED" && card.lifecycleStatus !== "ACTIVATED") || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) return { status: "UNAVAILABLE" };
+    if (!row.confirmed || card.qcStatus !== "PASSED" || !["QC_PASSED", "ACTIVATED"].includes(card.lifecycleStatus)) return { status: "UNAVAILABLE" };
     if (card.profileId && card.lifecycleStatus === "ACTIVATED") {
       const [profile] = await db.select(publicProfileFields).from(customerProfiles).where(and(eq(customerProfiles.id, card.profileId), publicProfileAvailable()));
       if (profile) {

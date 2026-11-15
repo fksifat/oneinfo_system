@@ -1,12 +1,17 @@
 import type { StoreOrder } from "@oneinfo/contracts";
 
+export type OrderStage = "payment" | "packing" | "qc" | "processing" | "shipping" | "delivery";
+const stageIds: OrderStage[] = ["payment", "packing", "qc", "processing", "shipping", "delivery"];
+
 const arrowSvg = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M4 12h15m-5-5 5 5-5 5" />
   </svg>
 );
 
-export function OrderTrackingPipeline({ order, compact = false }: { order: StoreOrder; compact?: boolean }) {
+export function OrderTrackingPipeline({ order, compact = false, selectedStage, controls, onStageSelect }: {
+  order: StoreOrder; compact?: boolean; selectedStage?: OrderStage; controls?: string; onStageSelect?: (stage: OrderStage) => void;
+}) {
   const cards = order.cards ?? {
     total: order.items?.reduce((sum, item) => sum + item.quantity, 0) || 1,
     qrGenerated: order.assignedCards?.filter(c => c.qcStatus === "PASSED" || c.publicSlug).length || 0,
@@ -28,10 +33,10 @@ export function OrderTrackingPipeline({ order, compact = false }: { order: Store
   const stages = [
     { title: "Received", sub: "Order placed", done: isConfirmed, meta: fmt(order.createdAt) || "Awaiting order", note: order.paymentStatus === "VERIFIED" ? "bKash verified" : order.paymentStatus === "PENDING_VERIFICATION" ? "Payment needs verification" : "Order received" },
     { title: order.invoiceNumber ? "Cards packed" : "Card & QR Generated", sub: order.invoiceNumber ? "Packed from ready stock" : "Identity allocated", done: qrReady, meta: `${qrReady ? total : cards.qrGenerated}/${total} ${order.invoiceNumber ? "packed" : "QR ready"}`, note: order.activationMethod === "ORDER_SECRET" ? "QR linked on client activation" : order.invoiceNumber ? "QRs linked during packing" : order.assignedCards?.length ? `${order.assignedCards.length} cards assigned` : "Optical QR code" },
-    { title: "NFC & QC Test OK", sub: "Hardware verified", done: qcReady, meta: `${qcReady ? total : cards.qcPassed}/${total} QC passed`, note: "NTAG213 write & read-back" },
+    { title: "NFC & QC", sub: "Hardware verification", done: qcReady, meta: `${qcReady ? total : cards.qcPassed}/${total} QC passed`, note: "NTAG213 write & read-back" },
     { title: "Processing", sub: order.invoiceNumber ? "Preparing dispatch" : "Packed for dispatch", done: pastProcessing, meta: fmt(order.processingAt) || "Workstation prep", note: order.activationMethod === "ORDER_SECRET" ? "Secret code included per card" : order.invoiceNumber ? "Activation by invoice after delivery" : "Card sealed with secret code" },
     { title: "Shipped", sub: "Handed to courier", done: pastShipped, meta: fmt(order.shippedAt) || "Courier handoff", note: order.courierTrackingId ? `Tracking: ${order.courierTrackingId}` : "Nationwide dispatch" },
-    { title: "Delivered", sub: "In client’s hands", done: isDelivered, meta: fmt(order.deliveredAt) || "Delivered", note: isDelivered ? "Card ready for tap & activate" : "Awaiting delivery" },
+    { title: "Delivered", sub: "In client’s hands", done: isDelivered, meta: fmt(order.deliveredAt) || "Delivery confirmation", note: isDelivered ? "Card ready for tap & activate" : "Awaiting delivery" },
   ];
 
   const activeIndex = stages.findIndex(s => !s.done);
@@ -49,20 +54,24 @@ export function OrderTrackingPipeline({ order, compact = false }: { order: Store
           <span className="pipeline-percent">{Math.round((doneCount / 6) * 100)}%</span>
         </div>
       </div>
+      {onStageSelect && <p className="pipeline-instruction">Select a stage to open its actions.</p>}
       <ol className="pipeline-stages">
         {stages.map((stage, i) => {
+          const id = stageIds[i]!;
           const state = isCancelled && !stage.done ? "cancelled" : stage.done ? "done" : i === activeIndex ? "current" : "upcoming";
+          const Card = onStageSelect ? "button" : "div";
           return (
-            <li key={stage.title} className="pipeline-stage-item" data-state={state}>
-              <div className="pipeline-card">
-                <div className="pipeline-card-top">
-                  <span className="pipeline-badge">{stage.done ? "✓" : `0${i + 1}`}</span>
+            <li key={id} className="pipeline-stage-item" data-state={state}>
+              <Card className="pipeline-card" {...(onStageSelect && { type: "button", "aria-controls": controls,
+                "aria-pressed": selectedStage === id, "aria-label": `${stage.title} actions`, onClick: () => onStageSelect(id) })}>
+                <span className="pipeline-card-top">
+                  <span className="pipeline-badge" aria-hidden="true">{stage.done ? "✓" : `0${i + 1}`}</span>
                   <small>{stage.sub}</small>
-                </div>
+                </span>
                 <strong className="pipeline-stage-name">{stage.title}</strong>
-                <p className="pipeline-note">{stage.note}</p>
+                <span className="pipeline-note">{stage.note}</span>
                 <span className="pipeline-meta">{stage.meta}</span>
-              </div>
+              </Card>
               {i < stages.length - 1 && (
                 <span className={`pipeline-arrow ${stage.done ? "is-done" : state === "current" ? "is-active" : ""}`} aria-hidden="true">
                   {arrowSvg}

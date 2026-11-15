@@ -255,3 +255,13 @@ footer { min-height: 50px; padding: 12px var(--page-inset); background: white; b
 .backup-record > div { flex:1 1 240px; min-width:0; overflow-wrap:anywhere; }
 .database-backups summary { cursor:pointer; padding:8px 0; font-weight:600; }
 .database-backups code { overflow-wrap:anywhere; }
+
+.nfc-protection { border-top:1px solid #dbe6eb; margin-top:20px; padding-top:20px; }
+.nfc-protection h3 { font-size:16px; margin:8px 0; }
+.nfc-protection p, .nfc-protection small { overflow-wrap:anywhere; }
+.nfc-protection fieldset { min-width:0; border:0; padding:0; margin:12px 0; display:flex; flex-wrap:wrap; gap:10px; align-items:end; }
+.nfc-protection fieldset > label:first-child { flex:1 1 230px; }
+.nfc-protection .checkbox-label { flex:1 1 100%; display:flex; align-items:flex-start; gap:10px; }
+.nfc-protection input[type=checkbox] { width:18px; height:18px; padding:0; margin:2px 0 0; flex-shrink:0; }
+.nfc-protection .actions { flex:1 1 100%; }
+.nfc-protection small { display:block; color:#526b79; }

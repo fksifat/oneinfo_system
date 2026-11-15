@@ -1,3 +1,5 @@
+import { PNG } from "pngjs";
+import jsQR from "jsqr";
 import { qrUrl } from "../src/domain/card-urls.js";
 import { randomUUID, randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -77,6 +79,45 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     return created;
   }
   const confirm = (id: string) => request(`/api/v1/production/batches/${id}/confirm-print`, { confirmed: true });
+
+  it("keeps protection keys private and records protection only after the assigned phone verifies the matching card", async () => {
+    const card = await readyForClaim();
+    const input = { cardId: card.id, operation: "PROTECT", keyHex: "49C26785A1FE", confirmed: true };
+    const url = "/api/v1/local-nfc/protection-sessions";
+    expect((await app.inject({ method: "POST", url, payload: input })).statusCode).toBe(401);
+    expect((await app.inject({ method: "POST", url, headers, payload: { ...input, confirmed: false } })).statusCode).toBe(400);
+    const pairing = await request("/api/v1/local-nfc/pairings", {});
+    const paired = await request("/api/v1/local-nfc/devices/pair", { pairingCode: pairing.pairingCode, deviceName: "Protection phone" });
+    const deviceHeaders = { "x-oneinfo-device-token": paired.deviceToken };
+    const result = { uid: "7470CE64", techList: ["android.nfc.tech.MifareClassic", "android.nfc.tech.Ndef"], ndefFormatted: true,
+      records: [{ tnf: 1, type: "U", idHex: "", payloadHex: "00", uri: card.canonicalUrl }],
+      deviceMetadata: { protectionVerified: true, protectionMethod: "MIFARE_CLASSIC_KEY_B_V1", protectionOperation: "PROTECT", sectorsVerified: 16 } };
+    const submit = (id: string, body: object) => app.inject({ method: "POST", url: `/api/v1/local-nfc/device/read-tasks/${id}/result`, headers: deviceHeaders, payload: body });
+    const next = () => app.inject({ url: "/api/v1/local-nfc/device/read-tasks/next", headers: deviceHeaders });
+    const started = await request(url, input);
+    for (const publicResult of [started, await request(`/api/v1/local-nfc/read-sessions/${started.id}`), await request("/api/v1/local-nfc/utility-sessions")]) {
+      expect(JSON.stringify(publicResult)).not.toContain(input.keyHex);
+      expect(JSON.stringify(publicResult)).not.toContain("encryptedKey");
+    }
+    expect((await next()).json()).toMatchObject({ sessionId: started.id, utility: { operation: "CLASSIC_PROTECT", keyHex: input.keyHex, expectedUrl: card.canonicalUrl } });
+    expect((await app.inject({ method: "POST", url: `/api/v1/local-nfc/utility-sessions/${started.id}/cancel`, headers, payload: {} })).statusCode).toBe(409);
+    expect((await submit(started.id, { ...result, deviceMetadata: {} })).json().state).toBe("FAILED");
+    const mismatch = await request(url, input); await next();
+    expect((await submit(mismatch.id, { ...result, records: [{ ...result.records[0], uri: "https://wrong.example/card" }] })).json().state).toBe("FAILED");
+    expect(await client.db.select().from(schema.cardEvents).where(eq(schema.cardEvents.eventType, "NFC_WRITE_PROTECTED"))).toHaveLength(0);
+    const valid = await request(url, input); await next();
+    expect((await submit(valid.id, result)).json().state).toBe("COMPLETED");
+    expect((await submit(valid.id, result)).json().state).toBe("COMPLETED");
+    expect((await request(`/api/v1/production/batches/${card.batchId}/verification-status`)).items[0].writeProtection).toBe("PROTECTED");
+    const removed = await request(url, { ...input, operation: "UNPROTECT" }); await next();
+    expect((await submit(removed.id, { ...result, deviceMetadata: { ...result.deviceMetadata, protectionOperation: "UNPROTECT" } })).json().state).toBe("COMPLETED");
+    expect((await request(`/api/v1/production/batches/${card.batchId}`)).cards[0].writeProtection).toBe("UNPROTECTED");
+    const events = await client.db.select().from(schema.cardEvents).where(eq(schema.cardEvents.eventType, "NFC_WRITE_PROTECTED"));
+    expect(events).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain(input.keyHex);
+    const pending = await request(url, input);
+    await request(`/api/v1/local-nfc/utility-sessions/${pending.id}/cancel`, {});
+  });
 
   it("limits database backup listing to a local administrator with a valid station", async () => {
     const path = "/api/v1/production/backups";
@@ -264,6 +305,24 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(await client.db.select().from(schema.storeOrders)).toHaveLength(1);
     expect(allocations).toHaveLength(removed.statusCode === 200 ? 0 : 1);
     expect(rows).toHaveLength(allocations.length);
+  });
+
+  it("loads lightweight batch previews while preserving protected original PNG downloads", async () => {
+    const created = await batch(2, false);
+    const pending = await request(`/api/v1/production/batches/${created.id}?preview=svg`);
+    expect(pending.cards.every((card: any) => card.imageData === null)).toBe(true);
+    await request(`/api/v1/production/batches/${created.id}/generate-qr`, {});
+    const original = await request(`/api/v1/production/batches/${created.id}`);
+    const preview = await request(`/api/v1/production/batches/${created.id}?preview=svg`);
+    expect(preview.cards).toHaveLength(2);
+    for (const card of preview.cards) {
+      expect(card.imageData).toMatch(/^data:image\/svg\+xml;base64,/);
+      const path = `/api/v1/production/batches/${created.id}/cards/${card.id}/qr-image`;
+      expect((await app.inject({ url: path })).statusCode).toBe(401);
+      expect(await request(path)).toEqual({ imageData: original.cards.find((item: any) => item.id === card.id).imageData });
+      expect((await app.inject({ url: `/api/v1/production/batches/${randomUUID()}/cards/${card.id}/qr-image`, headers })).statusCode).toBe(404);
+    }
+    expect(await request(`/api/v1/production/batches/${created.id}`)).toEqual(original);
   });
 
   it("exports every generated QR as SVG and EPS in a protected ZIP without changing stock", async () => {
@@ -570,6 +629,45 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect((await app.inject({ url: `/api/v1/admin/cards?query=${"x".repeat(121)}`, headers })).statusCode).toBe(400);
 
   }, 30000);
+
+  it("does not expose private previews to production operators and ignores caller-controlled QR origins", async () => {
+    const profile = await request("/api/v1/profiles", { publicSlug: "audit-profile-preview", displayName: "Audit Private Profile", published: false });
+    const [writer] = await client.db.insert(schema.operators).values({ email: `profile-writer-${randomUUID()}@example.com`, displayName: "Production writer", role: "PRODUCTION_OPERATOR" }).returning();
+    const { issueOperatorToken } = await import("../src/auth.js");
+    const token = await issueOperatorToken({ operatorId: writer!.id, email: writer!.email, role: "PRODUCTION_OPERATOR" });
+    for (const url of [`/api/v1/profiles/public/${profile.publicSlug}`, `/api/v1/profiles/handle/${profile.handle}`]) {
+      expect((await app.inject({url})).statusCode).toBe(404);
+      expect((await app.inject({url,headers:{authorization:`Bearer ${token}`}})).statusCode).toBe(404);
+      expect((await app.inject({url,headers})).statusCode).toBe(200);
+    }
+    const path = `/api/v1/profiles/public/${profile.publicSlug}/qr.png`;
+    expect((await app.inject({url:path})).statusCode).toBe(404);
+    await client.db.update(schema.customerProfiles).set({published:true}).where(eq(schema.customerProfiles.id,profile.id));
+    const response = await app.inject({url:path,headers:{origin:"https://attacker.example"}});
+    expect(response.statusCode).toBe(200);
+    const png=PNG.sync.read(response.rawPayload);
+    const value=jsQR(new Uint8ClampedArray(png.data),png.width,png.height)?.data;
+    const {config}=await import("../src/config.js");
+    expect(value).toBe(new URL(`/${profile.handle}`,config.PUBLIC_CARD_BASE_URL).href);
+    expect(value).not.toContain("attacker.example");
+  });
+
+  it("rejects failed-QC or unconfirmed active cards consistently on every public profile alias", async () => {
+    const card=await readyForClaim(),secret=await issue(card.id);
+    const grant=await activate(card.publicSlug,secret.secretCode);await signup(grant.claimToken,"qc-visibility@example.com");
+    const profile=(await request(`/api/v1/customer/cards/${card.publicSlug}`)).profile;
+    const urls=[`/api/v1/profiles/handle/${profile.handle}`,`/api/v1/profiles/public/${profile.publicSlug}`,`/api/v1/profiles/public/${profile.publicSlug}/contact.vcf`,`/api/v1/profiles/public/${profile.publicSlug}/qr.png`,`/api/v1/profiles/card/${card.publicSlug}`];
+    for(const qcStatus of ["FAILED","PENDING"] as const){
+      await client.db.update(schema.cards).set({qcStatus}).where(eq(schema.cards.id,card.id));
+      for(const url of urls)expect((await app.inject({url})).statusCode,url).toBe(404);
+      expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({status:"UNAVAILABLE"});
+    }
+    await client.db.update(schema.cards).set({qcStatus:"PASSED"}).where(eq(schema.cards.id,card.id));
+    await client.db.update(schema.cardBatches).set({printConfirmedAt:null}).where(eq(schema.cardBatches.id,card.batchId));
+    for(const url of urls)expect((await app.inject({url})).statusCode,url).toBe(404);
+    expect(await request(`/api/v1/customer/cards/${card.publicSlug}`)).toEqual({status:"UNAVAILABLE"});
+    expect((await app.inject({method:"POST",url:`/api/v1/customer/cards/${card.publicSlug}/contact-leads`,remoteAddress:"192.0.2.50",payload:{requestId:randomUUID(),name:"Visitor",email:"visitor@example.com",consent:true}})).statusCode).toBe(404);
+  });
 
   it("hides disabled profiles consistently across handles, legacy URLs, vCards and card endpoints", async () => {
     const card = await readyForClaim(), secret = await issue(card.id);
@@ -947,6 +1045,9 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     const secret = edit.json().path.split("#edit/")[1];
     expect((await send("POST", editor, { token: secret, profile: { displayName: "Edited Employee", company: "Untrusted Company" } }, {})).json().profile)
       .toMatchObject({ displayName: "Edited Employee", company: "Oneinfo Team" });
+    const badge = await app.inject({url:`/api/v1/profiles/public/${employee.publicSlug}/qr.png`,headers:{origin:"https://attacker.example"}});
+    const badgePng=PNG.sync.read(badge.rawPayload);
+    expect(jsQR(new Uint8ClampedArray(badgePng.data),badgePng.width,badgePng.height)?.data).toBe(`https://team.example.com/team?profile=${employee.publicSlug}`);
     const publicPortal = await app.inject({ url: "/api/v1/company/public/team.example.com", headers: { origin: "https://team.example.com" } });
     expect(publicPortal.headers["access-control-allow-origin"]).toBe("*");
     expect(publicPortal.body).not.toContain("employee@example.com");
@@ -1382,6 +1483,36 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     await app.inject({ method: "PATCH", url: `/api/v1/profiles/${owner.id}`, headers, payload: { published: false } });
     expect((await app.inject({ url: `/api/v1/profiles/handle/${owner.handle}` })).statusCode).toBe(404);
     expect((await make("reserved-name", "Admin")).handle).toBe("AdminProfile");
+  });
+
+  it("counts split custom designs together when validating, reserving and releasing variant stock", async () => {
+    const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
+    try {
+      await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 5 })) }).where(eq(schema.products.id, productId));
+      const original = orderPayload();
+      const payload = { ...original, items: [
+        { ...original.items[0]!, quantity: 2, customization: { name: "First design" } },
+        { ...original.items[0]!, quantity: 4, customization: { name: "Second design" } },
+      ] };
+      expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload })).statusCode).toBe(409);
+      const stock = async () => (await client.db.select().from(schema.products).where(eq(schema.products.id, productId)))[0]!.variants[0]!.stockQuantity;
+      expect(await stock()).toBe(5);
+      payload.items[1]!.quantity = 3;
+      const placed = await request("/api/v1/orders", payload);
+      expect(await stock()).toBe(0);
+      const [stored] = await client.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id, placed.id));
+      expect(stored!.stockReservations).toEqual([{ productId, variantId, quantity: 5 }]);
+      expect((await request("/api/v1/orders", payload)).id).toBe(placed.id);
+      expect(await stock()).toBe(0);
+      await request(`/api/v1/orders/admin/${placed.id}/cancel`, { reason: "Customer cancelled both designs" });
+      expect(await stock()).toBe(5);
+      await request(`/api/v1/orders/admin/${placed.id}/cancel`, { reason: "Customer cancelled both designs" });
+      expect(await stock()).toBe(5);
+      const another = await request("/api/v1/orders", { ...payload, requestId: randomUUID() });
+      await client.db.update(schema.storeOrders).set({ stockReservations: [{ productId, variantId, quantity: 2 }, { productId, variantId, quantity: 3 }] }).where(eq(schema.storeOrders.id, another.id));
+      expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${another.id}/cancel`, headers, payload: { reason: "Legacy stock needs reconciliation" } })).statusCode).toBe(409);
+      expect(await stock()).toBe(0);
+    } finally { await client.db.update(schema.products).set({ variants: catalog!.variants }).where(eq(schema.products.id, productId)); }
   });
 
   it("reserves stock before payment, freezes the total, and releases stock once on cancellation", async () => {

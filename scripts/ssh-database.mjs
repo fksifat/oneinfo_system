@@ -24,6 +24,18 @@ export function databasePortOpen(port) {
   });
 }
 
+export async function databaseResponding(connectionString) {
+  const { Client } = await import("pg");
+  const client = new Client({ connectionString, connectionTimeoutMillis: 5000, query_timeout: 5000 });
+  client.on("error", () => {});
+  try {
+    await client.connect();
+    await client.query("SELECT 1");
+    return true;
+  } catch { return false; }
+  finally { await client.end().catch(() => {}); }
+}
+
 export async function runDatabaseTunnel(settings, signal) {
   const options = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=8"];
   while (!signal.aborted) {
@@ -34,7 +46,21 @@ export async function runDatabaseTunnel(settings, signal) {
       if (!address) throw new Error("No private database container address");
       const child = spawn("ssh", [...options, "-N", "-T", "-o", "ExitOnForwardFailure=yes", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
         "-L", `127.0.0.1:${settings.port}:${address}:5432`, settings.host], { signal, stdio: ["ignore", "ignore", "inherit"] });
-      await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); });
+      const monitor = new AbortController();
+      // SSH keepalives can succeed while forwarded database traffic is stalled.
+      const watchdog = (async () => {
+        while (!monitor.signal.aborted) {
+          await delay(15000, undefined, { signal: monitor.signal }).catch(() => {});
+          if (monitor.signal.aborted) return;
+          if (!await databaseResponding(process.env.DATABASE_URL)) {
+            console.error("Database tunnel stopped responding; reconnecting.");
+            child.kill("SIGTERM");
+            return;
+          }
+        }
+      })();
+      try { await new Promise((resolve, reject) => { child.once("error", reject); child.once("close", resolve); }); }
+      finally { monitor.abort(); await watchdog; }
     } catch { if (!signal.aborted) console.error("Database SSH connection unavailable; retrying in 3 seconds. Check SSH access and network."); }
     if (!signal.aborted) await delay(3000, undefined, { signal }).catch(() => {});
   }

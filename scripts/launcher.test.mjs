@@ -9,7 +9,25 @@ import { spawn, spawnSync } from "node:child_process";
 import { probeService, waitForService, npmCommand, usesLocalDatabase, dependenciesNeedInstall } from "./start-local.mjs";
 import { shortcut, desktopQuote, installShortcut } from "./setup-desktop.mjs";
 import { browserCommands } from "./desktop.mjs";
-import { databaseTunnelSettings, databasePortOpen, runDatabaseTunnel } from "./ssh-database.mjs";
+import { databaseTunnelSettings, databasePortOpen, databaseResponding, runDatabaseTunnel } from "./ssh-database.mjs";
+import { createServer as createTcpServer } from "node:net";
+
+test("database tunnel health detects a stalled forward even when its TCP port is open", async () => {
+  const sockets = new Set();
+  const server = createTcpServer(socket => { sockets.add(socket); socket.on("close", () => sockets.delete(socket)); });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const port = server.address().port;
+  try {
+    assert.equal(await databasePortOpen(port), true);
+    const started = Date.now();
+    assert.equal(await databaseResponding(`postgresql://test:test@127.0.0.1:${port}/test`), false);
+    assert.ok(Date.now() - started < 8000, "stalled database probes must time out");
+  } finally {
+    for (const socket of sockets) socket.destroy();
+    await new Promise(resolve => server.close(resolve));
+  }
+});
 
 test("VPS tunnels require an explicit loopback database port and safe SSH/container values", async () => {
   assert.equal(databaseTunnelSettings({}), null);
