@@ -101,7 +101,10 @@
 .collection-heading h2 { margin: 0; }
 .collection-heading > p { max-width: 440px; margin: 0 auto; font-size: .9375rem; line-height: 1.6; text-align: center; }
 .products { font-family: inherit; }
-.product-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 310px)); justify-content: center; gap: 24px; max-width: 690px; margin-inline: auto; }
+.product-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); justify-content: center; gap: 24px; max-width: 1040px; margin-inline: auto; }
+@media (max-width: 900px) {
+  .product-grid { grid-template-columns: repeat(2, minmax(0, 320px)); max-width: 690px; }
+}
 .product-grid .product, .product-grid .product.featured { padding: 0 0 16px; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 4px 14px rgba(18, 19, 22, 0.04); transition: transform var(--dur-normal) var(--ease-premium), box-shadow var(--dur-normal) var(--ease-premium), border-color var(--dur-fast) var(--ease-standard); overflow: hidden; }
 .product-grid .product:hover { transform: translateY(-3px); border-color: var(--line-strong); box-shadow: 0 12px 28px rgba(18, 19, 22, 0.08); }
 .product-grid .product-art { position: relative; min-height: 0; aspect-ratio: 4 / 3; border-radius: 13px 13px 0 0; background: #f4efe6; overflow: hidden; }
