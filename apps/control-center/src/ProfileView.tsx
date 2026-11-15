@@ -20,6 +20,7 @@ export interface PublicProfileData {
     modeContent?: {
       EVENT?: { title: string; description: string } | undefined;
       PORTFOLIO?: { title: string; description: string } | undefined;
+      websiteLabel?: string | undefined;
     };
   };
   links: { id?: string; label: string; url: string }[];
@@ -271,10 +272,11 @@ function WebsiteFavicon({ url, label }: { url?: string | undefined; label?: stri
         />
       )}
       {(!loaded || failed || !faviconUrl) && (
-        <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="link-fallback-globe">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="2" y1="12" x2="22" y2="12" />
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none" className="link-fallback-globe">
+          <circle cx="20" cy="20" r="19" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.12))" />
+          <ellipse cx="20" cy="20" rx="8" ry="19" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.4" />
+          <line x1="1" y1="20" x2="39" y2="20" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.4" />
+          <path d="M4.5 12h31M4.5 28h31" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.2" strokeOpacity="0.75" />
         </svg>
       )}
     </div>
@@ -283,70 +285,177 @@ function WebsiteFavicon({ url, label }: { url?: string | undefined; label?: stri
 
 export function SocialBrandIcon({ kind, url, label }: { kind: string; url?: string | undefined; label?: string | undefined }) {
   switch (kind) {
-    case "linkedin":
+    case "whatsapp":
       return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.46 8.76a1.68 1.68 0 1 0 0-3.36 1.68 1.68 0 0 0 0 3.36m1.39 9.74v-8.37H5.07v8.37h2.78z" />
-        </svg>
-      );
-    case "instagram":
-      return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" strokeWidth="2.5" />
-        </svg>
-      );
-    case "twitter":
-      return (
-        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-        </svg>
-      );
-    case "github":
-      return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#25D366" />
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M20 7.5c-6.9 0-12.5 5.6-12.5 12.5 0 2.2.6 4.4 1.7 6.3L7.5 32.5l6.4-1.7c1.8 1 3.9 1.6 6.1 1.6 6.9 0 12.5-5.6 12.5-12.5S26.9 7.5 20 7.5zm7.3 17.7c-.3.9-1.5 1.6-2.4 1.7-.6.1-1.4.1-2.3-.2-.5-.2-1.3-.5-2.2-.9-3.9-1.7-6.4-5.6-6.6-5.9-.2-.3-1.6-2.1-1.6-4s1.1-2.9 1.4-3.3c.4-.4.8-.5 1.1-.5.3 0 .5 0 .7.01.2.01.5-.08.8.6.3.7 1.1 2.7 1.2 2.9.1.2.1.4 0 .6-.1.2-.2.4-.4.6-.2.2-.4.4-.5.6-.2.2-.4.4-.2.8.2.4 1.1 1.8 2.3 2.9 1.6 1.4 3 1.9 3.4 2.1.4.2.7.2.9-.1.3-.3 1.1-1.3 1.4-1.7.3-.4.6-.3 1.1-.2.4.2 2.8 1.3 3.3 1.5.5.2.8.4 1 .6.1.2.1 1.4-.2 2.2z"
+            fill="#ffffff"
+          />
         </svg>
       );
     case "facebook":
       return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#1877F2" />
+          <path
+            d="M22.5 35V20.8h4.7l.7-5.5h-5.4v-3.5c0-1.6.4-2.7 2.7-2.7h2.9V4.2c-.5-.1-2.2-.2-4.2-.2-4.2 0-7 2.6-7 7.2v4.1H12v5.5h4.7V35h5.8z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case "instagram":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <defs>
+            <radialGradient id="igIconGrad" cx="30%" cy="105%" r="120%">
+              <stop offset="0%" stopColor="#fdf497" />
+              <stop offset="10%" stopColor="#fdf497" />
+              <stop offset="35%" stopColor="#fd5949" />
+              <stop offset="60%" stopColor="#d6249f" />
+              <stop offset="100%" stopColor="#285AEB" />
+            </radialGradient>
+          </defs>
+          <rect width="40" height="40" rx="10" fill="url(#igIconGrad)" />
+          <rect x="9.5" y="9.5" width="21" height="21" rx="6" stroke="#ffffff" strokeWidth="2.3" fill="none" />
+          <circle cx="20" cy="20" r="5" stroke="#ffffff" strokeWidth="2.3" fill="none" />
+          <circle cx="25.5" cy="14.5" r="1.3" fill="#ffffff" />
+        </svg>
+      );
+    case "linkedin":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="9" fill="#0A66C2" />
+          <path
+            d="M12.5 16.5h4.2V30h-4.2V16.5zm2.1-6.8c1.3 0 2.4 1.1 2.4 2.4s-1.1 2.4-2.4 2.4-2.4-1.1-2.4-2.4 1.1-2.4 2.4-2.4zm7 6.8h4v1.8h.1c.6-1.1 2-2.2 4.1-2.2 4.4 0 5.2 2.9 5.2 6.6V30h-4.2v-6.8c0-1.6 0-3.7-2.3-3.7s-2.6 1.8-2.6 3.6V30h-4.3V16.5z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case "github":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#24292e" />
+          <path
+            fillRule="evenodd"
+            clipRule="evenodd"
+            d="M20 9c-6.1 0-11 4.9-11 11 0 4.9 3.2 9 7.6 10.4.6.1.8-.2.8-.5v-2c-3.1.7-3.7-1.3-3.7-1.3-.5-1.3-1.2-1.6-1.2-1.6-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 .1.7 2.3 2.7 2.3.9 0 1.7-.2 2.2-.5.1-.7.4-1.2.7-1.5-2.5-.3-5.1-1.2-5.1-5.5 0-1.2.4-2.2 1.2-3-.1-.3-.5-1.4.1-3 0 0 .9-.3 3.1 1.1.9-.2 1.9-.4 2.8-.4s1.9.1 2.8.4c2.1-1.4 3.1-1.1 3.1-1.1.6 1.5.2 2.7.1 3 .7.8 1.2 1.8 1.2 3 0 4.3-2.6 5.2-5.1 5.5.4.3.7 1 .7 2v3c0 .3.2.6.8.5 4.4-1.5 7.6-5.6 7.6-10.4 0-6.1-4.9-11-11-11z"
+            fill="#ffffff"
+          />
         </svg>
       );
     case "youtube":
       return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect x="3" y="7" width="34" height="26" rx="8" fill="#FF0000" />
+          <polygon points="16,14 27,20 16,26" fill="#ffffff" />
+        </svg>
+      );
+    case "twitter":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#000000" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+          <path
+            d="M25.7 12h2.5l-5.5 6.3 6.5 8.6h-5.1l-4-5.2-4.6 5.2h-2.5l5.9-6.8L17 12h5.2l3.6 4.8L25.7 12zm-.9 13.4h1.4L15.3 13.4h-1.5l11 12z"
+            fill="#ffffff"
+          />
         </svg>
       );
     case "telegram":
       return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#2AABEE" />
+          <path
+            d="M28.3 11.7c.3-.1.6 0 .8.2.2.2.3.5.2.8l-3.2 15.1c-.1.5-.4.8-.8.9-.4.1-.9 0-1.2-.3l-4.5-3.3-2.2 2.1c-.3.3-.7.4-1.1.3-.4-.1-.7-.4-.7-.8v-3.8l8.8-8-10.9 6.8-4.5-1.4c-.5-.2-.8-.6-.8-1.1 0-.5.4-.9.9-1.1l19.1-7.3z"
+            fill="#ffffff"
+          />
         </svg>
       );
-    case "whatsapp":
-      return <WhatsAppIcon />;
-    case "map":
-      return <MapPinIcon />;
-    case "portfolio":
-      return <PortfolioBriefcaseIcon />;
-    case "design":
-      return <DesignPaletteIcon />;
-    case "shop":
-      return <ShoppingBagIcon />;
-    case "calendar":
-      return <CalendarScheduleIcon />;
-    case "document":
-      return <DocumentIcon />;
-    case "music":
-      return <MusicNoteIcon />;
     case "tiktok":
       return (
-        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.24 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" />
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#000000" stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+          <path
+            d="M25.5 15.2c-1.4-.4-2.5-1.5-2.8-2.9v-.3h-3.4v13.5c0 1.8-1.4 3.2-3.2 3.2s-3.2-1.4-3.2-3.2 1.4-3.2 3.2-3.2c.4 0 .7.1 1.1.2v-3.6c-.4 0-.7-.1-1.1-.1-3.7 0-6.7 3-6.7 6.7s3 6.7 6.7 6.7 6.7-3 6.7-6.7v-7.1c1.4 1 3.1 1.6 4.9 1.6v-3.5c-.8 0-1.5-.2-2.2-.6z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case "map":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#EA4335" />
+          <path
+            d="M20 10c-3.9 0-7 3.1-7 7 0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case "music":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#1DB954" />
+          <path
+            d="M27.8 24.3c-.3.5-.9.7-1.4.4-3.9-2.4-8.8-2.9-14.6-1.6-.6.1-1.1-.2-1.2-.8-.1-.6.2-1.1.8-1.2 6.3-1.4 11.7-.8 16 1.8.5.3.7.9.4 1.4zm1.8-4c-.4.6-1.2.8-1.8.4-4.5-2.8-11.3-3.6-16.6-2-.7.2-1.4-.2-1.6-.9-.2-.7.2-1.4.9-1.6 6.1-1.8 13.6-.9 18.7 2.2.6.4.8 1.2.4 1.9zm.2-4.2C24.4 13.2 16.3 13 11.6 14.4c-.8.2-1.7-.2-1.9-1.1-.2-.8.2-1.7 1.1-1.9 5.4-1.6 14.3-1.4 20.3 2.2.7.4 1 1.4.5 2.1-.4.7-1.3.9-2 .4z"
+            fill="#ffffff"
+          />
+        </svg>
+      );
+    case "calendar":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#006BFF" />
+          <path
+            d="M26.2 18.4c-.4-.4-1.1-.5-1.5-.1-.4.4-.5 1.1-.1 1.5 1.4 1.5 1.4 3.9 0 5.4-1.5 1.5-3.9 1.5-5.4 0-1.5-1.5-1.5-3.9 0-5.4.4-.4.4-1.1 0-1.5-.4-.4-1.1-.4-1.5 0-2.3 2.3-2.3 6 0 8.3 2.3 2.3 6 2.3 8.3 0 2.4-2.3 2.4-6 .2-8.2z"
+            fill="#ffffff"
+          />
+          <circle cx="20" cy="12" r="1.5" fill="#ffffff" />
+          <circle cx="20" cy="28" r="1.5" fill="#ffffff" />
+        </svg>
+      );
+    case "design":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="#EA4C89" />
+          <circle cx="20" cy="20" r="10.5" stroke="#ffffff" strokeWidth="1.8" fill="none" />
+          <path
+            d="M10 20c4.5-1 9.5-1 14-3.5M15 11c3.5 4 6.5 9 8 18M28 15c-3 3-7 5.5-14 6"
+            stroke="#ffffff"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </svg>
+      );
+    case "portfolio":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.5" />
+          <rect x="11.5" y="15.5" width="17" height="13" rx="2" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" fill="none" />
+          <path d="M15.5 15.5V12.5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v3" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinecap="round" />
+          <path d="M11.5 20.5h17" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.4" />
+        </svg>
+      );
+    case "shop":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.5" />
+          <path d="M13 14l-2 4v11a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V18l-2-4H13z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinejoin="round" fill="none" />
+          <line x1="11" y1="18" x2="29" y2="18" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.5" />
+          <path d="M16 21a4 4 0 0 0 8 0" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinecap="round" />
+        </svg>
+      );
+    case "document":
+      return (
+        <svg aria-hidden="true" width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <circle cx="20" cy="20" r="20" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.5" />
+          <path d="M14 11h8l6 6v12a2 2 0 0 1-2 2H14a2 2 0 0 1-2-2V13a2 2 0 0 1 2-2z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.8" strokeLinejoin="round" fill="none" />
+          <polyline points="22 11 22 17 28 17" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.6" strokeLinejoin="round" fill="none" />
+          <line x1="16" y1="22" x2="24" y2="22" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.5" strokeLinecap="round" />
+          <line x1="16" y1="25" x2="21" y2="25" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       );
     case "globe":
@@ -453,6 +562,12 @@ export function ProfileView({
   }
 
   const themeClass = `theme-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
+  const themeUpper = (profile.theme || "MIDNIGHT").toUpperCase();
+  const wireColor = themeUpper === "MINT" ? "#10b981" : themeUpper === "IVORY" ? "#b48c48" : "#dfb877";
+  const wireMidColor = themeUpper === "MINT" ? "#059669" : themeUpper === "IVORY" ? "#8c6a2e" : "#c99c4d";
+  const wireId = `coverWire-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
+  const shineId = `coverShine-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
+  const websiteLabel = profile.modeContent?.websiteLabel?.trim() || "Official Website";
 
   return (
     <div className={`profile-page ${themeClass}`}>
@@ -468,27 +583,27 @@ export function ProfileView({
             aria-hidden="true"
           >
             <defs>
-              <linearGradient id="coverGoldWire" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#dfb877" stopOpacity="0.45" />
-                <stop offset="50%" stopColor="#c99c4d" stopOpacity="0.25" />
-                <stop offset="100%" stopColor="#dfb877" stopOpacity="0.08" />
+              <linearGradient id={wireId} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={wireColor} stopOpacity="0.45" />
+                <stop offset="50%" stopColor={wireMidColor} stopOpacity="0.25" />
+                <stop offset="100%" stopColor={wireColor} stopOpacity="0.08" />
               </linearGradient>
-              <radialGradient id="coverShine" cx="80%" cy="15%" r="65%">
-                <stop offset="0%" stopColor="#dfb877" stopOpacity="0.22" />
+              <radialGradient id={shineId} cx="80%" cy="15%" r="65%">
+                <stop offset="0%" stopColor={wireColor} stopOpacity="0.22" />
                 <stop offset="100%" stopColor="transparent" stopOpacity="0" />
               </radialGradient>
             </defs>
-            <rect width="100%" height="100%" fill="url(#coverShine)" />
+            <rect width="100%" height="100%" fill={`url(#${shineId})`} />
             {/* Elegant Signature Geometric Polygon Lines */}
-            <polygon points="440,0 340,0 395,55" stroke="url(#coverGoldWire)" strokeWidth="1.2" />
-            <polygon points="340,0 265,32 395,55" stroke="url(#coverGoldWire)" strokeWidth="1.1" />
-            <polygon points="395,55 440,110 440,0" stroke="url(#coverGoldWire)" strokeWidth="1.2" />
-            <polygon points="265,32 300,95 395,55" stroke="url(#coverGoldWire)" strokeWidth="1" />
-            <polygon points="395,55 350,150 440,110" stroke="url(#coverGoldWire)" strokeWidth="1" />
-            <polygon points="300,95 350,150 395,55" stroke="url(#coverGoldWire)" strokeWidth="0.9" />
-            <polygon points="210,0 265,32 170,58" stroke="url(#coverGoldWire)" strokeWidth="0.8" />
-            <polygon points="0,150 85,150 38,92" stroke="url(#coverGoldWire)" strokeWidth="0.9" />
-            <polygon points="0,96 38,92 0,150" stroke="url(#coverGoldWire)" strokeWidth="0.9" />
+            <polygon points="440,0 340,0 395,55" stroke={`url(#${wireId})`} strokeWidth="1.2" />
+            <polygon points="340,0 265,32 395,55" stroke={`url(#${wireId})`} strokeWidth="1.1" />
+            <polygon points="395,55 440,110 440,0" stroke={`url(#${wireId})`} strokeWidth="1.2" />
+            <polygon points="265,32 300,95 395,55" stroke={`url(#${wireId})`} strokeWidth="1" />
+            <polygon points="395,55 350,150 440,110" stroke={`url(#${wireId})`} strokeWidth="1" />
+            <polygon points="300,95 350,150 395,55" stroke={`url(#${wireId})`} strokeWidth="0.9" />
+            <polygon points="210,0 265,32 170,58" stroke={`url(#${wireId})`} strokeWidth="0.8" />
+            <polygon points="0,150 85,150 38,92" stroke={`url(#${wireId})`} strokeWidth="0.9" />
+            <polygon points="0,96 38,92 0,150" stroke={`url(#${wireId})`} strokeWidth="0.9" />
           </svg>
 
           {/* Discreet Top Bar on Banner: Brand watermark on left, minimal actions (QR & Settings/Login) on right */}
@@ -644,14 +759,14 @@ export function ProfileView({
                   target="_blank"
                   rel="noreferrer"
                   className="social-card"
-                  title="Official Website"
+                  title={websiteLabel}
                   onClick={() => onActivity?.("LINK")}
                 >
                   <div className="social-card-icon is-globe">
-                    <SocialBrandIcon kind="globe" url={profile.website} label="Official Website" />
+                    <SocialBrandIcon kind="globe" url={profile.website} label={websiteLabel} />
                   </div>
                   <div className="social-card-details">
-                    <span className="social-card-name">Official Website</span>
+                    <span className="social-card-name">{websiteLabel}</span>
                     <span className="social-card-url">{profile.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>
                   </div>
                   <div className="social-card-arrow" aria-hidden="true">
