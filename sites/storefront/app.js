@@ -697,11 +697,12 @@ import "./invoice.css";
         </div>
       `;
 
-      return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""}" data-id="${escapeHtml(p.id)}">
+      return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""} ${!v.available ? "is-out-of-stock" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}
         ${isCustomizable ? `
           <div class="product-art custom-stage-unified ${p.featured ? 'has-badge' : ''}">
             <div class="product-badges">
+              ${!v.available ? `<span class="out-of-stock-badge">Out of stock</span>` : ""}
               ${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}
             </div>
 
@@ -727,7 +728,7 @@ import "./invoice.css";
           </div>
         ` : `
           <div class="product-art art-${v.appearance} ${hasMedia ? "has-image" : ""}">
-            <div class="product-badges">${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
+            <div class="product-badges">${!v.available ? `<span class="out-of-stock-badge">Out of stock</span>` : ""}${p.featured ? `<span class="feature-badge">${escapeHtml(p.badge || "Featured")}</span>` : ""}${!detail && sale && v.available ? `<span class="discount-badge">${percent > 0 ? `${percent}% OFF` : "ON SALE"}</span>` : ""}</div>
             ${standardIllustration}${imageUrl ? `<img class="catalog-image" draggable="false" src="${escapeHtml(imageSource(imageUrl))}" alt="${escapeHtml(p.name)} — ${escapeHtml(v.name)} — ${escapeHtml(item?.label || "Product image")}" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span class="finish-label">${escapeHtml(v.finish)}</span>
             ${detail && item?.type === "video" ? (drivePreview ? `<iframe class="gallery-video" src="${escapeHtml(drivePreview)}" title="${escapeHtml(item.label || p.name + ' video')}" allowfullscreen referrerpolicy="no-referrer"></iframe>` : `<video class="gallery-video" controls playsinline preload="metadata" ${item.poster ? `poster="${escapeHtml(imageSource(item.poster))}"` : ""} src="${escapeHtml(mediaUrl(item.url))}" aria-label="${escapeHtml(item.label || p.name + ' video')}"></video>`) : ""}
             ${detail && media.length ? `<p class="gallery-error" role="status" hidden>Media could not load. Choose another item or check the URL.</p>` : ""}
@@ -744,11 +745,11 @@ import "./invoice.css";
           ${models.length > 1 ? `<div class="gallery-model-actions" role="group" aria-label="3D views">${models.map(entry => `<button class="gallery-model-button" type="button" data-media="${entry.index}" data-media-variant="${escapeHtml(entry.variant.id)}" aria-pressed="${entry === model}">${escapeHtml(entry.media.label || entry.variant.name)}</button>`).join("")}</div>` : ""}
         </section>` : ""}
         ${detail ? `</div><div class="product-details-copy">` : ""}
-        <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price"><strong>${money.format(activePrice / 100)}</strong>${sale ? `<del aria-label="Regular price ${money.format(activeRegular / 100)}">${money.format(activeRegular / 100)}</del>` : ""}${detail && sale ? `<span class="purchase-saving">Save ${money.format((activeRegular - activePrice) / 100)}</span>` : ''}</div></div>
+        <div class="product-info"><div>${!detail && p.subtitle ? `<p>${escapeHtml(p.subtitle)}</p>` : ""}${detail ? `<h1 id="product-title" tabindex="-1">${escapeHtml(p.name)}</h1>` : `<h3><a class="product-link" href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}">${escapeHtml(p.name)}</a></h3>`}</div><div class="product-price">${!v.available ? `<span class="out-of-stock-tag">Out of stock</span>` : ""}<strong>${money.format(activePrice / 100)}</strong>${sale && v.available ? `<del aria-label="Regular price ${money.format(activeRegular / 100)}">${money.format(activeRegular / 100)}</del>` : ""}${detail && sale && v.available ? `<span class="purchase-saving">Save ${money.format((activeRegular - activePrice) / 100)}</span>` : ''}</div></div>
         ${!isCustomizable ? `
           <div class="product-colours">
             <div class="colour-caption">
-              <span>${detail ? 'Colour. <span>Choose your finish.</span>' : (p.customizable ? 'Colour: <strong>Limitless</strong>' : `Colour: <strong>${escapeHtml(v.name)}</strong>`)}</span>
+              <span>${detail ? 'Colour. <span>Choose your finish.</span>' : (p.customizable ? 'Colour: <strong>Limitless</strong>' : `Colour: <strong>${escapeHtml(v.name)}</strong>${!v.available ? ' <span class="out-of-stock-caption">(Out of stock)</span>' : ''}`)}</span>
               ${detail ? "" : (p.customizable ? `
                 <span class="infinity-option-wrap" title="Limitless customizable themes & finishes">
                   ${icon("infinity")}
@@ -767,7 +768,7 @@ import "./invoice.css";
                 <a href="#product/${encodeURIComponent(p.slug)}?colour=${encodeURIComponent(v.id)}" class="colour-swatch is-mini-preview" style="--swatch:#182232" title="Royal Navy"></a>
               </div>
             ` : `
-              <div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — unavailable"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Unavailable</small>' : ''}</b>` : ''}</button>`).join("")}</div>
+              <div class="colour-options" role="group" aria-label="${escapeHtml(p.name)} colours">${p.variants.map(option => `<button type="button" class="colour-swatch ${!option.available ? "unavailable is-out-of-stock" : ""}" style="--swatch:${escapeHtml(option.colorHex)}" data-variant="${escapeHtml(option.id)}" aria-label="${escapeHtml(option.name)}${option.available ? "" : " — Out of stock"}" aria-pressed="${option.id === v.id}" title="${escapeHtml(option.name)}${option.available ? "" : " — Out of stock"}"><span aria-hidden="true"></span>${detail ? `<b>${escapeHtml(option.name)}${!option.available ? '<small>Out of stock</small>' : ''}</b>` : ''}</button>`).join("")}</div>
             `}
           </div>
         ` : ""}
@@ -1045,7 +1046,7 @@ import "./invoice.css";
             </div>
           </div>
         </section>` : ""}
-        ${detail ? `<div class="purchase-actions"><div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Unavailable in this colour'}</button></div>
+        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${!v.available || quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${!v.available || quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Out of stock'}</button></div>
         <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
@@ -2462,7 +2463,7 @@ import "./invoice.css";
       if (!await loadProducts()) { toast("Please retry loading this product."); return; }
       const product = products.find(p => p.id === productId);
       const variant = product?.variants.find(v => v.id === variantId);
-      if (!variant?.available) { toast("This colour is no longer available."); return; }
+      if (!variant?.available) { toast("This card is currently out of stock."); return; }
       const draft = productCustomizations.get(productId) ?? defaultCustomization("01");
       const hasLogo = !product.customizable || (draft.hasOneinfoLogo !== false && draft.brandingMode !== "without-logo");
       const expectedBefore = product.customizable ? variantPriceForBranding(before, hasLogo) : variantPrice(before);

@@ -345,7 +345,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .colour-swatch[aria-pressed=true] { border-color:var(--accent); } .colour-swatch:hover { background:var(--cream); }
 .colour-swatch:focus-visible { outline:2px solid #27795e; outline-offset:3px; }
 .colour-swatch.unavailable::after { content:""; position:absolute; width:30px; height:2px; background:#778781; transform:rotate(-45deg); box-shadow:0 1px 0 white; }
-.product .add-to-cart:disabled { cursor:not-allowed; background:#e1e7e3; color:#60706a; }
+.product .add-to-cart:disabled, .product .add-to-cart.is-out-of-stock { cursor:not-allowed; background:#e1e7e3; color:#60706a; box-shadow:none; }
 .product-art .mini-product-card { width:78%; } .product .product-description { font-size:.86rem; margin:12px 10px; }
 @media (max-width:540px) { .product-art { min-height:230px; } .product-info h3 { font-size:1.25rem; } .product-price strong { font-size:1rem; } }
 
