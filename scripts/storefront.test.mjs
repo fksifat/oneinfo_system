@@ -606,3 +606,15 @@ test("original card design renders flat physical card with centered Oneinfo logo
   const adminCss = readFileSync("apps/control-center/src/styles.css", "utf8");
   assert.match(adminCss, /\.catalog-card-visual\s*\{[^}]*background-color:\s*#ffffff/);
 });
+
+test("recover account password screen matches luxury portal auth design and omits back to sign in", () => {
+  const accountAccessSrc = readFileSync("apps/control-center/src/AccountAccess.tsx", "utf8");
+  assert.match(accountAccessSrc, /card-portal-auth/);
+  assert.match(accountAccessSrc, /portal-auth-card/);
+  assert.match(accountAccessSrc, /portal-brand-logo-centered/);
+  assert.match(accountAccessSrc, /portal-btn-submit/);
+  assert.match(accountAccessSrc, /portal-auth-input/);
+  assert.match(accountAccessSrc, /Back to card/);
+  assert.match(accountAccessSrc, /Powered by AriseStudio/);
+  assert.doesNotMatch(accountAccessSrc, /Back to sign in/i);
+});
