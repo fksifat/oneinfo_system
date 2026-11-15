@@ -162,6 +162,13 @@
       "when": 1794765000000,
       "tag": "0022_cod_advance_inside_dhaka",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1794768000000,
+      "tag": "0023_product_category",
+      "breakpoints": true
     }
   ]
 }

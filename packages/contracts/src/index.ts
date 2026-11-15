@@ -451,6 +451,7 @@ export type ProductCustomization = z.infer<typeof ProductCustomizationSchema>;
 export const ProductInputSchema = z.object({
   slug: z.string().trim().min(3).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   name: z.string().trim().min(2).max(120),
+  category: z.string().trim().max(80).default(""),
   subtitle: z.string().trim().max(100).default(""),
   description: z.string().trim().max(1000).default(""),
   warranty: z.string().trim().max(2000).default(""),

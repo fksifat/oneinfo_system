@@ -78,7 +78,29 @@ export function Products({ token }: { token: string }) {
       defaultMediaIndex: v.defaultMediaIndex ?? 0,
       media: productMedia(v).map(m=>({...m, id: m.id.startsWith("legacy-") ? crypto.randomUUID() : m.id}))
     })) : [newVariant()];
-    setEditing(product ? {...product, customizable: product.customizable ?? false, warranty:product.warrantyIsDemo ? "" : product.warranty ?? "", warrantyIsDemo:false, variants} : {name:"", slug:"", subtitle:"", description:"", customizable:false, warranty:"", warrantyIsDemo:false, features:[], status:"DRAFT", featured:false, badge:"", sortOrder:0, variants});
+    setEditing(product ? {
+      ...product,
+      category: product.category ?? "",
+      customizable: product.customizable ?? false,
+      warranty: product.warrantyIsDemo ? "" : product.warranty ?? "",
+      warrantyIsDemo: false,
+      variants,
+    } : {
+      name: "",
+      slug: "",
+      category: "",
+      subtitle: "",
+      description: "",
+      customizable: false,
+      warranty: "",
+      warrantyIsDemo: false,
+      features: [],
+      status: "DRAFT",
+      featured: false,
+      badge: "",
+      sortOrder: 0,
+      variants,
+    });
     setActiveVariant(variants[0]!.id); setFeatures(product?.features.join("\n") ?? ""); setError(""); setNotice("");
   }
   function changeVariant(id: string, changes: Partial<VariantDraft>) {
@@ -127,7 +149,7 @@ export function Products({ token }: { token: string }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save product"); }
     finally { setBusy(false); }
   }
-  const filtered = items.filter(p => `${p.name} ${p.slug} ${p.status}`.toLowerCase().includes(search.toLowerCase()));
+  const filtered = items.filter(p => `${p.name} ${p.category ?? ""} ${p.slug} ${p.status}`.toLowerCase().includes(search.toLowerCase()));
   const preview = editing?.variants.find(v => v.id === activeVariant) ?? editing?.variants[0];
   const cover = preview ? productMedia(preview).find(m=>m.type === "image" || (m.type === "video" && m.poster)) : undefined;
   const previewImage = cover?.type === "image" ? cover.url : cover?.type === "video" ? cover.poster : "";
@@ -184,6 +206,7 @@ export function Products({ token }: { token: string }) {
             <div className="product-admin-card-body">
               <div className="catalog-card-top">
                 <span className={`pill ${p.status === "PUBLISHED" ? "success" : ""}`}>{p.status.toLowerCase()}</span>
+                {p.category && <span className="pill catalog-category-pill">{p.category}</span>}
                 {p.customizable && <span className="pill info">✦ Customizable</span>}
                 {p.featured && <span className="catalog-highlight">★ Homepage highlight</span>}
               </div>
@@ -237,6 +260,7 @@ export function Products({ token }: { token: string }) {
           <section className="catalog-section" hidden={section !== "details"}><h3>Product details</h3><div className="catalog-form-grid">
             <label>Product name<input autoFocus required maxLength={120} value={editing.name} onChange={e => setEditing({...editing,name:e.target.value})} /></label>
             <label>Slug<input required pattern="[a-z0-9]+(-[a-z0-9]+)*" maxLength={80} value={editing.slug} onChange={e => setEditing({...editing,slug:e.target.value})} /><small>Used in the product link, e.g. oneinfo-essential.</small></label>
+            <label className="full">Category<input maxLength={80} placeholder="e.g. Essential, Signature, Metal Card" value={editing.category ?? ""} onChange={e => setEditing({...editing, category: e.target.value})} /><small>Used for category filter pills on the customer storefront. Leave blank to default to product name.</small></label>
             <label className="full">Subtitle<input maxLength={100} value={editing.subtitle} onChange={e => setEditing({...editing,subtitle:e.target.value})} /></label>
             <label className="full">Description<textarea rows={2} maxLength={1000} value={editing.description} onChange={e => setEditing({...editing,description:e.target.value})} /></label>
             <label className="full">Features<textarea rows={3} placeholder="One feature per line" value={features} onChange={e => setFeatures(e.target.value)} /><small>One per line, up to 12.</small></label>
