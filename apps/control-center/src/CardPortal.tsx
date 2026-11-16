@@ -1957,14 +1957,6 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                   <div className="lead-contact-text">
                     <strong className="lead-contact-name">{lead.name}</strong>
                     <div className="lead-meta-row">
-                      {lead.recipientName && (
-                        <>
-                          <small className="lead-recipient-pill">
-                            Shared via {lead.recipientName}’s card
-                          </small>
-                          <span className="lead-meta-sep" aria-hidden="true">·</span>
-                        </>
-                      )}
                       <time className="lead-time-inline" dateTime={lead.createdAt}>
                         {formatLeadDate(lead.createdAt)}
                       </time>

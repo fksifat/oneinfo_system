@@ -6646,6 +6646,12 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   align-items: start;
 }
 
+.studio-editor-column {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 @media (min-width: 1025px) {
   .studio-tab-preview-only {
     display: none !important;
@@ -8744,11 +8750,24 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
 .studio-side-panel {
   background: rgba(14, 25, 36, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgba(223, 184, 119, 0.18);
   border-radius: 20px;
-  padding: 22px;
+  padding: clamp(16px, 3.5vw, 24px);
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
   margin-bottom: 20px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  .studio-side-panel {
+    padding: 16px 14px !important;
+    border-radius: 16px !important;
+    margin-bottom: 16px !important;
+  }
 }
 
 .studio-side-panel .lead-inbox {
@@ -8767,6 +8786,8 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   flex-direction: column;
   gap: 12px;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .contacts-sub-nav {
@@ -8847,13 +8868,21 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 14px;
-  flex-wrap: wrap;
+  gap: 12px;
+  flex-wrap: nowrap;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .lead-inbox-title-wrap {
   flex: 1;
-  min-width: 220px;
+  min-width: 0;
+}
+
+.lead-inbox-header-row .lead-action-btn.lead-btn-refresh {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
 }
 
 .lead-inbox-header-row .studio-card-head-row {
@@ -8993,6 +9022,9 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
   padding: 10px 14px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
@@ -9349,6 +9381,8 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   justify-content: space-between;
   gap: 10px;
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .analytics-filter-inline {
@@ -9359,20 +9393,28 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .analytics-controls-row .lead-action-btn.lead-btn-refresh {
   flex-shrink: 0;
   height: 40px;
-  padding: 0 14px;
+  padding: 0 12px;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
 .analytics-controls-row .analytics-select-box select {
   height: 40px;
+  padding: 0 32px 0 12px;
 }
 
-@media (max-width: 380px) {
+@media (max-width: 480px) {
   .analytics-controls-row {
     gap: 8px;
   }
   .analytics-controls-row .lead-action-btn.lead-btn-refresh {
-    padding: 0 10px;
-    font-size: 0.78rem;
+    padding: 0 9px;
+    font-size: 0.76rem;
+    gap: 5px;
+  }
+  .analytics-controls-row .analytics-select-box select {
+    padding: 0 28px 0 10px;
+    font-size: 0.8rem;
   }
 }
 
@@ -9456,6 +9498,9 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 14px;
   padding: 12px 16px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
@@ -10438,7 +10483,7 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 /* Mobile Optimizations (320px - 640px) */
 @media (max-width: 640px) {
   .card-portal.card-portal-studio {
-    padding: 12px 10px 110px !important;
+    padding: 12px 14px 110px !important;
   }
 
   .studio-header {
