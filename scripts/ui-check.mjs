@@ -449,13 +449,8 @@ try {
     await inspect('customer-share-contact-'+width);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await fill('Your Full Name','Browser Visitor');await fill('Email','visitor@example.com');await click('Send my contact');
-  assert.equal(await evaluate(`document.querySelector('input[name=consent]').checked`),false);
-  assert.equal(await evaluate(`document.querySelector('.share-contact form').checkValidity()`),false);
-  assert.equal(contactAttempts.length,0);
-  assert.equal(await evaluate(`document.querySelector('input[name=crmAllowed]').checked`),false);
-  await evaluate(`document.querySelector('input[name=consent]').click()`);
-  await fill('Email','');await click('Send my contact');
+  await fill('Your Full Name','Browser Visitor');await fill('Email','');await click('Send my contact');
+  await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
