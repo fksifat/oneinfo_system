@@ -3039,9 +3039,9 @@ button.banner-action-btn,
   min-height: 38px !important;
   border-radius: 50% !important;
   border: none !important;
-  background: rgba(0, 0, 0, 0.38) !important;
-  backdrop-filter: blur(10px) !important;
-  -webkit-backdrop-filter: blur(10px) !important;
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
   color: #ffffff !important;
   cursor: pointer !important;
   padding: 0 !important;
@@ -3050,10 +3050,16 @@ button.banner-action-btn,
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
+.banner-action-btn svg {
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.45));
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
 .banner-action-btn:hover {
-  transform: scale(1.08);
-  background: rgba(255, 255, 255, 0.24);
+  transform: scale(1.12);
+  background: transparent !important;
   border: none !important;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.65));
 }
 
 .banner-action-btn:active {
@@ -3062,12 +3068,12 @@ button.banner-action-btn,
 
 .theme-ivory .banner-action-btn {
   border: none !important;
-  background: rgba(255, 255, 255, 0.65);
-  color: #1c1917;
+  background: transparent !important;
+  color: #1c1917 !important;
 }
 
 .theme-ivory .banner-action-btn:hover {
-  background: rgba(255, 255, 255, 0.95);
+  background: transparent !important;
   border: none !important;
 }
 
