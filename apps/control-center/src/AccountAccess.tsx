@@ -337,7 +337,7 @@ export function AccountSettings({ token, onSignOut }: { token: string; onSignOut
               title="Refresh status"
             >
               <SvgRefreshIcon size={13} />
-              <span>Refresh</span>
+              <span>Refresh status</span>
             </button>
           )}
         </div>
