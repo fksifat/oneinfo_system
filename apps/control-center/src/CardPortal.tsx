@@ -1,6 +1,9 @@
 import { AccountSettings } from "./AccountAccess.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ActivateCardSchema, CustomerProfileSchema, HttpUrlSchema, PROFILE_BIO_MAX_LENGTH, type ContactLead } from "@oneinfo/contracts";
+import {
+  ActivateCardSchema, CustomerProfileSchema, HttpUrlSchema, PROFILE_BIO_MAX_LENGTH,
+  PROFILE_ABOUT_HEADING_MAX_LENGTH, PROFILE_ABOUT_MAX_SECTIONS, type ContactLead,
+} from "@oneinfo/contracts";
 import { ProfileView, ProfileSkeleton, ShareContact, SocialBrandIcon, WhatsAppIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
 import { customerApi } from "./customer-api.js";
 import type { z } from "zod";
@@ -258,11 +261,11 @@ export function CardPortal({
   const lastEditorTabRef = useRef<"edit" | "settings" | "contacts">("edit");
   const [openPlatformIndex, setOpenPlatformIndex] = useState<number | null>(null);
   const [profile, setProfile] = useState<Draft>(emptyProfile);
-  const bioInputRef = useRef<HTMLTextAreaElement>(null);
   const [hasSavedWebsite, setHasSavedWebsite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState("");
+  const aboutSections = profile.modeContent?.aboutSections ?? [];
   const websitePosition = Math.min(profile.modeContent?.websiteSortOrder ?? 0, profile.links.length);
   const linkPositions = profile.links.map((_, index) => index);
   if (profile.website.trim()) linkPositions.splice(websitePosition, 0, -1);
@@ -450,6 +453,8 @@ export function CardPortal({
   };
   const save = (event: FormEvent) => { event.preventDefault(); executeSave(); };
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setProfile(previous => ({ ...previous, [key]: value }));
+  const updateAboutSections = (sections: typeof aboutSections) =>
+    update("modeContent", { ...profile.modeContent, aboutSections: sections });
   const moveLink = (index: number, position: number) => {
     const positions = linkPositions.filter(item => item !== index);
     positions.splice(position, 0, index);
@@ -951,22 +956,46 @@ export function CardPortal({
                   <div>
                     <label className="studio-bio-label">
                       About you
-                      <textarea ref={bioInputRef} maxLength={PROFILE_BIO_MAX_LENGTH} value={profile.bio} placeholder="Share a brief introduction for visitors who scan or tap your card..." onChange={event => update("bio", event.target.value)} />
+                      <textarea maxLength={PROFILE_BIO_MAX_LENGTH} value={profile.bio} placeholder="Share a brief introduction for visitors who scan or tap your card..." onChange={event => update("bio", event.target.value)} />
                     </label>
+                    {aboutSections.map((section, index) => (
+                      <div className="studio-about-section" role="group" aria-label={`About section ${index + 1}`} key={index}>
+                        <label>
+                          Heading (optional)
+                          <input
+                            maxLength={PROFILE_ABOUT_HEADING_MAX_LENGTH}
+                            placeholder="e.g. Research interests"
+                            value={section.heading}
+                            onChange={event => updateAboutSections(aboutSections.map((item, position) =>
+                              position === index ? { ...item, heading: event.target.value } : item))}
+                          />
+                        </label>
+                        <label>
+                          Section text
+                          <textarea
+                            maxLength={PROFILE_BIO_MAX_LENGTH}
+                            value={section.body}
+                            onChange={event => updateAboutSections(aboutSections.map((item, position) =>
+                              position === index ? { ...item, body: event.target.value } : item))}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="quiet studio-btn-remove"
+                          aria-label={`Remove section ${index + 1}`}
+                          onClick={() => updateAboutSections(aboutSections.filter((_, position) => position !== index))}
+                        >
+                          <SvgTrashIcon size={14} /> Remove section
+                        </button>
+                      </div>
+                    ))}
                     <button
                       type="button"
-                      className="quiet studio-add-paragraph"
-                      disabled={profile.bio.trimEnd().length > PROFILE_BIO_MAX_LENGTH - 3}
-                      onClick={() => {
-                        const text = profile.bio.trimEnd();
-                        const bio = text ? `${text}\n\n` : "";
-                        update("bio", bio);
-                        const input = bioInputRef.current;
-                        input?.focus();
-                        requestAnimationFrame(() => input?.setSelectionRange(bio.length, bio.length));
-                      }}
+                      className="quiet studio-add-about-section"
+                      disabled={aboutSections.length >= PROFILE_ABOUT_MAX_SECTIONS}
+                      onClick={() => updateAboutSections([...aboutSections, { heading: "", body: "" }])}
                     >
-                      <SvgPlusIcon size={14} /> Add paragraph
+                      <SvgPlusIcon size={14} /> Add section
                     </button>
                   </div>
                 </fieldset>

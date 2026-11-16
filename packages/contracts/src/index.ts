@@ -135,6 +135,8 @@ export const ProfileLinkSchema = z.object({
 });
 
 export const PROFILE_BIO_MAX_LENGTH = 1500;
+export const PROFILE_ABOUT_MAX_SECTIONS = 12;
+export const PROFILE_ABOUT_HEADING_MAX_LENGTH = 80;
 
 export const CreateProfileSchema = z.object({
   publicSlug: z.string().trim().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
@@ -162,6 +164,10 @@ export { contactVcard } from "./contact.js";
 export const profileSources = ["NFC", "QR", "DIRECT"] as const;
 export const ProfileModeContentSchema = z.object({ title: z.string().trim().max(120), description: z.string().trim().max(600) });
 export const ProfileModesSchema = z.object({
+  aboutSections: z.array(z.object({
+    heading: z.string().trim().max(PROFILE_ABOUT_HEADING_MAX_LENGTH).default(""),
+    body: z.string().max(PROFILE_BIO_MAX_LENGTH).default(""),
+  })).max(PROFILE_ABOUT_MAX_SECTIONS).transform(sections => sections.filter(section => section.heading || section.body.trim())).optional(),
   EVENT: ProfileModeContentSchema.optional(),
   PORTFOLIO: ProfileModeContentSchema.optional(),
   websiteLabel: z.string().trim().max(60).optional(),
@@ -172,6 +178,7 @@ export const ProfileModesSchema = z.object({
   address: z.string().trim().max(300).optional(),
 });
 export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true }).extend({
+  bio: z.string().max(PROFILE_BIO_MAX_LENGTH).default(""),
   profileMode: z.enum(profileModes).default("BUSINESS"), modeContent: ProfileModesSchema.default({}),
 });
 
