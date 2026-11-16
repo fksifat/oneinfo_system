@@ -9056,6 +9056,19 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   text-overflow: ellipsis;
 }
 
+.lead-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 1px;
+}
+
+.lead-meta-sep {
+  color: #556c7d;
+  font-size: 0.68rem;
+}
+
 .lead-time-inline {
   font-size: 0.7rem;
   color: #728a9c;
@@ -9117,8 +9130,19 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 /* Channels: Email, Phone, WhatsApp */
 .lead-channels-row {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.lead-contact-pills {
+  display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .lead-channel-pill {
@@ -9154,6 +9178,29 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   background: rgba(37, 211, 102, 0.18);
   border-color: rgba(37, 211, 102, 0.45);
   color: #ffffff;
+}
+
+.lead-whatsapp-icon-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  flex-shrink: 0;
+  background: rgba(37, 211, 102, 0.1) !important;
+  border: 1px solid rgba(37, 211, 102, 0.28) !important;
+  color: #25d366 !important;
+  transition: all 0.2s ease !important;
+}
+
+.lead-whatsapp-icon-btn:hover {
+  background: rgba(37, 211, 102, 0.22) !important;
+  border-color: rgba(37, 211, 102, 0.55) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
 }
 
 /* Note / message box */
@@ -9293,6 +9340,40 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .analytics-chip-dot.is-qr {
   background: #38bdf8;
   box-shadow: 0 0 6px rgba(56, 189, 248, 0.5);
+}
+
+/* Traffic source and Refresh analytics controls row */
+.analytics-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.analytics-filter-inline {
+  flex: 1;
+  min-width: 0;
+}
+
+.analytics-controls-row .lead-action-btn.lead-btn-refresh {
+  flex-shrink: 0;
+  height: 40px;
+  padding: 0 14px;
+}
+
+.analytics-controls-row .analytics-select-box select {
+  height: 40px;
+}
+
+@media (max-width: 380px) {
+  .analytics-controls-row {
+    gap: 8px;
+  }
+  .analytics-controls-row .lead-action-btn.lead-btn-refresh {
+    padding: 0 10px;
+    font-size: 0.78rem;
+  }
 }
 
 /* Traffic source select */
