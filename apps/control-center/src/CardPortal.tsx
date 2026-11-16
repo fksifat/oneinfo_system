@@ -360,6 +360,7 @@ export function CardPortal({
   const [showPassword, setShowPassword] = useState(false);
   const [studioTab, setStudioTab] = useState<"edit" | "settings" | "contacts" | "preview">("edit");
   const lastEditorTabRef = useRef<"edit" | "settings" | "contacts">("edit");
+  const [contactsSubTab, setContactsSubTab] = useState<"inbox" | "analytics">("inbox");
   const [openPlatformIndex, setOpenPlatformIndex] = useState<number | null>(null);
   const [profile, setProfile] = useState<Draft>(emptyProfile);
   const [hasSavedWebsite, setHasSavedWebsite] = useState(false);
@@ -1544,15 +1545,47 @@ export function CardPortal({
               </div>
             )}
 
-            {/* Tab: Shared Contacts */}
+            {/* Tab: Shared Contacts & Profile Analytics with Sub Nav */}
             {studioTab === "contacts" && (
               <div className="studio-contacts-tab-view">
-                <div className="studio-side-panel">
-                  <LeadInbox key={token} token={token} />
+                <div className="contacts-sub-nav" role="tablist" aria-label="Contacts and analytics views">
+                  <button
+                    type="button"
+                    role="tab"
+                    id="contacts-subtab-inbox"
+                    aria-selected={contactsSubTab === "inbox"}
+                    aria-controls="contacts-panel-inbox"
+                    className={`contacts-sub-tab-btn ${contactsSubTab === "inbox" ? "is-active" : ""}`}
+                    onClick={() => setContactsSubTab("inbox")}
+                  >
+                    <TabInboxIcon />
+                    <span>Inbox</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    id="contacts-subtab-analytics"
+                    aria-selected={contactsSubTab === "analytics"}
+                    aria-controls="contacts-panel-analytics"
+                    className={`contacts-sub-tab-btn ${contactsSubTab === "analytics" ? "is-active" : ""}`}
+                    onClick={() => setContactsSubTab("analytics")}
+                  >
+                    <SvgBarChartIcon size={14} />
+                    <span>Analytics</span>
+                  </button>
                 </div>
-                <div className="studio-side-panel">
-                  <ProfileAnalytics token={token} base={base} />
-                </div>
+
+                {contactsSubTab === "inbox" && (
+                  <div id="contacts-panel-inbox" role="tabpanel" aria-labelledby="contacts-subtab-inbox" className="studio-side-panel">
+                    <LeadInbox key={token} token={token} />
+                  </div>
+                )}
+
+                {contactsSubTab === "analytics" && (
+                  <div id="contacts-panel-analytics" role="tabpanel" aria-labelledby="contacts-subtab-analytics" className="studio-side-panel">
+                    <ProfileAnalytics token={token} base={base} />
+                  </div>
+                )}
               </div>
             )}
 

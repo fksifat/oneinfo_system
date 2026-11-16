@@ -8761,6 +8761,82 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
    SHARED CONTACTS & PROFILE ANALYTICS (STUDIO CONTACTS TAB)
    ========================================================================== */
 
+/* Contacts Tab View & Sub Nav (Inbox vs Analytics) */
+.studio-contacts-tab-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.contacts-sub-nav {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.contacts-sub-tab-btn {
+  flex: 1;
+  min-height: 38px;
+  padding: 6px 16px;
+  border-radius: 9px;
+  font-size: 0.84rem;
+  font-weight: 650;
+  color: #8fa5b5;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.contacts-sub-tab-btn:hover:not(.is-active) {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.contacts-sub-tab-btn.is-active {
+  background: rgba(223, 184, 119, 0.16);
+  color: #ffffff;
+  border-color: rgba(223, 184, 119, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-weight: 750;
+}
+
+.contacts-sub-tab-btn svg {
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.contacts-sub-tab-btn.is-active svg {
+  color: #dfb877;
+}
+
+@media (max-width: 600px) {
+  .contacts-sub-nav {
+    padding: 3px;
+    border-radius: 10px;
+  }
+
+  .contacts-sub-tab-btn {
+    min-height: 34px;
+    font-size: 0.78rem;
+    padding: 5px 10px;
+    gap: 6px;
+    border-radius: 7px;
+  }
+}
+
 .lead-inbox {
   display: flex;
   flex-direction: column;

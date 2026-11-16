@@ -942,6 +942,8 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(cardPortalSrc, /lead-channel-pill/);
   assert.match(cardPortalSrc, /lead-channel-whatsapp/);
   assert.match(cardPortalSrc, /lead-btn-delete/);
+  assert.match(cardPortalSrc, /contacts-sub-nav/);
+  assert.match(cardPortalSrc, /contacts-sub-tab-btn/);
   assert.match(cardPortalSrc, /analytics-stat-grid/);
   assert.match(cardPortalSrc, /analytics-stat-tile/);
   assert.match(cardPortalSrc, /analytics-stat-row/);
@@ -956,6 +958,8 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
 
   // Check CSS styles for shared contacts & profile analytics
   const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.contacts-sub-nav\s*\{/);
+  assert.match(stylesCss, /\.contacts-sub-tab-btn\s*\{/);
   assert.match(stylesCss, /\.lead-contact-card\s*\{/);
   assert.match(stylesCss, /\.lead-channels-row\s*\{/);
   assert.match(stylesCss, /\.lead-channel-pill\s*\{/);
