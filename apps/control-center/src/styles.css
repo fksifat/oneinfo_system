@@ -10126,3 +10126,321 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
 .share-contact-choice { display:flex; align-items:flex-start; gap:10px; font-size:.85rem; line-height:1.5; font-weight:400; }
 .share-contact-choice input[type=checkbox] { width:18px; height:18px; margin:2px 0 0; padding:0; flex-shrink:0; }
+
+/* Custom Cover Banner Image */
+.cover-custom-image-wrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  z-index: 1;
+}
+
+.cover-custom-image-wrap.is-clickable {
+  cursor: pointer;
+}
+
+.cover-custom-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.cover-custom-image-wrap:hover .cover-custom-image {
+  transform: scale(1.03);
+}
+
+.cover-custom-image-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.42) 0%,
+    rgba(0, 0, 0, 0.12) 45%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  pointer-events: none;
+}
+
+/* Clickable Avatar with Zoom Preview */
+.profile-avatar-box.is-clickable {
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+}
+
+.profile-avatar-box.is-clickable:hover {
+  transform: scale(1.04);
+  box-shadow:
+    0 0 0 3px rgba(223, 184, 119, 0.8),
+    0 0 28px rgba(223, 184, 119, 0.4),
+    0 22px 50px rgba(0, 0, 0, 0.6);
+}
+
+.profile-avatar-box.is-clickable:active {
+  transform: scale(0.98);
+}
+
+/* Photo Lightbox Modal */
+.profile-lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: lightboxFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  cursor: zoom-out;
+}
+
+@keyframes lightboxFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.profile-lightbox-content {
+  position: relative;
+  max-width: min(92vw, 560px);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: default;
+  animation: lightboxZoomIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes lightboxZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.profile-lightbox-close {
+  position: absolute;
+  top: -46px;
+  right: -4px;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.profile-lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.32);
+  transform: scale(1.08);
+}
+
+.profile-lightbox-image-wrap {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.15);
+  background: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.profile-lightbox-img {
+  max-width: 100%;
+  max-height: 76vh;
+  object-fit: contain;
+  display: block;
+}
+
+.profile-lightbox-caption {
+  margin-top: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+
+@media (max-width: 640px) {
+  .profile-lightbox-close {
+    top: -42px;
+    right: 0;
+  }
+}
+
+/* Studio Visual Media: Profile Photo & Cover Photo */
+.studio-visual-media-section {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.studio-media-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-media-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, rgba(255, 255, 255, 0.65));
+}
+
+.cover-photo-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.cover-editor-banner {
+  position: relative;
+  width: 100%;
+  height: 110px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #111a24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cover-editor-banner.theme-midnight {
+  background: linear-gradient(135deg, #0b1520 0%, #152232 50%, #0d1722 100%);
+}
+
+.cover-editor-banner.theme-ivory {
+  background: linear-gradient(135deg, #e8dfd1 0%, #dfd5c4 50%, #d4c8b2 100%);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+
+.cover-editor-banner.theme-mint {
+  background: linear-gradient(135deg, #144439 0%, #0b2d25 50%, #051a15 100%);
+}
+
+.cover-editor-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+.cover-editor-default-graphic {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-image: radial-gradient(circle at 75% 25%, rgba(223, 184, 119, 0.18) 0%, transparent 60%);
+}
+
+.cover-editor-default-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--profile-accent, #dfb877);
+  border: 1px solid rgba(223, 184, 119, 0.35);
+  backdrop-filter: blur(8px);
+}
+
+.cover-editor-controls {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+}
+
+.cover-editor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.cover-editor-btn.is-upload {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+}
+
+.cover-editor-btn.is-upload:hover:not(:disabled) {
+  background: rgba(30, 41, 59, 0.98);
+  border-color: var(--profile-accent, #dfb877);
+  transform: translateY(-1px);
+}
+
+.cover-editor-btn.is-remove {
+  background: rgba(225, 29, 72, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+}
+
+.cover-editor-btn.is-remove:hover {
+  background: rgba(225, 29, 72, 1);
+  transform: translateY(-1px);
+}
+
+.cover-editor-error {
+  color: #f87171;
+  font-size: 0.78rem;
+  margin: 2px 0 0;
+}
+
+.cover-editor-hint {
+  font-size: 0.74rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+  margin: 0;
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .studio-visual-media-section {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+

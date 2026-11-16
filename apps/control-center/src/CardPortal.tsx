@@ -9,6 +9,7 @@ import { customerApi } from "./customer-api.js";
 import type { z } from "zod";
 
 import { ProfilePhoto } from "./ProfilePhoto.js";
+import { CoverPhotoEditor } from "./CoverPhotoEditor.js";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 
 type Draft = z.infer<typeof CustomerProfileSchema>;
@@ -272,6 +273,8 @@ export function CardPortal({
   const [hasSavedWebsite, setHasSavedWebsite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [coverBusy, setCoverBusy] = useState(false);
+  const isMediaBusy = photoBusy || coverBusy;
   const [error, setError] = useState("");
   const aboutSections = profile.modeContent?.aboutSections ?? [];
   const websitePosition = Math.min(profile.modeContent?.websiteSortOrder ?? 0, profile.links.length);
@@ -426,7 +429,7 @@ export function CardPortal({
     remember(result.accessToken); await loadOwner(result.accessToken);
   }); };
   const executeSave = () => {
-    if (photoBusy) return;
+    if (isMediaBusy) return;
     void run(async () => {
       // Clean and sanitize links: strip empty/unfilled links so they don't break validation
       const sanitizedLinks = profile.links
@@ -727,11 +730,11 @@ export function CardPortal({
           <button
             type="button"
             className="studio-dock-btn studio-dock-save"
-            disabled={busy || photoBusy}
+            disabled={busy || isMediaBusy}
             onClick={executeSave}
           >
             <SvgCheckIcon size={16} />
-            <span>{photoBusy ? "Uploading…" : busy ? "Saving…" : "Save profile"}</span>
+            <span>{isMediaBusy ? "Uploading…" : busy ? "Saving…" : "Save profile"}</span>
           </button>
         </div>
       </div>
@@ -871,7 +874,24 @@ export function CardPortal({
                     <span className="studio-legend-icon"><SvgUserIcon size={14} /></span>
                     <span>Public profile</span>
                   </legend>
-                  <ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
+                  <div className="studio-visual-media-section">
+                    <div className="studio-media-block">
+                      <span className="studio-media-label">Profile photo</span>
+                      <ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
+                    </div>
+
+                    <div className="studio-media-block">
+                      <span className="studio-media-label">Cover photo</span>
+                      <CoverPhotoEditor
+                        value={profile.modeContent?.coverUrl ?? ""}
+                        theme={profile.theme}
+                        token={token}
+                        claimToken={claimToken}
+                        onChange={url => update("modeContent", { ...profile.modeContent, coverUrl: url })}
+                        onBusy={setCoverBusy}
+                      />
+                    </div>
+                  </div>
                   <div className="studio-form-grid">
                     <label>
                       Full name
@@ -1290,9 +1310,9 @@ export function CardPortal({
 
                 <div className="studio-save-action">
                   {error && <p className="studio-save-error" role="alert">{error}</p>}
-                  <button type="submit" className="studio-save-button" disabled={busy || photoBusy}>
+                  <button type="submit" className="studio-save-button" disabled={busy || isMediaBusy}>
                     <SvgCheckIcon size={16} />
-                    <span>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</span>
+                    <span>{isMediaBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</span>
                   </button>
                   <span className="studio-save-note">Save your changes to update the profile linked to your card.</span>
                 </div>
@@ -1398,7 +1418,7 @@ export function CardPortal({
                   </fieldset>
 
                   <div className="studio-save-action">
-                    <button type="submit" className="studio-save-button" disabled={busy || photoBusy}>
+                    <button type="submit" className="studio-save-button" disabled={busy || isMediaBusy}>
                       <SvgCheckIcon size={16} />
                       <span>{busy ? "Saving…" : "Save card settings"}</span>
                     </button>
@@ -1490,11 +1510,11 @@ export function CardPortal({
           <button
             type="button"
             className="studio-dock-btn studio-dock-save"
-            disabled={busy || photoBusy}
+            disabled={busy || isMediaBusy}
             onClick={executeSave}
           >
             <SvgCheckIcon size={16} />
-            <span>{photoBusy ? "Uploading…" : busy ? "Saving…" : "Save profile"}</span>
+            <span>{isMediaBusy ? "Uploading…" : busy ? "Saving…" : "Save profile"}</span>
           </button>
         </div>
       </section>

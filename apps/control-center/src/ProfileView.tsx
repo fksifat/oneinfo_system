@@ -15,6 +15,7 @@ export interface PublicProfileData {
     email: string;
     website: string;
     avatarUrl: string;
+    coverUrl?: string;
     theme: string;
     profileMode?: "BUSINESS" | "EVENT" | "PORTFOLIO";
     modeContent?: z.infer<typeof ProfileModesSchema> | undefined;
@@ -500,11 +501,33 @@ export function ProfileView({
 }) {
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string; title: string } | null>(null);
   const { profile, links } = data;
+
+  const coverUrl = profile.coverUrl || profile.modeContent?.coverUrl;
 
   useEffect(() => {
     setPhotoFailed(false);
   }, [profile.avatarUrl]);
+
+  useEffect(() => {
+    setCoverFailed(false);
+  }, [coverUrl]);
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setLightboxImage(null);
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [lightboxImage]);
 
   const apiBase = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
   const contactPath = `${apiBase}/api/v1/profiles/public/${encodeURIComponent(profile.publicSlug)}/contact.vcf`;
@@ -591,37 +614,70 @@ export function ProfileView({
       <main className="public-profile">
         {/* Luxury Back Image / Cover Header with Geometric Card Motifs */}
         <div className="profile-cover-banner">
-          <svg
-            className="cover-geometric-pattern"
-            viewBox="0 0 440 150"
-            fill="none"
-            preserveAspectRatio="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <defs>
-              <linearGradient id={wireId} x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor={wireColor} stopOpacity="0.45" />
-                <stop offset="50%" stopColor={wireMidColor} stopOpacity="0.25" />
-                <stop offset="100%" stopColor={wireColor} stopOpacity="0.08" />
-              </linearGradient>
-              <radialGradient id={shineId} cx="80%" cy="15%" r="65%">
-                <stop offset="0%" stopColor={wireColor} stopOpacity="0.22" />
-                <stop offset="100%" stopColor="transparent" stopOpacity="0" />
-              </radialGradient>
-            </defs>
-            <rect width="100%" height="100%" fill={`url(#${shineId})`} />
-            {/* Elegant Signature Geometric Polygon Lines */}
-            <polygon points="440,0 340,0 395,55" stroke={`url(#${wireId})`} strokeWidth="1.2" />
-            <polygon points="340,0 265,32 395,55" stroke={`url(#${wireId})`} strokeWidth="1.1" />
-            <polygon points="395,55 440,110 440,0" stroke={`url(#${wireId})`} strokeWidth="1.2" />
-            <polygon points="265,32 300,95 395,55" stroke={`url(#${wireId})`} strokeWidth="1" />
-            <polygon points="395,55 350,150 440,110" stroke={`url(#${wireId})`} strokeWidth="1" />
-            <polygon points="300,95 350,150 395,55" stroke={`url(#${wireId})`} strokeWidth="0.9" />
-            <polygon points="210,0 265,32 170,58" stroke={`url(#${wireId})`} strokeWidth="0.8" />
-            <polygon points="0,150 85,150 38,92" stroke={`url(#${wireId})`} strokeWidth="0.9" />
-            <polygon points="0,96 38,92 0,150" stroke={`url(#${wireId})`} strokeWidth="0.9" />
-          </svg>
+          {coverUrl && !coverFailed ? (
+            <div
+              className="cover-custom-image-wrap is-clickable"
+              onClick={() => {
+                setLightboxImage({
+                  src: coverUrl,
+                  alt: `${profile.displayName} cover photo`,
+                  title: "Cover Photo",
+                });
+              }}
+              title="Click to view full cover photo"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  setLightboxImage({
+                    src: coverUrl,
+                    alt: `${profile.displayName} cover photo`,
+                    title: "Cover Photo",
+                  });
+                }
+              }}
+            >
+              <img
+                src={coverUrl}
+                alt={`${profile.displayName} cover`}
+                className="cover-custom-image"
+                onError={() => setCoverFailed(true)}
+              />
+              <div className="cover-custom-image-overlay" />
+            </div>
+          ) : (
+            <svg
+              className="cover-geometric-pattern"
+              viewBox="0 0 440 150"
+              fill="none"
+              preserveAspectRatio="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <defs>
+                <linearGradient id={wireId} x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor={wireColor} stopOpacity="0.45" />
+                  <stop offset="50%" stopColor={wireMidColor} stopOpacity="0.25" />
+                  <stop offset="100%" stopColor={wireColor} stopOpacity="0.08" />
+                </linearGradient>
+                <radialGradient id={shineId} cx="80%" cy="15%" r="65%">
+                  <stop offset="0%" stopColor={wireColor} stopOpacity="0.22" />
+                  <stop offset="100%" stopColor="transparent" stopOpacity="0" />
+                </radialGradient>
+              </defs>
+              <rect width="100%" height="100%" fill={`url(#${shineId})`} />
+              {/* Elegant Signature Geometric Polygon Lines */}
+              <polygon points="440,0 340,0 395,55" stroke={`url(#${wireId})`} strokeWidth="1.2" />
+              <polygon points="340,0 265,32 395,55" stroke={`url(#${wireId})`} strokeWidth="1.1" />
+              <polygon points="395,55 440,110 440,0" stroke={`url(#${wireId})`} strokeWidth="1.2" />
+              <polygon points="265,32 300,95 395,55" stroke={`url(#${wireId})`} strokeWidth="1" />
+              <polygon points="395,55 350,150 440,110" stroke={`url(#${wireId})`} strokeWidth="1" />
+              <polygon points="300,95 350,150 395,55" stroke={`url(#${wireId})`} strokeWidth="0.9" />
+              <polygon points="210,0 265,32 170,58" stroke={`url(#${wireId})`} strokeWidth="0.8" />
+              <polygon points="0,150 85,150 38,92" stroke={`url(#${wireId})`} strokeWidth="0.9" />
+              <polygon points="0,96 38,92 0,150" stroke={`url(#${wireId})`} strokeWidth="0.9" />
+            </svg>
+          )}
 
           {/* Discreet Top Bar on Banner: Brand watermark on left, minimal actions (QR & Settings/Login) on right */}
           <div className="banner-top-bar">
@@ -648,7 +704,30 @@ export function ProfileView({
 
         {/* Profile Avatar (Overlaps the Cover Banner seamlessly) */}
         <div className="profile-avatar-container">
-          <div className="profile-avatar-box public-avatar">
+          <div
+            className={`profile-avatar-box public-avatar ${profile.avatarUrl && !photoFailed ? "is-clickable" : ""}`}
+            onClick={() => {
+              if (profile.avatarUrl && !photoFailed) {
+                setLightboxImage({
+                  src: profile.avatarUrl,
+                  alt: `${profile.displayName} profile photo`,
+                  title: profile.displayName,
+                });
+              }
+            }}
+            title={profile.avatarUrl && !photoFailed ? "Click to view full photo" : undefined}
+            role={profile.avatarUrl && !photoFailed ? "button" : undefined}
+            tabIndex={profile.avatarUrl && !photoFailed ? 0 : undefined}
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && profile.avatarUrl && !photoFailed) {
+                setLightboxImage({
+                  src: profile.avatarUrl,
+                  alt: `${profile.displayName} profile photo`,
+                  title: profile.displayName,
+                });
+              }
+            }}
+          >
             {profile.avatarUrl && !photoFailed ? (
               <img
                 src={profile.avatarUrl}
@@ -830,6 +909,48 @@ export function ProfileView({
           </a>
         </footer>
       </main>
+
+      {/* Lightbox / Enlarged Photo Modal */}
+      {lightboxImage && (
+        <div
+          className="profile-lightbox-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Enlarged photo preview"
+          onClick={() => setLightboxImage(null)}
+        >
+          <div
+            className="profile-lightbox-content"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="profile-lightbox-close"
+              onClick={() => setLightboxImage(null)}
+              aria-label="Close enlarged photo"
+            >
+              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+
+            <div className="profile-lightbox-image-wrap">
+              <img
+                src={lightboxImage.src}
+                alt={lightboxImage.alt}
+                className="profile-lightbox-img"
+              />
+            </div>
+
+            {lightboxImage.title && (
+              <div className="profile-lightbox-caption">
+                <span>{lightboxImage.title}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

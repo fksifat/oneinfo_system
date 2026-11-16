@@ -856,3 +856,31 @@ test("profile preserves typed About text and keeps optional section headings", (
   ]);
   assert.equal(CustomerProfileSchema.parse({ displayName: "Existing Owner", bio }).modeContent.aboutSections, undefined);
 });
+
+test("profile photo expands in lightbox on click and editor supports custom cover photo", () => {
+  // Schema validates modeContent.coverUrl
+  const valid = CustomerProfileSchema.parse({
+    displayName: "Cover Owner",
+    modeContent: { coverUrl: "https://example.com/cover.jpg" },
+  });
+  assert.equal(valid.modeContent?.coverUrl, "https://example.com/cover.jpg");
+  assert.equal(CustomerProfileSchema.safeParse({ displayName: "Cover Owner", modeContent: { coverUrl: "invalid-url" } }).success, false);
+
+  // ProfileView supports lightbox for avatar & cover, and custom cover rendering
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  assert.match(profileViewSrc, /profile-lightbox-overlay/);
+  assert.match(profileViewSrc, /profile-lightbox-close/);
+  assert.match(profileViewSrc, /cover-custom-image/);
+  assert.match(profileViewSrc, /is-clickable/);
+
+  // CardPortal includes CoverPhotoEditor
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  assert.match(cardPortalSrc, /CoverPhotoEditor/);
+  assert.match(cardPortalSrc, /coverUrl/);
+
+  // CoverPhotoEditor exists and has upload/remove controls
+  const coverEditorSrc = readFileSync("apps/control-center/src/CoverPhotoEditor.tsx", "utf8");
+  assert.match(coverEditorSrc, /export function CoverPhotoEditor/);
+  assert.match(coverEditorSrc, /handleFileChange/);
+  assert.match(coverEditorSrc, /handleRemove/);
+});
