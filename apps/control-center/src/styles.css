@@ -9225,56 +9225,89 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   justify-content: center;
 }
 
-/* Analytics Stats Grid */
+/* Analytics Stats Rows */
 .analytics-stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-  margin-top: 4px;
-}
-
-@media (max-width: 600px) {
-  .analytics-stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .analytics-stat-tile {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 14px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 14px;
+  padding: 12px 16px;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .analytics-stat-tile:hover {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(223, 184, 119, 0.35);
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
 }
 
-.analytics-stat-top {
+.analytics-stat-left {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
-.analytics-stat-tag {
+.analytics-stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.analytics-stat-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.analytics-stat-title strong {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.analytics-stat-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.analytics-stat-source-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 0.72rem;
   font-weight: 650;
-  color: #8fa5b5;
+  color: #94a3b8;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .analytics-source-dot {
@@ -9284,44 +9317,41 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   flex-shrink: 0;
 }
 
-.analytics-source-dot.is-nfc { background: #2ed573; }
-.analytics-source-dot.is-qr { background: #38bdf8; }
-.analytics-source-dot.is-direct { background: #dfb877; }
+.analytics-source-dot.is-nfc { background: #2ed573; box-shadow: 0 0 5px rgba(46, 213, 115, 0.4); }
+.analytics-source-dot.is-qr { background: #38bdf8; box-shadow: 0 0 5px rgba(56, 189, 248, 0.4); }
+.analytics-source-dot.is-direct { background: #dfb877; box-shadow: 0 0 5px rgba(223, 184, 119, 0.4); }
 
 .analytics-event-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-  background: rgba(223, 184, 119, 0.12);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: rgba(223, 184, 119, 0.1);
   color: #dfb877;
-  border: 1px solid rgba(223, 184, 119, 0.25);
+  border: 1px solid rgba(223, 184, 119, 0.22);
   flex-shrink: 0;
 }
 
-.analytics-stat-number {
-  font-size: 1.75rem;
-  font-weight: 850;
-  color: #ffffff;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
 @media (max-width: 600px) {
-  .analytics-stat-number {
-    font-size: 1.45rem;
+  .analytics-stat-grid {
+    gap: 8px;
   }
-}
 
-.analytics-stat-title strong {
-  display: block;
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: #b8c9d6;
-  line-height: 1.35;
+  .analytics-stat-tile {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  .analytics-stat-title strong {
+    font-size: 0.84rem;
+  }
+
+  .analytics-stat-source-badge {
+    font-size: 0.68rem;
+    padding: 3px 8px;
+  }
 }
 
 .studio-side-panel h2 {
