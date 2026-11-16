@@ -211,17 +211,6 @@ function ShoppingBagIcon() {
   );
 }
 
-function DocumentIcon() {
-  return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <line x1="16" y1="13" x2="8" y2="13" />
-      <line x1="16" y1="17" x2="8" y2="17" />
-    </svg>
-  );
-}
-
 function LinkIcon() {
   return (
     <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -760,27 +749,23 @@ export function ProfileView({
 
         {/* Detailed Professional Description / About Section */}
         {profile.bio.trim() && (
-          <section className="profile-about-section">
-            <h2 className="profile-section-heading">
-              <span className="profile-section-icon"><DocumentIcon /></span>
-              <span>About</span>
-            </h2>
-            <div className="profile-about-card">
-              <p className="about-description">{profile.bio}</p>
-            </div>
-          </section>
+          <fieldset className="profile-about-section profile-about-card">
+            <legend className="profile-about-legend">
+              <h2 className="profile-about-heading">About</h2>
+            </legend>
+            <p className="about-description">{profile.bio}</p>
+          </fieldset>
         )}
         {profile.modeContent?.aboutSections?.map(({ heading, body }, index) =>
           (heading.trim() || body.trim()) && (
-            <section className="profile-about-card" key={index}>
+            <fieldset className="profile-about-section profile-about-card" key={index}>
               {heading.trim() && (
-                <h2 className="profile-section-heading">
-                  <span className="profile-section-icon"><DocumentIcon /></span>
-                  <span>{heading.trim()}</span>
-                </h2>
+                <legend className="profile-about-legend">
+                  <h2 className="profile-about-heading">{heading.trim()}</h2>
+                </legend>
               )}
               {body.trim() && <p className="about-description">{body}</p>}
-            </section>
+            </fieldset>
           )
         )}
 
