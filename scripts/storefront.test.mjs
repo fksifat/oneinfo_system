@@ -784,8 +784,8 @@ test("profile editor supports compact tabs, inline WhatsApp toggle next to phone
   const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
   assert.match(cardPortalSrc, /className="studio-inline-wa-toggle"/);
   assert.match(cardPortalSrc, /Same as phone/);
-  assert.match(cardPortalSrc, /Address \/ Map location/);
-  assert.match(cardPortalSrc, /Google Maps link or physical address/);
+  assert.match(cardPortalSrc, /Address or map link/);
+  assert.match(cardPortalSrc, /Street address or Google Maps URL/);
   assert.match(cardPortalSrc, /studio-tab-preview-only/);
   assert.match(cardPortalSrc, /isWaSameAsPhone \? profile\.phone/);
 
@@ -799,7 +799,7 @@ test("profile editor supports compact tabs, inline WhatsApp toggle next to phone
   assert.match(stylesCss, /\.studio-form-grid input\.is-synced-disabled/);
 });
 
-test("social links editor arranges all 4 elements (platform, label, url, remove) in 1 single row with table header", () => {
+test("social links editor uses a desktop table and compact mobile rows", () => {
   const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
   assert.match(cardPortalSrc, /studio-link-single-row/);
   assert.match(cardPortalSrc, /studio-links-table-header/);
@@ -819,5 +819,7 @@ test("social links editor arranges all 4 elements (platform, label, url, remove)
   assert.match(stylesCss, /\.studio-legend-icon/);
   assert.match(stylesCss, /\.studio-field-label-row\s*\{[^}]*min-height:\s*26px/);
   assert.match(stylesCss, /\.studio-link-item \.studio-btn-remove\s*\{[^}]*width:\s*38px/);
-  assert.match(stylesCss, /@media \(max-width:\s*680px\)\s*\{\s*\.studio-link-item\s*\{[^}]*grid-template-columns:\s*1fr\s*38px/);
+  assert.match(stylesCss, /\.studio-link-item\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*[\d.]+fr\)\s+minmax\(0,\s*[\d.]+fr\)\s+44px/);
+  assert.match(stylesCss, /\.studio-link-label-col\s*\{\s*grid-column:\s*span 2/);
+  assert.match(stylesCss, /\.studio-link-url-col\s*\{\s*grid-column:\s*span 2/);
 });

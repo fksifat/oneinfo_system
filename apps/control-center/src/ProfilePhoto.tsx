@@ -442,7 +442,7 @@ export function ProfilePhoto({
               </button>
             )}
           </div>
-          <small>{busy ? "Preparing your photo…" : "JPG, PNG or WebP · up to 10 MB. Interactive zoom & crop enabled."}</small>
+          <small>{busy ? "Preparing your photo…" : "JPG, PNG or WebP · up to 10 MB"}</small>
           {error && <p className="photo-editor-error" role="alert">{error}</p>}
         </div>
       </div>
