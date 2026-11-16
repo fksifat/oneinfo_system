@@ -759,3 +759,24 @@ test("profile editor keeps save button floating on screen with glassmorphic stic
   // Portal container uses overflow-x: clip so position: sticky is not broken
   assert.match(stylesCss, /\.card-portal\.card-portal-studio\s*\{[^}]*overflow-x:\s*clip;/);
 });
+
+test("profile photo editor supports interactive crop, zoom resize, rotation and framing like social media", () => {
+  const profilePhotoSrc = readFileSync("apps/control-center/src/ProfilePhoto.tsx", "utf8");
+  // Supports PhotoCropperModal with zoom, pan, rotate and canvas export
+  assert.match(profilePhotoSrc, /export function PhotoCropperModal/);
+  assert.match(profilePhotoSrc, /setZoom/);
+  assert.match(profilePhotoSrc, /setPan/);
+  assert.match(profilePhotoSrc, /setRotation/);
+  assert.match(profilePhotoSrc, /handlePointerDown/);
+  assert.match(profilePhotoSrc, /handleWheel/);
+  assert.match(profilePhotoSrc, /ctx\.drawImage/);
+  assert.match(profilePhotoSrc, /photo-btn-adjust/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  // Includes FB-style circular aperture mask, viewport, slider and controls
+  assert.match(stylesCss, /\.photo-crop-backdrop/);
+  assert.match(stylesCss, /\.photo-crop-modal/);
+  assert.match(stylesCss, /\.photo-crop-mask-circle/);
+  assert.match(stylesCss, /\.photo-crop-range/);
+  assert.match(stylesCss, /\.photo-btn-adjust/);
+});
