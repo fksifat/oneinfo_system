@@ -698,3 +698,24 @@ test("exchange contact details card is clean, has modern centered icon, and omit
   // ContactExchangeIcon uses clean contact card SVG
   assert.match(profileViewSrc, /<rect x="3" y="3" width="18" height="18" rx="4"/);
 });
+
+test("profile editor supports WhatsApp number toggle: asks if same as phone, hides field when same, and reveals separate field when toggled off", () => {
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  assert.match(cardPortalSrc, /WhatsApp number same as phone number\?/);
+  assert.match(cardPortalSrc, /className="studio-switch"/);
+  assert.match(cardPortalSrc, /className="studio-slider round"/);
+  assert.match(cardPortalSrc, /isWaSameAsPhone/);
+  assert.match(cardPortalSrc, /!isWaSameAsPhone &&/);
+  assert.match(cardPortalSrc, /WhatsApp number/);
+  assert.match(cardPortalSrc, /whatsappSameAsPhone/);
+
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  assert.match(profileViewSrc, /profile\.modeContent\?\.whatsappSameAsPhone === false && profile\.modeContent\?\.whatsapp/);
+  assert.match(profileViewSrc, /https:\/\/wa\.me\/\${cleanWaPhone}/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.studio-whatsapp-card/);
+  assert.match(stylesCss, /\.studio-switch/);
+  assert.match(stylesCss, /\.studio-slider/);
+  assert.match(stylesCss, /background-color:\s*#25d366/);
+});
