@@ -23,6 +23,8 @@ export interface PublicProfileData {
       websiteLabel?: string | undefined;
       whatsapp?: string | undefined;
       whatsappSameAsPhone?: boolean | undefined;
+      mapUrl?: string | undefined;
+      address?: string | undefined;
     };
   };
   links: { id?: string; label: string; url: string }[];
@@ -547,13 +549,18 @@ export function ProfileView({
     ? `https://wa.me/${cleanWaPhone}`
     : (fallbackWaLink ? fallbackWaLink.url : null);
 
-  // Resolve Map location link (custom map link, company location, or fallback)
+  // Resolve Map location link (custom mapUrl / address in modeContent, custom map link in links, company location, or fallback)
   const mapLink = links.find(
     (l) =>
       detectSocialBrand(l.url, l.label).kind === "map" ||
       /maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl|\/maps\//i.test(l.url)
   );
-  const mapUrl = mapLink
+  const customMapOrAddress = profile.modeContent?.mapUrl?.trim() || profile.modeContent?.address?.trim();
+  const mapUrl = customMapOrAddress
+    ? (/^https?:\/\//i.test(customMapOrAddress)
+        ? customMapOrAddress
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(customMapOrAddress)}`)
+    : mapLink
     ? mapLink.url
     : profile.company
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(profile.company)}`

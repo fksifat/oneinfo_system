@@ -780,3 +780,20 @@ test("profile photo editor supports interactive crop, zoom resize, rotation and 
   assert.match(stylesCss, /\.photo-crop-range/);
   assert.match(stylesCss, /\.photo-btn-adjust/);
 });
+
+test("profile editor supports compact tabs, inline WhatsApp toggle next to phone label, and dedicated Map / Address field", () => {
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  assert.match(cardPortalSrc, /className="studio-inline-wa-toggle"/);
+  assert.match(cardPortalSrc, /Same on WhatsApp/);
+  assert.match(cardPortalSrc, /Address \/ Map location/);
+  assert.match(cardPortalSrc, /Google Maps link or physical address/);
+  assert.match(cardPortalSrc, /studio-tab-preview-only/);
+
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  assert.match(profileViewSrc, /profile\.modeContent\?\.mapUrl\?\.trim\(\)\s*\|\|\s*profile\.modeContent\?\.address\?\.trim\(\)/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.studio-inline-wa-toggle/);
+  assert.match(stylesCss, /\.studio-field-label-row/);
+  assert.match(stylesCss, /\.studio-mobile-tabs\s*\{[^}]*max-width:\s*440px/);
+});

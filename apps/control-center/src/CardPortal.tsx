@@ -719,7 +719,7 @@ export function CardPortal({
             type="button"
             role="tab"
             aria-selected={false}
-            className="studio-tab-pill"
+            className="studio-tab-pill studio-tab-preview-only"
             onClick={() => {
               lastEditorTabRef.current = studioTab;
               setStudioTab("preview");
@@ -765,73 +765,77 @@ export function CardPortal({
                       Company
                       <input maxLength={120} value={profile.company} placeholder="e.g. Arise Studio" onChange={event => update("company", event.target.value)} />
                     </label>
-                    <label>
-                      Public phone
-                      <input type="tel" maxLength={40} value={profile.phone} placeholder="+880..." onChange={event => update("phone", event.target.value)} />
-                    </label>
+                    {/* Public phone with inline WhatsApp toggle */}
+                    <div className="studio-field-group">
+                      <div className="studio-field-label-row">
+                        <label htmlFor="studio-field-phone">Public phone</label>
+                        <div
+                          className="studio-inline-wa-toggle"
+                          title="WhatsApp number same as phone number?"
+                        >
+                          <span className="wa-icon" aria-hidden="true">
+                            <WhatsAppIcon size={13} />
+                          </span>
+                          <span className="wa-text">Same on WhatsApp</span>
+                          <label className="studio-switch" aria-label="WhatsApp number same as phone number?">
+                            <input
+                              type="checkbox"
+                              checked={isWaSameAsPhone}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                update("modeContent", {
+                                  ...profile.modeContent,
+                                  whatsappSameAsPhone: checked,
+                                  ...(checked ? { whatsapp: "" } : {}),
+                                });
+                              }}
+                            />
+                            <span className="studio-slider round" />
+                          </label>
+                        </div>
+                      </div>
+                      <input
+                        id="studio-field-phone"
+                        type="tel"
+                        maxLength={40}
+                        value={profile.phone}
+                        placeholder="+880..."
+                        onChange={event => update("phone", event.target.value)}
+                      />
+                    </div>
+
                     <label>
                       Public email
                       <input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} />
                     </label>
 
-                    {/* WhatsApp Toggle & Optional Custom Number */}
-                    <div className="studio-col-span-2 studio-whatsapp-card">
-                      <div className="studio-whatsapp-header">
-                        <div className="studio-whatsapp-info">
-                          <div className="studio-whatsapp-title">
-                            <span className="studio-wa-badge-icon" aria-hidden="true">
-                              <WhatsAppIcon size={16} />
-                            </span>
-                            <span>WhatsApp number same as phone number?</span>
-                          </div>
-                          <span className="studio-whatsapp-desc">
-                            {isWaSameAsPhone
-                              ? "Your public phone number will be used for direct WhatsApp chat."
-                              : "Enter a separate WhatsApp number below for visitors to message you."}
+                    {/* Separate WhatsApp number field when toggled OFF */}
+                    {!isWaSameAsPhone && (
+                      <div className="studio-col-span-2 studio-whatsapp-custom-field">
+                        <label>
+                          <span className="studio-field-label-inline">
+                            <WhatsAppIcon size={14} /> WhatsApp number
                           </span>
-                        </div>
-                        <label className="studio-switch" aria-label="WhatsApp same as phone number">
                           <input
-                            type="checkbox"
-                            checked={isWaSameAsPhone}
-                            onChange={(e) => {
-                              const checked = e.target.checked;
+                            type="tel"
+                            maxLength={40}
+                            value={profile.modeContent?.whatsapp ?? ""}
+                            placeholder="+880 1..."
+                            autoFocus
+                            onChange={(e) =>
                               update("modeContent", {
                                 ...profile.modeContent,
-                                whatsappSameAsPhone: checked,
-                                ...(checked ? { whatsapp: "" } : {}),
-                              });
-                            }}
+                                whatsapp: e.target.value,
+                                whatsappSameAsPhone: false,
+                              })
+                            }
                           />
-                          <span className="studio-slider round" />
                         </label>
+                        <small className="studio-field-hint">
+                          Include country code (e.g. +880) so visitors can chat directly on WhatsApp.
+                        </small>
                       </div>
-
-                      {!isWaSameAsPhone && (
-                        <div className="studio-whatsapp-custom-field">
-                          <label>
-                            WhatsApp number
-                            <input
-                              type="tel"
-                              maxLength={40}
-                              value={profile.modeContent?.whatsapp ?? ""}
-                              placeholder="+880 1..."
-                              autoFocus
-                              onChange={(e) =>
-                                update("modeContent", {
-                                  ...profile.modeContent,
-                                  whatsapp: e.target.value,
-                                  whatsappSameAsPhone: false,
-                                })
-                              }
-                            />
-                          </label>
-                          <small className="studio-field-hint">
-                            Include your country code so visitors can start a WhatsApp conversation with one tap.
-                          </small>
-                        </div>
-                      )}
-                    </div>
+                    )}
 
                     <label>
                       Website URL
@@ -840,6 +844,20 @@ export function CardPortal({
                     <label>
                       Website label
                       <input maxLength={40} value={profile.modeContent?.websiteLabel ?? ""} placeholder="Official Website" onChange={event => update("modeContent", { ...profile.modeContent, websiteLabel: event.target.value })} />
+                    </label>
+
+                    {/* Address / Google Maps Location Field */}
+                    <label className="studio-col-span-2">
+                      <div className="studio-field-label-row">
+                        <span>Address / Map location</span>
+                        <span className="studio-field-hint-inline">Google Maps link or physical address</span>
+                      </div>
+                      <input
+                        maxLength={300}
+                        value={profile.modeContent?.mapUrl ?? ""}
+                        placeholder="e.g. https://maps.app.goo.gl/... or House 12, Road 4, Dhanmondi, Dhaka"
+                        onChange={event => update("modeContent", { ...profile.modeContent, mapUrl: event.target.value })}
+                      />
                     </label>
                   </div>
                   <label className="studio-bio-label">
