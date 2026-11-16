@@ -1663,6 +1663,13 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
     }
   }
 
+  // Open / load analytics automatically on mount for card owner studio
+  useEffect(() => {
+    if (!companyId && token && !items && !busy) {
+      void load();
+    }
+  }, [token, companyId]);
+
   return (
     <section className="lead-inbox profile-analytics-section" aria-labelledby="analytics-heading">
       <div className="lead-inbox-header-row">
@@ -1685,21 +1692,6 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
           <span>{busy ? "Loading…" : items ? "Refresh analytics" : "Load analytics"}</span>
         </button>
       </div>
-
-      {base && (
-        <div className="analytics-quick-links-row">
-          <a href={`${base}?source=nfc`} target="_blank" rel="noopener noreferrer" className="analytics-link-chip">
-            <span className="analytics-chip-dot is-nfc" />
-            <span>Tap link</span>
-            <SvgExternalLink size={11} />
-          </a>
-          <a href={`${base}?source=qr`} target="_blank" rel="noopener noreferrer" className="analytics-link-chip">
-            <span className="analytics-chip-dot is-qr" />
-            <span>QR link</span>
-            <SvgExternalLink size={11} />
-          </a>
-        </div>
-      )}
 
       {error && <p className="portal-error" role="alert">{error}</p>}
 
@@ -1739,7 +1731,7 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
       )}
 
       {!!visible?.length && (
-        <div className="analytics-stat-grid">
+        <div className="analytics-stat-grid analytics-stat-rows">
           {visible.map(item => {
             const eventLabel =
               item.label ??
@@ -1750,30 +1742,32 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
             return (
               <div
                 key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}
-                className="analytics-stat-tile"
+                className="analytics-stat-tile analytics-stat-row"
               >
-                <div className="analytics-stat-top">
-                  <span className="analytics-stat-tag">
-                    <span className={`analytics-source-dot is-${item.source.toLowerCase()}`} />
-                    {sourceName} · {modeName}
-                  </span>
+                <div className="analytics-stat-left">
                   <span className="analytics-event-icon">
                     {item.event === "VIEW" ? (
-                      <SvgEyeIcon size={14} />
+                      <SvgEyeIcon size={15} />
                     ) : item.event === "SAVE" ? (
-                      <SvgSaveContactIcon size={14} />
+                      <SvgSaveContactIcon size={15} />
                     ) : item.event === "LEAD" ? (
                       <TabInboxIcon />
                     ) : (
-                      <SvgLinkIcon size={13} />
+                      <SvgLinkIcon size={14} />
                     )}
                   </span>
+                  <div className="analytics-stat-info">
+                    <div className="analytics-stat-title">
+                      <strong>{eventLabel} · {item.total}</strong>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="analytics-stat-number">{item.total.toLocaleString()}</div>
-                <div className="analytics-stat-title">
-                  <strong>{eventLabel} · {item.total}</strong>
-                  <span className="sr-only">{modeName} · {sourceName}</span>
+                <div className="analytics-stat-right">
+                  <span className="analytics-stat-source-badge">
+                    <span className={`analytics-source-dot is-${item.source.toLowerCase()}`} />
+                    <span>{sourceName} · {modeName}</span>
+                  </span>
                 </div>
               </div>
             );
