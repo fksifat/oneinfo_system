@@ -941,6 +941,9 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(cardPortalSrc, /lead-channels-row/);
   assert.match(cardPortalSrc, /lead-channel-pill/);
   assert.match(cardPortalSrc, /lead-channel-whatsapp/);
+  assert.match(cardPortalSrc, /lead-whatsapp-icon-btn/);
+  assert.match(cardPortalSrc, /lead-contact-pills/);
+  assert.match(cardPortalSrc, /lead-meta-row/);
   assert.match(cardPortalSrc, /lead-btn-delete/);
   assert.match(cardPortalSrc, /contacts-sub-nav/);
   assert.match(cardPortalSrc, /contacts-sub-tab-btn/);
@@ -948,6 +951,7 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(cardPortalSrc, /analytics-stat-tile/);
   assert.match(cardPortalSrc, /analytics-stat-row/);
   assert.match(cardPortalSrc, /analytics-stat-source-badge/);
+  assert.match(cardPortalSrc, /analytics-controls-row/);
   assert.match(cardPortalSrc, /analytics-select-box/);
   // Quick link chips removed as requested
   assert.doesNotMatch(cardPortalSrc, /analytics-quick-links-row/);
@@ -963,9 +967,11 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(stylesCss, /\.lead-contact-card\s*\{/);
   assert.match(stylesCss, /\.lead-channels-row\s*\{/);
   assert.match(stylesCss, /\.lead-channel-pill\s*\{/);
+  assert.match(stylesCss, /\.lead-whatsapp-icon-btn\s*\{/);
   assert.match(stylesCss, /\.lead-btn-delete\s*\{/);
   assert.match(stylesCss, /\.analytics-stat-grid\s*\{/);
   assert.match(stylesCss, /\.analytics-stat-tile\s*\{/);
+  assert.match(stylesCss, /\.analytics-controls-row\s*\{/);
   assert.match(stylesCss, /\.analytics-select-box\s*\{/);
   assert.match(stylesCss, /\.analytics-stat-source-badge\s*\{/);
 });

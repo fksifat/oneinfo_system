@@ -468,7 +468,7 @@ try {
   await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
   await until(`[...document.querySelectorAll('button')].some(b => b.textContent.includes('Contacts'))`);
   await evaluate(`(()=>{[...document.querySelectorAll('button')].find(b=>b.textContent.includes('Contacts')).click()})()`);
-  await click('Open inbox');await until(`document.querySelector('.lead-inbox')?.textContent.includes('Browser Visitor')`);
+  await until(`document.querySelector('.lead-inbox')?.textContent.includes('Browser Visitor')`);
   assert.equal(await evaluate(`document.querySelector('.lead-inbox').textContent.includes('visitor@example.com')`),true);
   console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
   await reload();await until(`document.querySelector('h1')?.textContent.includes('Edit')`);

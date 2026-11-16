@@ -1715,6 +1715,31 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Traffic source filter and Refresh analytics button on the same row */}
+      <div className="analytics-controls-row">
+        <div className="analytics-filter-inline">
+          <label htmlFor="analytics-source-select" className="sr-only">
+            Traffic source
+          </label>
+          <div className="analytics-select-box">
+            <select
+              id="analytics-source-select"
+              value={source}
+              onChange={event => setSource(event.target.value)}
+              aria-label="Filter by traffic source"
+            >
+              <option value="">All sources</option>
+              <option value="NFC">Tap</option>
+              <option value="QR">Scan</option>
+              <option value="DIRECT">Direct / untagged</option>
+            </select>
+            <span className="analytics-select-chevron">
+              <SvgChevronDown size={14} />
+            </span>
+          </div>
+        </div>
         <button
           type="button"
           className="lead-action-btn lead-btn-refresh"
@@ -1727,30 +1752,6 @@ export function ProfileAnalytics({ token, base, companyId }: { token: string; ba
       </div>
 
       {error && <p className="portal-error" role="alert">{error}</p>}
-
-      {/* Traffic source filter */}
-      {!!items?.length && (
-        <div className="analytics-filter-wrap">
-          <label htmlFor="analytics-source-select" className="analytics-filter-label">
-            Traffic source
-          </label>
-          <div className="analytics-select-box">
-            <select
-              id="analytics-source-select"
-              value={source}
-              onChange={event => setSource(event.target.value)}
-            >
-              <option value="">All sources</option>
-              <option value="NFC">Tap</option>
-              <option value="QR">Scan</option>
-              <option value="DIRECT">Direct / untagged</option>
-            </select>
-            <span className="analytics-select-chevron">
-              <SvgChevronDown size={14} />
-            </span>
-          </div>
-        </div>
-      )}
 
       {visible?.length === 0 && (
         <div className="lead-empty-state">
@@ -1820,6 +1821,12 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
   const [search, setSearch] = useState("");
   const term = search.trim().toLowerCase();
   const visible = items?.filter(lead => [lead.name, lead.email, lead.phone, lead.recipientName].some(value => value?.toLowerCase().includes(term)));
+
+  useEffect(() => {
+    if (!companyId && token && !items && !loading) {
+      void load();
+    }
+  }, [token, companyId]);
 
   async function load(before?: string) {
     if (loading) return;
@@ -1948,17 +1955,20 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                     {(lead.name || "C").trim().charAt(0).toUpperCase()}
                   </div>
                   <div className="lead-contact-text">
-                    <div className="lead-name-row">
-                      <strong className="lead-contact-name">{lead.name}</strong>
+                    <strong className="lead-contact-name">{lead.name}</strong>
+                    <div className="lead-meta-row">
+                      {lead.recipientName && (
+                        <>
+                          <small className="lead-recipient-pill">
+                            Shared via {lead.recipientName}’s card
+                          </small>
+                          <span className="lead-meta-sep" aria-hidden="true">·</span>
+                        </>
+                      )}
                       <time className="lead-time-inline" dateTime={lead.createdAt}>
                         {formatLeadDate(lead.createdAt)}
                       </time>
                     </div>
-                    {lead.recipientName && (
-                      <small className="lead-recipient-pill">
-                        Shared via {lead.recipientName}’s card
-                      </small>
-                    )}
                   </div>
                 </div>
 
@@ -1995,28 +2005,30 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
 
               {/* Quick Connect action pills (Email, Phone, WhatsApp) */}
               <div className="lead-channels-row">
-                {lead.email && (
-                  <a href={`mailto:${lead.email}`} className="lead-channel-pill" title="Send email">
-                    <FormEmailIcon />
-                    <span>{lead.email}</span>
-                  </a>
-                )}
-                {lead.phone && (
-                  <a href={`tel:${lead.phone}`} className="lead-channel-pill" title="Call phone">
-                    <SvgPhoneIcon size={12} />
-                    <span>{lead.phone}</span>
-                  </a>
-                )}
+                <div className="lead-contact-pills">
+                  {lead.email && (
+                    <a href={`mailto:${lead.email}`} className="lead-channel-pill" title="Send email">
+                      <FormEmailIcon />
+                      <span>{lead.email}</span>
+                    </a>
+                  )}
+                  {lead.phone && (
+                    <a href={`tel:${lead.phone}`} className="lead-channel-pill" title="Call phone">
+                      <SvgPhoneIcon size={12} />
+                      <span>{lead.phone}</span>
+                    </a>
+                  )}
+                </div>
                 {lead.phone && (
                   <a
                     href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="lead-channel-pill lead-channel-whatsapp"
+                    className="lead-channel-pill lead-channel-whatsapp lead-whatsapp-icon-btn"
                     title="Chat on WhatsApp"
+                    aria-label="Chat on WhatsApp"
                   >
-                    <SvgWhatsAppIcon size={12} />
-                    <span>WhatsApp</span>
+                    <SvgWhatsAppIcon size={14} />
                   </a>
                 )}
               </div>
