@@ -46,6 +46,22 @@ function SvgCropIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function SvgUploadIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 16V4m-5 5 5-5 5 5M4 16v4h16v-4" />
+    </svg>
+  );
+}
+
+function SvgTrashIcon() {
+  return (
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+    </svg>
+  );
+}
+
 function SvgCheckIcon({ size = 16 }: { size?: number }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -303,6 +319,7 @@ export function ProfilePhoto({
   const [error, setError] = useState("");
   const [failed, setFailed] = useState("");
   const [editingSrc, setEditingSrc] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
 
   const cleanupObjectUrl = () => {
@@ -381,31 +398,28 @@ export function ProfilePhoto({
   return (
     <>
       <div className="profile-photo-editor">
-        <div
+        <button
+          type="button"
           className="photo-editor-avatar"
-          role="button"
-          tabIndex={0}
-          title={value ? "Click to adjust crop" : "Click to upload photo"}
-          onClick={() => {
-            if (value) handleAdjustExisting();
-          }}
-          onKeyDown={e => {
-            if ((e.key === "Enter" || e.key === " ") && value) handleAdjustExisting();
-          }}
+          aria-label={value ? "Adjust profile photo crop" : "Upload a profile photo"}
+          disabled={busy}
+          onClick={value ? handleAdjustExisting : () => fileInputRef.current?.click()}
         >
           {value && failed !== value ? (
             <img src={value} alt="Profile photo preview" onError={() => setFailed(value)} />
           ) : (
             initials
           )}
-        </div>
+        </button>
         <div className="photo-editor-controls">
           <strong>Profile photo</strong>
           <p>Drag, zoom, and crop your photo like on social media. We frame a circle for your card.</p>
           <div className="photo-editor-actions">
             <label className="media-upload">
-              {busy ? "Uploading photo…" : value ? "Replace photo" : "Upload photo"}
+              <SvgUploadIcon />
+              <span>{busy ? "Uploading…" : <>{value ? "Replace" : "Upload"}<span className="photo-action-detail"> photo</span></>}</span>
               <input
+                ref={fileInputRef}
                 type="file"
                 aria-label="Upload profile photo"
                 accept="image/jpeg,image/png,image/webp"
@@ -425,20 +439,22 @@ export function ProfilePhoto({
                 title="Adjust framing, zoom, or rotation"
               >
                 <SvgCropIcon size={14} />
-                <span>Adjust crop</span>
+                <span><span className="photo-action-detail">Adjust </span><span className="photo-crop-label">crop</span></span>
               </button>
             )}
             {value && (
               <button
                 type="button"
                 className="quiet"
+                aria-label="Remove photo"
                 disabled={busy}
                 onClick={() => {
                   onChange("");
                   setError("");
                 }}
               >
-                Remove photo
+                <SvgTrashIcon />
+                <span>Remove<span className="photo-action-detail"> photo</span></span>
               </button>
             )}
           </div>

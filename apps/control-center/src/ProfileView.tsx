@@ -760,12 +760,14 @@ export function ProfileView({
 
         {/* Detailed Professional Description / About Section */}
         {profile.bio.trim() && (
-          <section className="profile-about-card">
+          <section className="profile-about-section">
             <h2 className="profile-section-heading">
               <span className="profile-section-icon"><DocumentIcon /></span>
               <span>About</span>
             </h2>
-            <p className="about-description">{profile.bio}</p>
+            <div className="profile-about-card">
+              <p className="about-description">{profile.bio}</p>
+            </div>
           </section>
         )}
         {profile.modeContent?.aboutSections?.map(({ heading, body }, index) =>
@@ -796,7 +798,7 @@ export function ProfileView({
         {/* Social Media & Links Section */}
         {visibleSocialLinks.length > 0 && (
           <section className="profile-social-section" aria-label="Social Media & Links">
-            <h2 className="section-label"><LinkIcon /> Social &amp; web links</h2>
+            <h2 className="section-label"><LinkIcon /><span>Social &amp; web links</span></h2>
 
             <div className="social-links-grid">
               {visibleSocialLinks

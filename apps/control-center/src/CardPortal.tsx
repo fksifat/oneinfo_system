@@ -178,6 +178,14 @@ function SvgUserIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function SvgTextIcon() {
+  return (
+    <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M4 6h16M4 12h16M4 18h10" />
+    </svg>
+  );
+}
+
 function SvgGlobeIcon({ size = 14 }: { size?: number }) {
   return (
     <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
@@ -731,7 +739,7 @@ export function CardPortal({
   }
 
   return (
-    <main className="card-portal card-portal-studio">
+    <main className="card-portal card-portal-studio customer-profile-studio">
       <section className="studio-container">
         {/* Professional, Clean & Simple Studio Header Bar */}
         <header className="studio-header">
@@ -784,6 +792,7 @@ export function CardPortal({
             onClick={() => {
               lastEditorTabRef.current = "edit";
               setStudioTab("edit");
+              window.scrollTo(0, 0);
             }}
           >
             <TabEditIcon />
@@ -797,6 +806,7 @@ export function CardPortal({
             onClick={() => {
               lastEditorTabRef.current = "settings";
               setStudioTab("settings");
+              window.scrollTo(0, 0);
             }}
           >
             <TabSettingsIcon />
@@ -811,6 +821,7 @@ export function CardPortal({
               onClick={() => {
                 lastEditorTabRef.current = "contacts";
                 setStudioTab("contacts");
+                window.scrollTo(0, 0);
               }}
             >
               <TabInboxIcon />
@@ -825,6 +836,7 @@ export function CardPortal({
             onClick={() => {
               lastEditorTabRef.current = studioTab;
               setStudioTab("preview");
+              window.scrollTo(0, 0);
             }}
           >
             <TabPreviewIcon />
@@ -869,24 +881,26 @@ export function CardPortal({
                       Headline / profession
                       <input maxLength={160} value={profile.headline} placeholder="e.g. Founder &amp; CEO" onChange={event => update("headline", event.target.value)} />
                     </label>
-                    {/* Row 2: Company on left, Public email on right */}
-                    <label>
+                    <label className="studio-col-span-2">
                       Company
                       <input maxLength={120} value={profile.company} placeholder="e.g. Arise Studio" onChange={event => update("company", event.target.value)} />
                     </label>
+                  </div>
+                </fieldset>
 
+                <fieldset className="studio-card">
+                  <legend className="studio-card-legend">
+                    <span className="studio-legend-icon"><FormEmailIcon /></span>
+                    <span>Contact details</span>
+                  </legend>
+                  <div className="studio-form-grid">
                     <label>
                       Public email
                       <input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} />
                     </label>
 
-                    {/* Row 3: Public phone on left, WhatsApp number with sync toggle on right */}
-                    <div className="studio-field-group">
-                      <div className="studio-field-label-row">
-                        <label htmlFor="studio-field-phone" className="studio-field-label-inline">
-                          Public phone
-                        </label>
-                      </div>
+                    <label htmlFor="studio-field-phone">
+                      Public phone
                       <input
                         id="studio-field-phone"
                         type="tel"
@@ -895,21 +909,19 @@ export function CardPortal({
                         placeholder="+880..."
                         onChange={event => update("phone", event.target.value)}
                       />
-                    </div>
+                    </label>
 
-                    <div className="studio-field-group">
+                    <div className="studio-field-group studio-whatsapp-field studio-col-span-2">
                       <div className="studio-field-label-row">
                         <label htmlFor="studio-whatsapp-field" className="studio-field-label-inline">
                           <WhatsAppIcon size={14} /> WhatsApp number
                         </label>
-                        <div
-                          className="studio-inline-wa-toggle"
-                          title="WhatsApp number same as phone number?"
-                        >
+                        <label className="studio-inline-wa-toggle">
                           <span className="wa-text">Same as phone</span>
-                          <label className="studio-switch" aria-label="WhatsApp number same as phone number?">
+                          <span className="studio-switch">
                             <input
                               type="checkbox"
+                              aria-label="Use public phone for WhatsApp"
                               checked={isWaSameAsPhone}
                               onChange={(e) => {
                                 const checked = e.target.checked;
@@ -921,8 +933,8 @@ export function CardPortal({
                               }}
                             />
                             <span className="studio-slider round" />
-                          </label>
-                        </div>
+                          </span>
+                        </label>
                       </div>
                       <input
                         id="studio-whatsapp-field"
@@ -953,6 +965,13 @@ export function CardPortal({
                       />
                     </label>
                   </div>
+                </fieldset>
+
+                <fieldset className="studio-card">
+                  <legend className="studio-card-legend">
+                    <span className="studio-legend-icon"><SvgTextIcon /></span>
+                    <span>About</span>
+                  </legend>
                   <div>
                     <label className="studio-bio-label">
                       About you
@@ -1247,6 +1266,7 @@ export function CardPortal({
                 </fieldset>
 
                 <div className="studio-save-action">
+                  {error && <p className="studio-save-error" role="alert">{error}</p>}
                   <button type="submit" className="studio-save-button" disabled={busy || photoBusy}>
                     <SvgCheckIcon size={16} />
                     <span>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</span>
@@ -1400,7 +1420,7 @@ export function CardPortal({
                 Already have an account? Sign in
               </button>
             )}
-            {error && <p className="portal-error" role="alert">{error}</p>}
+            {error && studioTab !== "edit" && <p className="portal-error" role="alert">{error}</p>}
           </div>
 
           <aside className="studio-sidebar-column">
