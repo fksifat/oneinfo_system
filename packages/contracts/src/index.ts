@@ -134,12 +134,14 @@ export const ProfileLinkSchema = z.object({
   active: z.boolean().default(true),
 });
 
+export const PROFILE_BIO_MAX_LENGTH = 1500;
+
 export const CreateProfileSchema = z.object({
   publicSlug: z.string().trim().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   displayName: z.string().trim().min(2).max(120),
   headline: z.string().trim().max(160).default(""),
   company: z.string().trim().max(120).default(""),
-  bio: z.string().trim().max(600).default(""),
+  bio: z.string().trim().max(PROFILE_BIO_MAX_LENGTH).default(""),
   phone: OptionalContactSchema.default(""),
   email: z.union([z.email(), z.literal("")]).default(""),
   website: z.union([HttpUrlSchema, z.literal("")]).default(""),
@@ -163,6 +165,7 @@ export const ProfileModesSchema = z.object({
   EVENT: ProfileModeContentSchema.optional(),
   PORTFOLIO: ProfileModeContentSchema.optional(),
   websiteLabel: z.string().trim().max(60).optional(),
+  websiteSortOrder: z.number().int().min(0).max(12).optional(),
   whatsapp: z.string().trim().max(40).optional(),
   whatsappSameAsPhone: z.boolean().optional(),
   mapUrl: z.string().trim().max(500).optional(),
