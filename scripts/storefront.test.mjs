@@ -798,3 +798,15 @@ test("profile editor supports compact tabs, inline WhatsApp toggle next to phone
   assert.match(stylesCss, /\.studio-mobile-tabs\s*\{[^}]*max-width:\s*440px/);
   assert.match(stylesCss, /\.studio-form-grid input\.is-synced-disabled/);
 });
+
+test("social links editor arranges all 4 elements (platform, label, url, remove) in 1 single row with table header", () => {
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  assert.match(cardPortalSrc, /studio-link-single-row/);
+  assert.match(cardPortalSrc, /studio-links-table-header/);
+  assert.match(cardPortalSrc, /studio-link-label-col/);
+  assert.match(cardPortalSrc, /studio-link-url-col/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.studio-links-table-header\s*\{[^}]*grid-template-columns/);
+  assert.match(stylesCss, /\.studio-link-item\s*\{[^}]*grid-template-columns:\s*minmax\(140px/);
+});
