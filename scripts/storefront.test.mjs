@@ -932,3 +932,25 @@ test("profile themes include Royal Sapphire and Titanium Noir with clean isolate
   assert.match(stylesCss, /\.tile-cover\.theme-ivory\s*\{/);
   assert.doesNotMatch(stylesCss, /^\.theme-ivory\s*\{[^}]*!important/m);
 });
+
+test("shared contacts and profile analytics have luxury UI, contact cards, quick connect pills, and mobile optimization", () => {
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  // Check contact card components & helpers
+  assert.match(cardPortalSrc, /lead-contact-card/);
+  assert.match(cardPortalSrc, /lead-contact-avatar/);
+  assert.match(cardPortalSrc, /lead-channels-row/);
+  assert.match(cardPortalSrc, /lead-channel-pill/);
+  assert.match(cardPortalSrc, /lead-channel-whatsapp/);
+  assert.match(cardPortalSrc, /analytics-stat-grid/);
+  assert.match(cardPortalSrc, /analytics-stat-tile/);
+  assert.match(cardPortalSrc, /analytics-select-box/);
+
+  // Check CSS styles for shared contacts & profile analytics
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.lead-contact-card\s*\{/);
+  assert.match(stylesCss, /\.lead-channels-row\s*\{/);
+  assert.match(stylesCss, /\.lead-channel-pill\s*\{/);
+  assert.match(stylesCss, /\.analytics-stat-grid\s*\{/);
+  assert.match(stylesCss, /\.analytics-stat-tile\s*\{/);
+  assert.match(stylesCss, /\.analytics-select-box\s*\{/);
+});
