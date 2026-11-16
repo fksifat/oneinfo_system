@@ -274,6 +274,70 @@ function SvgLockIcon({ size = 14 }: { size?: number }) {
   );
 }
 
+function SvgRefreshIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
+  );
+}
+
+function SvgPhoneIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+    </svg>
+  );
+}
+
+function SvgWhatsAppIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+    </svg>
+  );
+}
+
+function SvgSearchIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <line x1="21" y1="21" x2="16.65" y2="16.65" />
+    </svg>
+  );
+}
+
+function SvgBarChartIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="20" x2="12" y2="10" />
+      <line x1="18" y1="20" x2="18" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="16" />
+    </svg>
+  );
+}
+
+function SvgEyeIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function SvgSaveContactIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
 export function CardPortal({
   slug,
   initialCard,
@@ -1556,31 +1620,168 @@ export function CardPortal({
   );
 }
 
+function formatLeadDate(iso: string) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export function ProfileAnalytics({ token, base, companyId }: { token: string; base?: string; companyId?: string }) {
   const [items, setItems] = useState<{ mode: string; campaign: string; source: string; event: string; label: string | null; total: number }[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [source, setSource] = useState("");
   const visible = items?.filter(item => !source || item.source === source);
+
   async function load() {
-    setBusy(true); setError("");
-    try { setItems((await customerApi<{ items: NonNullable<typeof items> }>(`/me/activity${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`, "GET", undefined, token)).items); }
-    catch { setError("Could not load analytics. Check your session and try again."); }
-    finally { setBusy(false); }
+    setBusy(true);
+    setError("");
+    try {
+      setItems(
+        (
+          await customerApi<{ items: NonNullable<typeof items> }>(
+            `/me/activity${companyId ? `?companyId=${encodeURIComponent(companyId)}` : ""}`,
+            "GET",
+            undefined,
+            token
+          )
+        ).items
+      );
+    } catch {
+      setError("Could not load analytics. Check your session and try again.");
+    } finally {
+      setBusy(false);
+    }
   }
-  return <section className="lead-inbox"><h2>Profile analytics</h2><p>Last 30 days. Contact saves count button clicks.</p>
-    {base && <p><a href={`${base}?source=nfc`}>Tap link</a> · <a href={`${base}?source=qr`}>QR link</a></p>}
-    <button type="button" className="quiet" disabled={busy} onClick={() => void load()}>{busy ? "Loading…" : items ? "Refresh analytics" : "Load analytics"}</button>
-    {error && <p role="alert">{error}</p>}
-    {!!items?.length && <label>Traffic source<select value={source} onChange={event => setSource(event.target.value)}>
-      <option value="">All sources</option><option value="NFC">Tap</option><option value="QR">Scan</option><option value="DIRECT">Direct / untagged</option>
-    </select></label>}
-    {visible?.length === 0 && <p role="status">{source ? "No activity from this source." : "No activity recorded yet."}</p>}
-    {!!visible?.length && <ul>{visible.map(item => <li key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}>
-      <strong>{item.label ?? ({ VIEW: "Profile views", SAVE: "Contact-save clicks", LINK: "Website clicks", LEAD: "Leads" }[item.event] ?? item.event)} · {item.total}</strong>
-      <span>{item.campaign || item.mode} · {item.source === "NFC" ? "Tap" : item.source === "QR" ? "Scan" : "Direct link"}</span>
-    </li>)}</ul>}
-  </section>;
+
+  return (
+    <section className="lead-inbox profile-analytics-section" aria-labelledby="analytics-heading">
+      <div className="lead-inbox-header-row">
+        <div className="lead-inbox-title-wrap">
+          <div className="studio-card-head-row">
+            <span className="studio-legend-icon"><SvgBarChartIcon size={14} /></span>
+            <div>
+              <h2 id="analytics-heading" className="studio-card-title">Profile analytics</h2>
+              <p className="studio-card-helper">Last 30 days. Contact saves count button clicks.</p>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="lead-action-btn lead-btn-refresh"
+          disabled={busy}
+          onClick={() => void load()}
+        >
+          <SvgRefreshIcon size={13} />
+          <span>{busy ? "Loading…" : items ? "Refresh analytics" : "Load analytics"}</span>
+        </button>
+      </div>
+
+      {base && (
+        <div className="analytics-quick-links-row">
+          <a href={`${base}?source=nfc`} target="_blank" rel="noopener noreferrer" className="analytics-link-chip">
+            <span className="analytics-chip-dot is-nfc" />
+            <span>Tap link</span>
+            <SvgExternalLink size={11} />
+          </a>
+          <a href={`${base}?source=qr`} target="_blank" rel="noopener noreferrer" className="analytics-link-chip">
+            <span className="analytics-chip-dot is-qr" />
+            <span>QR link</span>
+            <SvgExternalLink size={11} />
+          </a>
+        </div>
+      )}
+
+      {error && <p className="portal-error" role="alert">{error}</p>}
+
+      {/* Traffic source filter */}
+      {!!items?.length && (
+        <div className="analytics-filter-wrap">
+          <label htmlFor="analytics-source-select" className="analytics-filter-label">
+            Traffic source
+          </label>
+          <div className="analytics-select-box">
+            <select
+              id="analytics-source-select"
+              value={source}
+              onChange={event => setSource(event.target.value)}
+            >
+              <option value="">All sources</option>
+              <option value="NFC">Tap</option>
+              <option value="QR">Scan</option>
+              <option value="DIRECT">Direct / untagged</option>
+            </select>
+            <span className="analytics-select-chevron">
+              <SvgChevronDown size={14} />
+            </span>
+          </div>
+        </div>
+      )}
+
+      {visible?.length === 0 && (
+        <div className="lead-empty-state">
+          <p className="lead-empty-title" role="status">
+            {source ? "No activity from this source." : "No activity recorded yet."}
+          </p>
+          <p className="lead-empty-desc">
+            When visitors tap your card or scan your QR code, engagement statistics will appear here.
+          </p>
+        </div>
+      )}
+
+      {!!visible?.length && (
+        <div className="analytics-stat-grid">
+          {visible.map(item => {
+            const eventLabel =
+              item.label ??
+              ({ VIEW: "Profile views", SAVE: "Contact-save clicks", LINK: "Website clicks", LEAD: "Leads" }[item.event] ?? item.event);
+            const sourceName = item.source === "NFC" ? "Tap" : item.source === "QR" ? "Scan" : "Direct link";
+            const modeName = item.campaign || item.mode;
+
+            return (
+              <div
+                key={JSON.stringify([item.mode, item.campaign, item.source, item.event])}
+                className="analytics-stat-tile"
+              >
+                <div className="analytics-stat-top">
+                  <span className="analytics-stat-tag">
+                    <span className={`analytics-source-dot is-${item.source.toLowerCase()}`} />
+                    {sourceName} · {modeName}
+                  </span>
+                  <span className="analytics-event-icon">
+                    {item.event === "VIEW" ? (
+                      <SvgEyeIcon size={14} />
+                    ) : item.event === "SAVE" ? (
+                      <SvgSaveContactIcon size={14} />
+                    ) : item.event === "LEAD" ? (
+                      <TabInboxIcon />
+                    ) : (
+                      <SvgLinkIcon size={13} />
+                    )}
+                  </span>
+                </div>
+
+                <div className="analytics-stat-number">{item.total.toLocaleString()}</div>
+                <div className="analytics-stat-title">
+                  <strong>{eventLabel} · {item.total}</strong>
+                  <span className="sr-only">{modeName} · {sourceName}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
 }
 
 export function LeadInbox({ token, companyId }: { token: string; companyId?: string }) {
@@ -1595,49 +1796,200 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
 
   async function load(before?: string) {
     if (loading) return;
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
       const query = new URLSearchParams();
       if (before) query.set("before", before);
       if (companyId) query.set("companyId", companyId);
       const page = await customerApi<{ items: ContactLead[]; nextCursor: string | null; crmEnabled?: boolean }>(
-        `/me/contact-leads${query.size ? `?${query}` : ""}`, "GET", undefined, token);
-      setItems(previous => before ? [...(previous ?? []), ...page.items] : page.items);
+        `/me/contact-leads${query.size ? `?${query}` : ""}`,
+        "GET",
+        undefined,
+        token
+      );
+      setItems(previous => (before ? [...(previous ?? []), ...page.items] : page.items));
       setNextCursor(page.nextCursor);
       setCrmEnabled(Boolean(page.crmEnabled));
     } catch (error) {
-      setError((error as { status?: number }).status === 401 ? "Your session expired. Go back to your card and sign in again." : "Could not load your inbox. Please try again.");
-    } finally { setLoading(false); }
+      setError(
+        (error as { status?: number }).status === 401
+          ? "Your session expired. Go back to your card and sign in again."
+          : "Could not load your inbox. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function forward(lead: ContactLead) {
     if (loading || !confirm("Send this visitor’s shared contact details to the connected CRM?")) return;
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
     try {
-      const { forwardedAt } = await customerApi<{ forwardedAt: string }>(`/me/contact-leads/${lead.id}/crm`, "POST", undefined, token);
-      setItems(previous => previous?.map(item => item.id === lead.id ? { ...item, forwardedAt } : item));
-    } catch (error) { setError(error instanceof Error ? error.message : "Could not send to CRM."); }
-    finally { setLoading(false); }
+      const { forwardedAt } = await customerApi<{ forwardedAt: string }>(
+        `/me/contact-leads/${lead.id}/crm`,
+        "POST",
+        undefined,
+        token
+      );
+      setItems(previous => previous?.map(item => (item.id === lead.id ? { ...item, forwardedAt } : item)));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Could not send to CRM.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  return <section className="lead-inbox" aria-labelledby="lead-inbox-heading">
-    <h2 id="lead-inbox-heading">Shared contacts</h2>
-    <p>Contacts that visitors chose to share with you.</p>
-    <button type="button" className="quiet" disabled={loading} onClick={() => void load()}>
-      {loading ? "Loading…" : items ? "Refresh inbox" : "Open inbox"}
-    </button>
-    {error && <p className="portal-error" role="alert">{error}</p>}
-    {items?.length === 0 && <p role="status">No contacts have been shared yet.</p>}
-    {companyId && !!items?.length && <label>Search loaded contacts<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, phone or employee" /></label>}
-    {!!items?.length && !visible?.length && <p role="status">No matching contacts in the loaded results.</p>}
-    {!!visible?.length && <ul>{visible.map(lead => <li key={lead.id}>
-      <strong>{lead.name}</strong> <time dateTime={lead.createdAt}>{new Date(lead.createdAt).toLocaleString()}</time>
-      {lead.recipientName && <small>Shared via {lead.recipientName}’s card</small>}
-      {lead.email && <a href={`mailto:${lead.email}`}>{lead.email}</a>}
-      {lead.phone && <a href={`tel:${lead.phone}`}>{lead.phone}</a>}
-      {lead.message && <p>{lead.message}</p>}
-      {lead.forwardedAt ? <small>Sent to CRM</small> : crmEnabled && lead.crmAllowed && <button className="quiet" type="button" disabled={loading} onClick={() => void forward(lead)}>Send to CRM</button>}
-    </li>)}</ul>}
-    {nextCursor && <button type="button" className="quiet" disabled={loading} onClick={() => void load(nextCursor)}>Load older contacts</button>}
-  </section>;
+  return (
+    <section className="lead-inbox" aria-labelledby="lead-inbox-heading">
+      <div className="lead-inbox-header-row">
+        <div className="lead-inbox-title-wrap">
+          <div className="studio-card-head-row">
+            <span className="studio-legend-icon"><TabInboxIcon /></span>
+            <div>
+              <h2 id="lead-inbox-heading" className="studio-card-title">Shared contacts</h2>
+              <p className="studio-card-helper">Contacts that visitors chose to share with you.</p>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          className="lead-action-btn lead-btn-refresh"
+          disabled={loading}
+          onClick={() => void load()}
+        >
+          <SvgRefreshIcon size={13} />
+          <span>{loading ? "Loading…" : items ? "Refresh inbox" : "Open inbox"}</span>
+        </button>
+      </div>
+
+      {error && <p className="portal-error" role="alert">{error}</p>}
+
+      {/* Search box if contacts exist */}
+      {(companyId || (items && items.length > 3)) && (
+        <div className="lead-search-bar">
+          <span className="lead-search-icon"><SvgSearchIcon size={14} /></span>
+          <input
+            type="search"
+            value={search}
+            onChange={event => setSearch(event.target.value)}
+            placeholder="Search contacts by name, email, phone or employee"
+            aria-label="Search loaded contacts"
+          />
+        </div>
+      )}
+
+      {/* Empty states */}
+      {items && items.length === 0 && (
+        <div className="lead-empty-state">
+          <span className="lead-empty-icon"><TabInboxIcon /></span>
+          <p className="lead-empty-title" role="status">No contacts have been shared yet.</p>
+          <p className="lead-empty-desc">When visitors tap &ldquo;Exchange Contact Details&rdquo; on your card, their submissions appear here.</p>
+        </div>
+      )}
+
+      {items && items.length > 0 && !visible?.length && (
+        <div className="lead-empty-state">
+          <p className="lead-empty-title" role="status">No matching contacts in the loaded results.</p>
+          <p className="lead-empty-desc">Try clearing or changing your search terms.</p>
+        </div>
+      )}
+
+      {/* Contact cards list */}
+      {!!visible?.length && (
+        <div className="lead-cards-list">
+          {visible.map(lead => (
+            <div key={lead.id} className="lead-contact-card">
+              <div className="lead-card-header">
+                <div className="lead-contact-main">
+                  <div className="lead-contact-avatar">
+                    {(lead.name || "C").trim().charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <strong className="lead-contact-name">{lead.name}</strong>
+                    {lead.recipientName && (
+                      <small className="lead-recipient-pill">
+                        Shared via {lead.recipientName}’s card
+                      </small>
+                    )}
+                  </div>
+                </div>
+                <time className="lead-time-badge" dateTime={lead.createdAt}>
+                  {formatLeadDate(lead.createdAt)}
+                </time>
+              </div>
+
+              {/* Quick Connect action pills (Email, Phone, WhatsApp) */}
+              <div className="lead-channels-row">
+                {lead.email && (
+                  <a href={`mailto:${lead.email}`} className="lead-channel-pill" title="Send email">
+                    <FormEmailIcon />
+                    <span>{lead.email}</span>
+                  </a>
+                )}
+                {lead.phone && (
+                  <a href={`tel:${lead.phone}`} className="lead-channel-pill" title="Call phone">
+                    <SvgPhoneIcon size={13} />
+                    <span>{lead.phone}</span>
+                  </a>
+                )}
+                {lead.phone && (
+                  <a
+                    href={`https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="lead-channel-pill lead-channel-whatsapp"
+                    title="Chat on WhatsApp"
+                  >
+                    <SvgWhatsAppIcon size={13} />
+                    <span>WhatsApp</span>
+                  </a>
+                )}
+              </div>
+
+              {/* Message / note if provided */}
+              {lead.message && (
+                <div className="lead-message-box">
+                  <span className="lead-message-quote">&ldquo;</span>
+                  <p>{lead.message}</p>
+                </div>
+              )}
+
+              {/* CRM forwarding footer if enabled */}
+              {(lead.forwardedAt || (crmEnabled && lead.crmAllowed)) && (
+                <div className="lead-crm-footer">
+                  {lead.forwardedAt ? (
+                    <small className="lead-crm-forwarded">
+                      <SvgCheckIcon size={12} /> Sent to CRM
+                    </small>
+                  ) : (
+                    <button
+                      className="lead-btn-crm"
+                      type="button"
+                      disabled={loading}
+                      onClick={() => void forward(lead)}
+                    >
+                      Send to CRM
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {nextCursor && (
+        <button
+          type="button"
+          className="lead-btn-load-more"
+          disabled={loading}
+          onClick={() => void load(nextCursor)}
+        >
+          {loading ? "Loading…" : "Load older contacts"}
+        </button>
+      )}
+    </section>
+  );
 }
