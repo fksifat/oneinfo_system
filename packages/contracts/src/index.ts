@@ -138,6 +138,9 @@ export const PROFILE_BIO_MAX_LENGTH = 1500;
 export const PROFILE_ABOUT_MAX_SECTIONS = 12;
 export const PROFILE_ABOUT_HEADING_MAX_LENGTH = 80;
 
+export const profileThemes = ["MIDNIGHT", "IVORY", "MINT", "SAPPHIRE", "TITANIUM"] as const;
+export type ProfileTheme = (typeof profileThemes)[number];
+
 export const CreateProfileSchema = z.object({
   publicSlug: z.string().trim().min(3).max(64).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   displayName: z.string().trim().min(2).max(120),
@@ -148,7 +151,7 @@ export const CreateProfileSchema = z.object({
   email: z.union([z.email(), z.literal("")]).default(""),
   website: z.union([HttpUrlSchema, z.literal("")]).default(""),
   avatarUrl: z.union([HttpUrlSchema, z.literal("")]).default(""),
-  theme: z.enum(["MIDNIGHT", "IVORY", "MINT"]).default("MIDNIGHT"),
+  theme: z.enum(profileThemes).default("MIDNIGHT"),
   published: z.boolean().default(false),
   links: z.array(ProfileLinkSchema).max(12).default([]),
 });

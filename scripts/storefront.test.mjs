@@ -904,3 +904,31 @@ test("account security card has luxury UI, omits native accordion details, and s
   assert.match(stylesCss, /\.security-submit-btn\s*\{/);
   assert.match(stylesCss, /\.security-fields-grid\s*\{/);
 });
+
+test("profile themes include Royal Sapphire and Titanium Noir with clean isolated studio cards and high contrast text", () => {
+  // Contracts validation includes new professional themes
+  assert.equal(CustomerProfileSchema.parse({ displayName: "Sapphire Lead", theme: "SAPPHIRE" }).theme, "SAPPHIRE");
+  assert.equal(CustomerProfileSchema.parse({ displayName: "Titanium Lead", theme: "TITANIUM" }).theme, "TITANIUM");
+
+  // CardPortal renders all 5 themes with dedicated banners and accessible select
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  assert.match(cardPortalSrc, /Royal Sapphire/);
+  assert.match(cardPortalSrc, /Titanium Noir/);
+  assert.match(cardPortalSrc, /SAPPHIRE/);
+  assert.match(cardPortalSrc, /TITANIUM/);
+  assert.match(cardPortalSrc, /theme-banner-\$\{theme\.id\.toLowerCase\(\)\}/);
+
+  // ProfileView supports dynamic wire styling for both new themes
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  assert.match(profileViewSrc, /themeUpper === "SAPPHIRE"/);
+  assert.match(profileViewSrc, /themeUpper === "TITANIUM"/);
+
+  // Stylesheet includes scoped variables and isolated tile covers without leaky rules
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.profile-page\.theme-sapphire\s*\{/);
+  assert.match(stylesCss, /\.profile-page\.theme-titanium\s*\{/);
+  assert.match(stylesCss, /\.theme-banner-sapphire\s*\{/);
+  assert.match(stylesCss, /\.theme-banner-titanium\s*\{/);
+  assert.match(stylesCss, /\.tile-cover\.theme-ivory\s*\{/);
+  assert.doesNotMatch(stylesCss, /^\.theme-ivory\s*\{[^}]*!important/m);
+});

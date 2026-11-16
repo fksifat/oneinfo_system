@@ -599,8 +599,26 @@ export function ProfileView({
 
   const themeClass = `theme-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
   const themeUpper = (profile.theme || "MIDNIGHT").toUpperCase();
-  const wireColor = themeUpper === "MINT" ? "#10b981" : themeUpper === "IVORY" ? "#b48c48" : "#dfb877";
-  const wireMidColor = themeUpper === "MINT" ? "#059669" : themeUpper === "IVORY" ? "#8c6a2e" : "#c99c4d";
+  const wireColor =
+    themeUpper === "MINT"
+      ? "#10b981"
+      : themeUpper === "IVORY"
+      ? "#b48c48"
+      : themeUpper === "SAPPHIRE"
+      ? "#38bdf8"
+      : themeUpper === "TITANIUM"
+      ? "#cbd5e1"
+      : "#dfb877";
+  const wireMidColor =
+    themeUpper === "MINT"
+      ? "#059669"
+      : themeUpper === "IVORY"
+      ? "#8c6a2e"
+      : themeUpper === "SAPPHIRE"
+      ? "#1d4ed8"
+      : themeUpper === "TITANIUM"
+      ? "#64748b"
+      : "#c99c4d";
   const wireId = `coverWire-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
   const shineId = `coverShine-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
   const websiteLabel = profile.modeContent?.websiteLabel?.trim() || "Official Website";
