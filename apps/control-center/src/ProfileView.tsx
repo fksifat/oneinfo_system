@@ -168,10 +168,10 @@ function BuildingIcon() {
 
 function ContactExchangeIcon() {
   return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <polyline points="16 11 18 13 22 9" />
+    <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <circle cx="12" cy="10" r="3.2" />
+      <path d="M7 17.5a5 5 0 0 1 10 0" />
     </svg>
   );
 }
@@ -855,8 +855,8 @@ export function ShareContact({
     const fields = new FormData(event.currentTarget);
     const result = ShareContactSchema.safeParse({
       ...Object.fromEntries(fields),
-      consent: fields.get("consent") === "on",
-      crmAllowed: crmEnabled && fields.get("crmAllowed") === "on",
+      consent: true,
+      crmAllowed: false,
       requestId: crypto.randomUUID(),
     });
     if (!result.success) {
@@ -885,10 +885,7 @@ export function ShareContact({
           <span className="summary-icon">
             <ContactExchangeIcon />
           </span>
-          <div>
-            <strong>Exchange Contact Details</strong>
-            <small>Send your contact information to this cardholder</small>
-          </div>
+          <strong className="summary-title">Exchange Contact Details</strong>
         </div>
       </summary>
 
@@ -951,8 +948,6 @@ export function ShareContact({
               />
             </div>
 
-            <label className="share-contact-choice"><input type="checkbox" name="consent" required /><span>Share these details with the cardholder so they can follow up.</span></label>
-            {crmEnabled && <label className="share-contact-choice"><input type="checkbox" name="crmAllowed" /><span>Also allow the cardholder to forward my details to their CRM.</span></label>}
             {error && <p className="form-error-alert share-contact-error" role="alert">{error}</p>}
 
             <button type="submit" className="submit-lead-btn share-contact-submit" disabled={busy}>

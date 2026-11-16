@@ -685,3 +685,16 @@ test("quick connect action row uses authentic real SVGs for Call, Email, WhatsAp
   // Real Address location dot SVG
   assert.match(profileViewSrc, /M215\.7 499\.2C267 435 384 279\.4/);
 });
+
+test("exchange contact details card is clean, has modern centered icon, and omits extra subtitle and checkbox", () => {
+  const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
+  // Only Exchange Contact Details title remains, subtitle is removed
+  assert.match(profileViewSrc, /Exchange Contact Details/);
+  assert.doesNotMatch(profileViewSrc, /Send your contact information to this cardholder/);
+
+  // Checkbox text is removed
+  assert.doesNotMatch(profileViewSrc, /Share these details with the cardholder so they can follow up/);
+
+  // ContactExchangeIcon uses clean contact card SVG
+  assert.match(profileViewSrc, /<rect x="3" y="3" width="18" height="18" rx="4"/);
+});
