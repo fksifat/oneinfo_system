@@ -655,7 +655,8 @@ test("customer profile simplifies Save Contact button, makes share button compac
   // Authentic brand vector paths
   assert.match(profileViewSrc, /M20\.447 20\.452h-3\.554v-5\.569/); // Official LinkedIn path
   assert.match(profileViewSrc, /M12 \.297c-6\.63 0-12 5\.373/); // Official GitHub Octocat path
-  assert.match(profileViewSrc, /M7\.0301\.084c-1\.2768/); // Official Instagram camera path
+  assert.match(profileViewSrc, /igIconGrad/); // Official Instagram gradient
+  assert.match(profileViewSrc, /rect x="5\.5" y="5\.5"/); // Official Instagram camera rect
 
   // Compact share button styles
   const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
@@ -718,4 +719,26 @@ test("profile editor supports WhatsApp number toggle: asks if same as phone, hid
   assert.match(stylesCss, /\.studio-switch/);
   assert.match(stylesCss, /\.studio-slider/);
   assert.match(stylesCss, /background-color:\s*#25d366/);
+});
+
+test("platform picker removes WhatsApp from presets, uses real SVGs, cleans link formatting, and fixes popover overflow", () => {
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  // WhatsApp is omitted from PRESET_PLATFORMS
+  assert.doesNotMatch(cardPortalSrc, /\{\s*id:\s*"whatsapp",\s*label:\s*"WhatsApp"/);
+  assert.match(cardPortalSrc, /\{\s*id:\s*"facebook",\s*label:\s*"Facebook"/);
+  assert.match(cardPortalSrc, /\{\s*id:\s*"instagram",\s*label:\s*"Instagram"/);
+
+  // Link sanitizer strips empty links so safeParse does not throw
+  assert.match(cardPortalSrc, /sanitizedLinks/);
+  assert.match(cardPortalSrc, /filter\(link => Boolean\(link\.label && link\.url && \/\^https\?:/);
+
+  // Size props are passed to SocialBrandIcon
+  assert.match(cardPortalSrc, /SocialBrandIcon kind=\{brand\.kind\} size=\{22\}/);
+  assert.match(cardPortalSrc, /SocialBrandIcon kind=\{p\.id\} size=\{20\}/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  // Popover uses vertical column layout avoiding clipping
+  assert.match(stylesCss, /\.platform-popover-grid\s*\{[^}]*display:\s*flex;\s*flex-direction:\s*column;/);
+  assert.match(stylesCss, /\.popover-item-icon svg\s*\{[^}]*width:\s*100% !important;/);
+  assert.match(stylesCss, /\.platform-trigger-badge svg\s*\{[^}]*width:\s*100% !important;/);
 });

@@ -15,11 +15,10 @@ const emptyProfile: Draft = { displayName: "", headline: "", company: "", bio: "
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
 
 const PRESET_PLATFORMS = [
-  { id: "whatsapp", label: "WhatsApp", prefix: "https://wa.me/", placeholder: "https://wa.me/8801XXXXXXXXX" },
   { id: "facebook", label: "Facebook", prefix: "https://facebook.com/", placeholder: "https://facebook.com/yourprofile" },
-  { id: "youtube", label: "YouTube", prefix: "https://youtube.com/@", placeholder: "https://youtube.com/@yourchannel" },
   { id: "instagram", label: "Instagram", prefix: "https://instagram.com/", placeholder: "https://instagram.com/yourusername" },
   { id: "linkedin", label: "LinkedIn", prefix: "https://linkedin.com/in/", placeholder: "https://linkedin.com/in/yourprofile" },
+  { id: "youtube", label: "YouTube", prefix: "https://youtube.com/@", placeholder: "https://youtube.com/@yourchannel" },
   { id: "twitter", label: "X (Twitter)", prefix: "https://x.com/", placeholder: "https://x.com/yourhandle" },
   { id: "tiktok", label: "TikTok", prefix: "https://tiktok.com/@", placeholder: "https://tiktok.com/@yourusername" },
   { id: "telegram", label: "Telegram", prefix: "https://t.me/", placeholder: "https://t.me/yourusername" },
@@ -233,9 +232,22 @@ export function CardPortal({
     const currentLink = profile.links[index];
     if (!currentLink) return;
     const currentUrl = currentLink.url.trim();
-    const isUrlEmptyOrOldPrefix = !currentUrl || PRESET_PLATFORMS.some(p => p.prefix === currentUrl);
-    const nextUrl = isUrlEmptyOrOldPrefix ? chosen.prefix : currentUrl;
-    const isLabelDefault = !currentLink.label.trim() || PRESET_PLATFORMS.some(p => p.label.toLowerCase() === currentLink.label.trim().toLowerCase() || p.id === currentLink.label.trim().toLowerCase());
+
+    // Check if the current URL matched an old preset prefix
+    const oldMatchedPreset = PRESET_PLATFORMS.find(p => p.prefix && currentUrl.startsWith(p.prefix));
+    let nextUrl: string = chosen.prefix;
+    if (oldMatchedPreset && oldMatchedPreset.prefix && chosen.prefix !== "https://") {
+      const suffix = currentUrl.slice(oldMatchedPreset.prefix.length).trim();
+      nextUrl = suffix ? `${chosen.prefix}${suffix}` : chosen.prefix;
+    } else if (!currentUrl || currentUrl === "https://") {
+      nextUrl = chosen.prefix;
+    }
+
+    const isLabelDefault =
+      !currentLink.label.trim() ||
+      PRESET_PLATFORMS.some(p => p.label.toLowerCase() === currentLink.label.trim().toLowerCase() || p.id === currentLink.label.trim().toLowerCase()) ||
+      currentLink.label.toLowerCase() === "whatsapp";
+
     const nextLabel = isLabelDefault ? (chosen.id === "globe" ? "Website" : chosen.label) : currentLink.label;
     update("links", profile.links.map((item, i) => (i === index ? { ...item, label: nextLabel, url: nextUrl } : item)));
   };
@@ -329,7 +341,23 @@ export function CardPortal({
   const executeSave = () => {
     if (photoBusy) return;
     void run(async () => {
-      const parsed = CustomerProfileSchema.safeParse(profile);
+      // Clean and sanitize links: strip empty/unfilled links so they don't break validation
+      const sanitizedLinks = profile.links
+        .map((link, i) => ({
+          ...link,
+          label: link.label.trim(),
+          url: link.url.trim(),
+          sortOrder: i,
+          active: true,
+        }))
+        .filter(link => Boolean(link.label && link.url && /^https?:\/\//i.test(link.url)));
+
+      const profileToSave = {
+        ...profile,
+        links: sanitizedLinks,
+      };
+
+      const parsed = CustomerProfileSchema.safeParse(profileToSave);
       if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Check your profile details.");
       if (mode === "signup") {
         const result = await customerApi<{ accessToken: string }>("/signup", "POST", { email, password, claimToken, profile: parsed.data });
@@ -830,7 +858,7 @@ export function CardPortal({
 
                   {profile.links.length === 0 ? (
                     <div className="studio-links-empty">
-                      <p>No links added yet. Click &quot;Add link&quot; below to add WhatsApp, Facebook, LinkedIn, YouTube, or your website.</p>
+                      <p>No links added yet. Click &quot;Add link&quot; below to add Facebook, Instagram, LinkedIn, YouTube, or your website.</p>
                     </div>
                   ) : (
                     profile.links.map((link, index) => {
@@ -847,7 +875,7 @@ export function CardPortal({
                                 aria-expanded={openPlatformIndex === index}
                               >
                                 <span className="platform-trigger-badge">
-                                  <SocialBrandIcon kind={brand.kind} />
+                                  <SocialBrandIcon kind={brand.kind} size={22} />
                                 </span>
                                 <span className="platform-trigger-name">{matchedPreset?.label ?? "Select platform"}</span>
                                 <span className={`platform-trigger-arrow ${openPlatformIndex === index ? "is-open" : ""}`}>
@@ -884,7 +912,7 @@ export function CardPortal({
                                           }}
                                         >
                                           <span className="popover-item-icon">
-                                            <SocialBrandIcon kind={p.id} />
+                                            <SocialBrandIcon kind={p.id} size={20} />
                                           </span>
                                           <span className="popover-item-label">{p.label}</span>
                                           {isSelected && (
