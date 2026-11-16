@@ -133,7 +133,7 @@ export function PhotoCropperModal({ imageSrc, onClose, onConfirm, busy }: PhotoC
 
   const handleApply = async () => {
     if (!imgNatural || !imgRef.current || busy) return;
-    const outputSize = 640;
+    const outputSize = Math.min(640, Math.min(imgNatural.width, imgNatural.height));
     const canvas = document.createElement("canvas");
     canvas.width = outputSize;
     canvas.height = outputSize;
