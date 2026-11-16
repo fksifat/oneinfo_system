@@ -3367,22 +3367,34 @@ button.save-cta-share-btn,
 }
 
 /* Detailed About / Description Section */
-.profile-about-section {
-  margin: 0 clamp(16px, 4.5vw, 24px) 20px;
-}
-
+fieldset.profile-about-card,
 .profile-about-card,
 .profile-showcase-card {
   margin: 0 24px 20px;
-  padding: 14px 16px;
+  padding: 12px 18px 16px;
   border-radius: 16px;
   background: var(--profile-link-bg);
   border: 1px solid var(--profile-link-border);
   text-align: left;
+  box-sizing: border-box;
+  min-inline-size: 0;
 }
 
-.profile-about-section > .profile-about-card {
+.profile-about-legend {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  margin-left: 12px;
+  line-height: 1.2;
+}
+
+.profile-about-heading {
   margin: 0;
+  font-size: 0.94rem;
+  font-weight: 750;
+  color: var(--profile-text);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
 
 .profile-section-icon {
@@ -4005,11 +4017,12 @@ button.submit-lead-btn:disabled {
     padding-left: clamp(16px, 4.5vw, 24px);
     padding-right: clamp(16px, 4.5vw, 24px);
   }
+  fieldset.profile-about-card,
   .profile-about-card,
   .profile-showcase-card {
     margin-left: clamp(16px, 4.5vw, 24px);
     margin-right: clamp(16px, 4.5vw, 24px);
-    padding: clamp(14px, 3.5vw, 18px) clamp(16px, 4vw, 20px);
+    padding: 12px clamp(16px, 4vw, 20px) 16px;
   }
   .profile-quick-actions {
     margin-inline: clamp(16px, 4.5vw, 24px);
