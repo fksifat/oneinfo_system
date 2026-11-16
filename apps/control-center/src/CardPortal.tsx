@@ -1,7 +1,7 @@
 import { AccountSettings } from "./AccountAccess.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ActivateCardSchema, CustomerProfileSchema, type ContactLead } from "@oneinfo/contracts";
-import { ProfileView, ProfileSkeleton, ShareContact, SocialBrandIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
+import { ProfileView, ProfileSkeleton, ShareContact, SocialBrandIcon, WhatsAppIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
 import { customerApi } from "./customer-api.js";
 import type { z } from "zod";
 
@@ -556,6 +556,10 @@ export function CardPortal({
     links: profile.links.filter(l => l.url || l.label),
   };
 
+  const isWaSameAsPhone =
+    profile.modeContent?.whatsappSameAsPhone !== false &&
+    (!profile.modeContent?.whatsapp || profile.modeContent?.whatsapp === profile.phone);
+
   if (studioTab === "preview") {
     return (
       <div className="studio-fullscreen-preview">
@@ -741,6 +745,66 @@ export function CardPortal({
                       Public email
                       <input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} />
                     </label>
+
+                    {/* WhatsApp Toggle & Optional Custom Number */}
+                    <div className="studio-col-span-2 studio-whatsapp-card">
+                      <div className="studio-whatsapp-header">
+                        <div className="studio-whatsapp-info">
+                          <div className="studio-whatsapp-title">
+                            <span className="studio-wa-badge-icon" aria-hidden="true">
+                              <WhatsAppIcon size={16} />
+                            </span>
+                            <span>WhatsApp number same as phone number?</span>
+                          </div>
+                          <span className="studio-whatsapp-desc">
+                            {isWaSameAsPhone
+                              ? "Your public phone number will be used for direct WhatsApp chat."
+                              : "Enter a separate WhatsApp number below for visitors to message you."}
+                          </span>
+                        </div>
+                        <label className="studio-switch" aria-label="WhatsApp same as phone number">
+                          <input
+                            type="checkbox"
+                            checked={isWaSameAsPhone}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              update("modeContent", {
+                                ...profile.modeContent,
+                                whatsappSameAsPhone: checked,
+                                ...(checked ? { whatsapp: "" } : {}),
+                              });
+                            }}
+                          />
+                          <span className="studio-slider round" />
+                        </label>
+                      </div>
+
+                      {!isWaSameAsPhone && (
+                        <div className="studio-whatsapp-custom-field">
+                          <label>
+                            WhatsApp number
+                            <input
+                              type="tel"
+                              maxLength={40}
+                              value={profile.modeContent?.whatsapp ?? ""}
+                              placeholder="+880 1..."
+                              autoFocus
+                              onChange={(e) =>
+                                update("modeContent", {
+                                  ...profile.modeContent,
+                                  whatsapp: e.target.value,
+                                  whatsappSameAsPhone: false,
+                                })
+                              }
+                            />
+                          </label>
+                          <small className="studio-field-hint">
+                            Include your country code so visitors can start a WhatsApp conversation with one tap.
+                          </small>
+                        </div>
+                      )}
+                    </div>
+
                     <label>
                       Website URL
                       <input type="url" maxLength={500} value={profile.website} placeholder="https://..." onChange={event => update("website", event.target.value)} />

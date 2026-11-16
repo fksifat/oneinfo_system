@@ -163,6 +163,8 @@ export const ProfileModesSchema = z.object({
   EVENT: ProfileModeContentSchema.optional(),
   PORTFOLIO: ProfileModeContentSchema.optional(),
   websiteLabel: z.string().trim().max(60).optional(),
+  whatsapp: z.string().trim().max(40).optional(),
+  whatsappSameAsPhone: z.boolean().optional(),
 });
 export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true }).extend({
   profileMode: z.enum(profileModes).default("BUSINESS"), modeContent: ProfileModesSchema.default({}),
