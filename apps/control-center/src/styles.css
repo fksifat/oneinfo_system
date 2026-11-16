@@ -6539,15 +6539,18 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 /* Mobile Segmented Control Bar */
 .studio-mobile-tabs {
   display: flex;
-  gap: 6px;
-  margin-bottom: 20px;
-  background: rgba(14, 25, 36, 0.85);
+  align-items: center;
+  gap: 4px;
+  margin: 0 auto 18px auto;
+  max-width: 440px;
+  width: 100%;
+  background: rgba(14, 25, 36, 0.88);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  padding: 6px;
-  border-radius: 16px;
+  padding: 4px;
+  border-radius: 12px;
   border: 1px solid rgba(223, 184, 119, 0.2);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -6559,30 +6562,47 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
 .studio-tab-pill {
   flex: 1 1 0px;
-  min-width: max-content;
-  min-height: 38px !important;
-  padding: 6px 14px !important;
-  border-radius: 10px !important;
+  min-width: 0;
+  min-height: 32px !important;
+  padding: 5px 8px !important;
+  border-radius: 8px !important;
   border: none !important;
   background: transparent !important;
   color: #94a3b8 !important;
-  font-weight: 650 !important;
-  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  font-size: 0.76rem !important;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   margin: 0 !important;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   white-space: nowrap;
+}
+
+.studio-tab-pill:hover {
+  color: #e2e8f0 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .studio-tab-pill.is-active {
   background: linear-gradient(135deg, #dfb877 0%, #c99c4d 100%) !important;
   color: #0c151e !important;
   font-weight: 750 !important;
-  box-shadow: 0 3px 12px rgba(223, 184, 119, 0.35) !important;
+  box-shadow: 0 2px 8px rgba(223, 184, 119, 0.3) !important;
+}
+
+.studio-tab-pill svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.studio-tab-pill span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Responsive Studio Grid */
@@ -6705,6 +6725,94 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   min-height: 110px;
   line-height: 1.5;
   resize: vertical;
+}
+
+/* Studio Form Field Groups & Inline Label Elements */
+.studio-field-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.studio-field-label-row label,
+.studio-field-label-row span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #cbd5e1;
+}
+
+.studio-field-hint-inline {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #64748b;
+}
+
+/* Sleek inline WhatsApp toggle directly beside phone label */
+.studio-inline-wa-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(37, 211, 102, 0.08);
+  border: 1px solid rgba(37, 211, 102, 0.22);
+  border-radius: 9999px;
+  padding: 2px 7px 2px 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.studio-inline-wa-toggle:hover {
+  background: rgba(37, 211, 102, 0.14);
+  border-color: rgba(37, 211, 102, 0.38);
+}
+
+.studio-inline-wa-toggle .wa-icon {
+  display: flex;
+  align-items: center;
+  color: #25d366;
+}
+
+.studio-inline-wa-toggle .wa-text {
+  font-size: 0.71rem;
+  font-weight: 600;
+  color: #86efac;
+  white-space: nowrap;
+}
+
+/* Micro switch inside the inline toggle */
+.studio-inline-wa-toggle .studio-switch {
+  width: 28px;
+  height: 16px;
+  margin: 0;
+}
+
+.studio-inline-wa-toggle .studio-slider {
+  border-radius: 16px;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.16);
+}
+
+.studio-inline-wa-toggle .studio-slider:before {
+  height: 12px;
+  width: 12px;
+  left: 2px;
+  bottom: 2px;
+}
+
+.studio-inline-wa-toggle .studio-switch input:checked + .studio-slider {
+  background-color: #25d366;
+  box-shadow: 0 0 8px rgba(37, 211, 102, 0.4);
+}
+
+.studio-inline-wa-toggle .studio-switch input:checked + .studio-slider:before {
+  transform: translateX(12px);
 }
 
 /* WhatsApp toggle and custom input card in studio editor */
