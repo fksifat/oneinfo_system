@@ -271,7 +271,7 @@ function WebsiteFavicon({ url, label }: { url?: string | undefined; label?: stri
       )}
       {(!loaded || failed || !faviconUrl) && (
         <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" className="link-fallback-globe">
-          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.12))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.3))" strokeWidth="1.2" />
+          <rect x="0.6" y="0.6" width="22.8" height="22.8" rx="5.5" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.12))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.3))" strokeWidth="1.2" />
           <g stroke="var(--profile-accent, #dfb877)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" transform="translate(4.8, 4.8) scale(0.6)">
             <circle cx="12" cy="12" r="10" />
             <line x1="2" y1="12" x2="22" y2="12" />
@@ -288,7 +288,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "whatsapp":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#25D366" />
+          <rect width="24" height="24" rx="5.5" fill="#25D366" />
           <path
             fill="#ffffff"
             d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"
@@ -299,7 +299,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "facebook":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#1877F2" />
+          <rect width="24" height="24" rx="5.5" fill="#1877F2" />
           <path
             d="M13.65 19.5v-6.9h2.32l.35-2.7h-2.67V8.18c0-.78.22-1.31 1.34-1.31h1.43V4.46c-.25-.03-1.1-.11-2.09-.11-2.07 0-3.48 1.26-3.48 3.58v2.07H8.5v2.7h2.35v6.9h2.8z"
             fill="#ffffff"
@@ -318,7 +318,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
               <stop offset="100%" stopColor="#285AEB" />
             </radialGradient>
           </defs>
-          <rect width="24" height="24" rx="6" fill="url(#igIconGrad)" />
+          <rect width="24" height="24" rx="5.5" fill="url(#igIconGrad)" />
           <rect x="5.5" y="5.5" width="13" height="13" rx="3.5" stroke="#ffffff" strokeWidth="1.6" fill="none" />
           <circle cx="12" cy="12" r="3.2" stroke="#ffffff" strokeWidth="1.6" fill="none" />
           <circle cx="15.8" cy="8.2" r="0.9" fill="#ffffff" />
@@ -327,7 +327,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "linkedin":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <rect width="24" height="24" rx="5" fill="#0A66C2" />
+          <rect width="24" height="24" rx="5.5" fill="#0A66C2" />
           <path
             d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564z"
             fill="#ffffff"
@@ -337,7 +337,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "github":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#181717" />
+          <rect width="24" height="24" rx="5.5" fill="#181717" />
           <path
             d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
             fill="#ffffff"
@@ -348,17 +348,14 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "youtube":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <path
-            d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"
-            fill="#FF0000"
-          />
-          <polygon points="9.545,8.432 15.818,12 9.545,15.568" fill="#ffffff" />
+          <rect width="24" height="24" rx="5.5" fill="#FF0000" />
+          <polygon points="9.5 7.5 16.5 12 9.5 16.5" fill="#ffffff" />
         </svg>
       );
     case "twitter":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#000000" />
+          <rect width="24" height="24" rx="5.5" fill="#000000" />
           <path
             d="M14.234 10.162 22.977 0h-2.072l-7.591 8.824L7.251 0H.258l9.168 13.343L.258 24H2.33l8.016-9.318L16.749 24h6.993zm-2.837 3.299-.929-1.329L3.076 1.56h3.182l5.965 8.532.929 1.329 7.754 11.09h-3.182z"
             fill="#ffffff"
@@ -369,7 +366,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "telegram":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#2AABEE" />
+          <rect width="24" height="24" rx="5.5" fill="#2AABEE" />
           <path
             d="M18.8 6.5c.3-.1.6 0 .8.2.2.2.3.5.2.8l-2.4 11.3c-.1.4-.4.6-.7.7-.3.1-.7 0-.9-.2l-3.4-2.5-1.7 1.6c-.2.2-.5.3-.8.2-.3-.1-.5-.3-.5-.6v-2.9l6.6-6-8.2 5.1-3.4-1.1c-.4-.1-.6-.5-.6-.9 0-.4.3-.7.7-.8l14.4-5.8z"
             fill="#ffffff"
@@ -379,7 +376,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "tiktok":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#000000" />
+          <rect width="24" height="24" rx="5.5" fill="#000000" />
           <path
             d="M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"
             fill="#ffffff"
@@ -390,7 +387,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "map":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#EA4335" />
+          <rect width="24" height="24" rx="5.5" fill="#EA4335" />
           <path
             d="M12 4C8.686 4 6 6.686 6 10c0 4.5 6 10 6 10s6-5.5 6-10c0-3.314-2.686-6-6-6zm0 8.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z"
             fill="#ffffff"
@@ -400,7 +397,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "music":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#1DB954" />
+          <rect width="24" height="24" rx="5.5" fill="#1DB954" />
           <path
             d="M17.8 15.3c-.2.3-.6.4-1 .2-2.6-1.6-6-1.9-9.8-1.1-.4.1-.7-.2-.8-.5-.1-.4.2-.7.5-.8 4.2-.9 8-.6 10.9 1.2.3.2.4.6.2 1zm1.2-2.7c-.3.4-.8.5-1.2.3-3-1.9-7.6-2.4-11.2-1.3-.5.1-.9-.1-1.1-.6-.1-.5.1-.9.6-1.1 4.1-1.2 9.2-.6 12.6 1.5.4.2.5.8.3 1.2zm.1-2.8C15.5 7.8 10.1 7.7 7 8.6c-.6.2-1.1-.1-1.3-.7-.2-.5.1-1.1.7-1.3 3.6-1.1 9.6-.9 13.6 1.5.5.3.7.9.3 1.4-.3.5-.9.7-1.3.3z"
             fill="#ffffff"
@@ -410,7 +407,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "calendar":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#006BFF" />
+          <rect width="24" height="24" rx="5.5" fill="#006BFF" />
           <rect x="6" y="7" width="12" height="11" rx="2" stroke="#ffffff" strokeWidth="1.4" fill="none" />
           <line x1="6" y1="11" x2="18" y2="11" stroke="#ffffff" strokeWidth="1.4" />
           <line x1="9" y1="5.5" x2="9" y2="8" stroke="#ffffff" strokeWidth="1.4" strokeLinecap="round" />
@@ -422,7 +419,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "design":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="12" fill="#EA4C89" />
+          <rect width="24" height="24" rx="5.5" fill="#EA4C89" />
           <circle cx="12" cy="12" r="7.5" stroke="#ffffff" strokeWidth="1.4" fill="none" />
           <path
             d="M4.8 11.5c3.2-.7 6.8-.7 10-2.5M8.5 5c2.4 2.8 4.5 6.2 5.5 12.5M18 8.5c-2.1 2.2-5 3.8-10.2 4.2"
@@ -436,7 +433,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "portfolio":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
+          <rect x="0.6" y="0.6" width="22.8" height="22.8" rx="5.5" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
           <rect x="6.5" y="9" width="11" height="8.5" rx="1.8" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" fill="none" />
           <path d="M9.5 9V7a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 7v2" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinecap="round" />
           <line x1="6.5" y1="12" x2="17.5" y2="12" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" />
@@ -445,7 +442,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "shop":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
+          <rect x="0.6" y="0.6" width="22.8" height="22.8" rx="5.5" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
           <path d="M7 8.5 5.5 11.5v6a1.5 1.5 0 0 0 1.5 1.5h10a1.5 1.5 0 0 0 1.5-1.5v-6L17 8.5H7z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
           <line x1="5.5" y1="11.5" x2="18.5" y2="11.5" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" />
           <path d="M9.5 13.5a2.5 2.5 0 0 0 5 0" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinecap="round" />
@@ -454,7 +451,7 @@ export function SocialBrandIcon({ kind, url, label, size = 40 }: { kind: string;
     case "document":
       return (
         <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="11" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
+          <rect x="0.6" y="0.6" width="22.8" height="22.8" rx="5.5" fill="var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.14))" stroke="var(--profile-accent-border, rgba(223, 184, 119, 0.35))" strokeWidth="1.2" />
           <path d="M8.5 6.5h4.5l3.5 3.5v7.5a1.5 1.5 0 0 1-1.5 1.5H8.5a1.5 1.5 0 0 1-1.5-1.5v-9.5a1.5 1.5 0 0 1 1.5-1.5z" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.3" strokeLinejoin="round" fill="none" />
           <polyline points="13 6.5 13 10 16.5 10" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.2" strokeLinejoin="round" fill="none" />
           <line x1="9.5" y1="13" x2="14.5" y2="13" stroke="var(--profile-accent, #dfb877)" strokeWidth="1.1" strokeLinecap="round" />

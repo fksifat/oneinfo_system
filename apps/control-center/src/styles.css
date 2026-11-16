@@ -3503,7 +3503,7 @@ fieldset.profile-about-card,
 .social-card-icon {
   width: 44px;
   height: 44px;
-  border-radius: 50%;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3536,7 +3536,7 @@ fieldset.profile-about-card,
   width: 38px;
   height: 38px;
   object-fit: contain;
-  border-radius: 50%;
+  border-radius: 9px;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.25);
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
