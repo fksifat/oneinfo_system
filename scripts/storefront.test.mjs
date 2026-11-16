@@ -630,9 +630,8 @@ test("customer profile social links omit box background, render authentic brand 
   assert.match(profileViewSrc, /coverShine-/); // Theme-dynamic cover shine
 
   const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
-  assert.match(cardPortalSrc, /Website URL/);
-  assert.match(cardPortalSrc, /Website label/);
-  assert.match(cardPortalSrc, /modeContent.*websiteLabel/);
+  assert.match(cardPortalSrc, /PRESET_PLATFORMS/);
+  assert.match(cardPortalSrc, /Website \/ Other/);
 
   const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
   assert.match(stylesCss, /\.social-card-icon\s*\{[^}]*background:\s*transparent !important/);
@@ -700,13 +699,13 @@ test("exchange contact details card is clean, has modern centered icon, and omit
   assert.match(profileViewSrc, /<rect x="3" y="3" width="18" height="18" rx="4"/);
 });
 
-test("profile editor supports WhatsApp number toggle: asks if same as phone, hides field when same, and reveals separate field when toggled off", () => {
+test("profile editor supports WhatsApp number toggle: asks if same as phone, syncs and disables field when same, and enables custom number when toggled off", () => {
   const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
   assert.match(cardPortalSrc, /WhatsApp number same as phone number\?/);
   assert.match(cardPortalSrc, /className="studio-switch"/);
   assert.match(cardPortalSrc, /className="studio-slider round"/);
   assert.match(cardPortalSrc, /isWaSameAsPhone/);
-  assert.match(cardPortalSrc, /!isWaSameAsPhone &&/);
+  assert.match(cardPortalSrc, /disabled=\{isWaSameAsPhone\}/);
   assert.match(cardPortalSrc, /WhatsApp number/);
   assert.match(cardPortalSrc, /whatsappSameAsPhone/);
 
@@ -784,10 +783,11 @@ test("profile photo editor supports interactive crop, zoom resize, rotation and 
 test("profile editor supports compact tabs, inline WhatsApp toggle next to phone label, and dedicated Map / Address field", () => {
   const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
   assert.match(cardPortalSrc, /className="studio-inline-wa-toggle"/);
-  assert.match(cardPortalSrc, /Same on WhatsApp/);
+  assert.match(cardPortalSrc, /Same as phone/);
   assert.match(cardPortalSrc, /Address \/ Map location/);
   assert.match(cardPortalSrc, /Google Maps link or physical address/);
   assert.match(cardPortalSrc, /studio-tab-preview-only/);
+  assert.match(cardPortalSrc, /isWaSameAsPhone \? profile\.phone/);
 
   const profileViewSrc = readFileSync("apps/control-center/src/ProfileView.tsx", "utf8");
   assert.match(profileViewSrc, /profile\.modeContent\?\.mapUrl\?\.trim\(\)\s*\|\|\s*profile\.modeContent\?\.address\?\.trim\(\)/);
@@ -796,4 +796,5 @@ test("profile editor supports compact tabs, inline WhatsApp toggle next to phone
   assert.match(stylesCss, /\.studio-inline-wa-toggle/);
   assert.match(stylesCss, /\.studio-field-label-row/);
   assert.match(stylesCss, /\.studio-mobile-tabs\s*\{[^}]*max-width:\s*440px/);
+  assert.match(stylesCss, /\.studio-form-grid input\.is-synced-disabled/);
 });

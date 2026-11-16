@@ -761,22 +761,40 @@ export function CardPortal({
                       Headline / profession
                       <input maxLength={160} value={profile.headline} placeholder="e.g. Founder &amp; CEO" onChange={event => update("headline", event.target.value)} />
                     </label>
-                    <label className="studio-col-span-2">
+                    {/* Row 2: Company on left, Public email on right */}
+                    <label>
                       Company
                       <input maxLength={120} value={profile.company} placeholder="e.g. Arise Studio" onChange={event => update("company", event.target.value)} />
                     </label>
-                    {/* Public phone with inline WhatsApp toggle */}
+
+                    <label>
+                      Public email
+                      <input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} />
+                    </label>
+
+                    {/* Row 3: Public phone on left, WhatsApp number with sync toggle on right */}
+                    <label>
+                      Public phone
+                      <input
+                        id="studio-field-phone"
+                        type="tel"
+                        maxLength={40}
+                        value={profile.phone}
+                        placeholder="+880..."
+                        onChange={event => update("phone", event.target.value)}
+                      />
+                    </label>
+
                     <div className="studio-field-group">
                       <div className="studio-field-label-row">
-                        <label htmlFor="studio-field-phone">Public phone</label>
+                        <label htmlFor="studio-whatsapp-field" className="studio-field-label-inline">
+                          <WhatsAppIcon size={14} /> WhatsApp number
+                        </label>
                         <div
                           className="studio-inline-wa-toggle"
                           title="WhatsApp number same as phone number?"
                         >
-                          <span className="wa-icon" aria-hidden="true">
-                            <WhatsAppIcon size={13} />
-                          </span>
-                          <span className="wa-text">Same on WhatsApp</span>
+                          <span className="wa-text">Same as phone</span>
                           <label className="studio-switch" aria-label="WhatsApp number same as phone number?">
                             <input
                               type="checkbox"
@@ -795,56 +813,22 @@ export function CardPortal({
                         </div>
                       </div>
                       <input
-                        id="studio-field-phone"
+                        id="studio-whatsapp-field"
                         type="tel"
                         maxLength={40}
-                        value={profile.phone}
-                        placeholder="+880..."
-                        onChange={event => update("phone", event.target.value)}
+                        value={isWaSameAsPhone ? profile.phone : (profile.modeContent?.whatsapp ?? "")}
+                        placeholder={isWaSameAsPhone ? (profile.phone || "Same as public phone") : "+880 1..."}
+                        disabled={isWaSameAsPhone}
+                        className={isWaSameAsPhone ? "is-synced-disabled" : ""}
+                        onChange={(e) =>
+                          update("modeContent", {
+                            ...profile.modeContent,
+                            whatsapp: e.target.value,
+                            whatsappSameAsPhone: false,
+                          })
+                        }
                       />
                     </div>
-
-                    <label>
-                      Public email
-                      <input type="email" value={profile.email} placeholder="you@domain.com" onChange={event => update("email", event.target.value)} />
-                    </label>
-
-                    {/* Separate WhatsApp number field when toggled OFF */}
-                    {!isWaSameAsPhone && (
-                      <div className="studio-col-span-2 studio-whatsapp-custom-field">
-                        <label>
-                          <span className="studio-field-label-inline">
-                            <WhatsAppIcon size={14} /> WhatsApp number
-                          </span>
-                          <input
-                            type="tel"
-                            maxLength={40}
-                            value={profile.modeContent?.whatsapp ?? ""}
-                            placeholder="+880 1..."
-                            autoFocus
-                            onChange={(e) =>
-                              update("modeContent", {
-                                ...profile.modeContent,
-                                whatsapp: e.target.value,
-                                whatsappSameAsPhone: false,
-                              })
-                            }
-                          />
-                        </label>
-                        <small className="studio-field-hint">
-                          Include country code (e.g. +880) so visitors can chat directly on WhatsApp.
-                        </small>
-                      </div>
-                    )}
-
-                    <label>
-                      Website URL
-                      <input type="url" maxLength={500} value={profile.website} placeholder="https://..." onChange={event => update("website", event.target.value)} />
-                    </label>
-                    <label>
-                      Website label
-                      <input maxLength={40} value={profile.modeContent?.websiteLabel ?? ""} placeholder="Official Website" onChange={event => update("modeContent", { ...profile.modeContent, websiteLabel: event.target.value })} />
-                    </label>
 
                     {/* Address / Google Maps Location Field */}
                     <label className="studio-col-span-2">

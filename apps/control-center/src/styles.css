@@ -6815,6 +6815,31 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   transform: translateX(12px);
 }
 
+.studio-field-label-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0 !important;
+}
+
+.studio-field-label-inline svg {
+  color: #25d366;
+  flex-shrink: 0;
+}
+
+.studio-form-grid input.is-synced-disabled,
+.studio-form-grid input:disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+  box-shadow: none !important;
+}
+
 /* WhatsApp toggle and custom input card in studio editor */
 .studio-whatsapp-card {
   background: rgba(255, 255, 255, 0.03);
