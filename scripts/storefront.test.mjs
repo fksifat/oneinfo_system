@@ -669,8 +669,12 @@ test("quick connect action row uses authentic real SVGs for Call, Email, WhatsAp
   assert.match(profileViewSrc, /<span className="action-text">Address<\/span>/);
   assert.doesNotMatch(profileViewSrc, /<span className="action-text">Map<\/span>/);
 
-  // Real WhatsApp SVG with speech bubble and phone
+  // Real WhatsApp SVG with speech bubble, enlarged handset and balanced size
   assert.match(profileViewSrc, /M380\.9 97\.1C339 55\.1 283\.2 32 223\.9 32/);
+  assert.match(profileViewSrc, /scale\(1\.25\)/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.action-icon\.action-wa svg\s*\{[^}]*width:\s*clamp\(21px,\s*5\.2vw,\s*23px\);/);
 
   // Real Phone handset SVG
   assert.match(profileViewSrc, /M164\.9 24\.6c-7\.7-18\.6-28-28\.5/);
