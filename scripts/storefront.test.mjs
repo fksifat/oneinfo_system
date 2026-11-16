@@ -742,3 +742,20 @@ test("platform picker removes WhatsApp from presets, uses real SVGs, cleans link
   assert.match(stylesCss, /\.popover-item-icon svg\s*\{[^}]*width:\s*100% !important;/);
   assert.match(stylesCss, /\.platform-trigger-badge svg\s*\{[^}]*width:\s*100% !important;/);
 });
+
+test("profile editor keeps save button floating on screen with glassmorphic sticky dock", () => {
+  const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
+  // Save buttons include SvgCheckIcon and accessible label
+  assert.match(cardPortalSrc, /<button type="submit" className="studio-save-button"[^>]*>\s*<SvgCheckIcon size=\{16\} \/>/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  // Studio save action is sticky floating at viewport bottom with blur and shadow
+  assert.match(stylesCss, /\.studio-save-action\s*\{[^}]*position:\s*sticky;/);
+  assert.match(stylesCss, /\.studio-save-action\s*\{[^}]*bottom:\s*max\(16px/);
+  assert.match(stylesCss, /\.studio-save-action\s*\{[^}]*backdrop-filter:\s*blur/);
+  assert.match(stylesCss, /\.studio-save-action\s*\{[^}]*z-index:\s*95;/);
+  assert.match(stylesCss, /\.studio-sticky-preview\s*\{[^}]*position:\s*sticky;\s*top:\s*24px;/);
+
+  // Portal container uses overflow-x: clip so position: sticky is not broken
+  assert.match(stylesCss, /\.card-portal\.card-portal-studio\s*\{[^}]*overflow-x:\s*clip;/);
+});
