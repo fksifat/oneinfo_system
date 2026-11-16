@@ -999,8 +999,9 @@ export function CardPortal({
                 </fieldset>
 
                 <div className="studio-save-action">
-                  <button className="studio-save-button" disabled={busy || photoBusy}>
-                    {photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}
+                  <button type="submit" className="studio-save-button" disabled={busy || photoBusy}>
+                    <SvgCheckIcon size={16} />
+                    <span>{photoBusy ? "Uploading photo…" : busy ? "Saving…" : mode === "signup" ? "Create account & save profile" : claimToken ? "Save & claim card" : "Save profile"}</span>
                   </button>
                   <span className="studio-save-note">Save your changes to update the profile linked to your card.</span>
                 </div>
@@ -1100,8 +1101,9 @@ export function CardPortal({
                   </fieldset>
 
                   <div className="studio-save-action">
-                    <button className="studio-save-button" disabled={busy || photoBusy}>
-                      {busy ? "Saving…" : "Save card settings"}
+                    <button type="submit" className="studio-save-button" disabled={busy || photoBusy}>
+                      <SvgCheckIcon size={16} />
+                      <span>{busy ? "Saving…" : "Save card settings"}</span>
                     </button>
                     <span className="studio-save-note">Theme and card mode will update instantly.</span>
                   </div>
