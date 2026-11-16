@@ -805,8 +805,19 @@ test("social links editor arranges all 4 elements (platform, label, url, remove)
   assert.match(cardPortalSrc, /studio-links-table-header/);
   assert.match(cardPortalSrc, /studio-link-label-col/);
   assert.match(cardPortalSrc, /studio-link-url-col/);
+  assert.match(cardPortalSrc, /studio-card-legend/);
+  assert.match(cardPortalSrc, /studio-legend-icon/);
+  assert.match(cardPortalSrc, /SvgGlobeIcon/);
+  assert.match(cardPortalSrc, /SvgUserIcon/);
+  assert.match(cardPortalSrc, /studio-mobile-field-tag/);
+  assert.match(cardPortalSrc, /htmlFor="studio-field-phone"/);
 
   const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
   assert.match(stylesCss, /\.studio-links-table-header\s*\{[^}]*grid-template-columns/);
-  assert.match(stylesCss, /\.studio-link-item\s*\{[^}]*grid-template-columns:\s*minmax\(140px/);
+  assert.match(stylesCss, /\.studio-link-item\s*\{[^}]*grid-template-columns:\s*minmax\(125px/);
+  assert.match(stylesCss, /\.studio-card-legend/);
+  assert.match(stylesCss, /\.studio-legend-icon/);
+  assert.match(stylesCss, /\.studio-field-label-row\s*\{[^}]*min-height:\s*26px/);
+  assert.match(stylesCss, /\.studio-link-item \.studio-btn-remove\s*\{[^}]*width:\s*38px/);
+  assert.match(stylesCss, /@media \(max-width:\s*680px\)\s*\{\s*\.studio-link-item\s*\{[^}]*grid-template-columns:\s*1fr\s*38px/);
 });

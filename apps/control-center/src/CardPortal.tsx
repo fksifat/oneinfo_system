@@ -164,6 +164,74 @@ function SvgCloseIcon({ size = 12 }: { size?: number }) {
   );
 }
 
+function SvgUserIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  );
+}
+
+function SvgGlobeIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="2" y1="12" x2="22" y2="12" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
+}
+
+function SvgTagIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+      <line x1="7" y1="7" x2="7.01" y2="7" />
+    </svg>
+  );
+}
+
+function SvgLinkIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  );
+}
+
+function SvgPaletteIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" />
+      <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" />
+      <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" />
+      <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" />
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.563-2.512 5.563-5.563C22 6.5 17.5 2 12 2z" />
+    </svg>
+  );
+}
+
+function SvgLayersIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 2 7 12 12 22 7 12 2" />
+      <polyline points="2 17 12 22 22 17" />
+      <polyline points="2 12 12 17 22 12" />
+    </svg>
+  );
+}
+
+function SvgLockIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </svg>
+  );
+}
+
 export function CardPortal({
   slug,
   initialCard,
@@ -737,7 +805,10 @@ export function CardPortal({
               <form onSubmit={save} className="studio-form">
                 {mode === "signup" && (
                   <fieldset className="studio-card">
-                    <legend>Private account</legend>
+                    <legend className="studio-card-legend">
+                      <span className="studio-legend-icon"><SvgLockIcon size={14} /></span>
+                      <span>Private account</span>
+                    </legend>
                     <label>
                       Account email
                       <input type="email" autoComplete="username" required value={email} onChange={event => setEmail(event.target.value)} />
@@ -750,7 +821,10 @@ export function CardPortal({
                 )}
 
                 <fieldset className="studio-card">
-                  <legend>Public profile</legend>
+                  <legend className="studio-card-legend">
+                    <span className="studio-legend-icon"><SvgUserIcon size={14} /></span>
+                    <span>Public profile</span>
+                  </legend>
                   <ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
                   <div className="studio-form-grid">
                     <label>
@@ -773,8 +847,12 @@ export function CardPortal({
                     </label>
 
                     {/* Row 3: Public phone on left, WhatsApp number with sync toggle on right */}
-                    <label>
-                      Public phone
+                    <div className="studio-field-group">
+                      <div className="studio-field-label-row">
+                        <label htmlFor="studio-field-phone" className="studio-field-label-inline">
+                          Public phone
+                        </label>
+                      </div>
                       <input
                         id="studio-field-phone"
                         type="tel"
@@ -783,7 +861,7 @@ export function CardPortal({
                         placeholder="+880..."
                         onChange={event => update("phone", event.target.value)}
                       />
-                    </label>
+                    </div>
 
                     <div className="studio-field-group">
                       <div className="studio-field-label-row">
@@ -851,7 +929,10 @@ export function CardPortal({
                 </fieldset>
 
                 <fieldset className="studio-card studio-social-fieldset">
-                  <legend>Social &amp; other links</legend>
+                  <legend className="studio-card-legend">
+                    <span className="studio-legend-icon"><SvgGlobeIcon size={14} /></span>
+                    <span>Social &amp; other links</span>
+                  </legend>
 
                   <div className="studio-links-header">
                     <p className="studio-card-helper">Add your social channels, messaging apps, and website links:</p>
@@ -865,9 +946,9 @@ export function CardPortal({
                   ) : (
                     <>
                       <div className="studio-links-table-header" aria-hidden="true">
-                        <span className="col-platform">Platform</span>
-                        <span className="col-label">Label</span>
-                        <span className="col-url">URL</span>
+                        <span className="col-platform"><SvgGlobeIcon size={11} /> Platform</span>
+                        <span className="col-label"><SvgTagIcon size={11} /> Label</span>
+                        <span className="col-url"><SvgLinkIcon size={11} /> URL</span>
                         <span className="col-action">Action</span>
                       </div>
                       {profile.links.map((link, index) => {
@@ -952,6 +1033,9 @@ export function CardPortal({
 
                             {/* 2. Label input */}
                             <div className="studio-link-field studio-link-label-col">
+                              <span className="studio-mobile-field-tag" aria-hidden="true">
+                                <SvgTagIcon size={11} /> Label
+                              </span>
                               <input
                                 required
                                 maxLength={40}
@@ -964,6 +1048,9 @@ export function CardPortal({
 
                             {/* 3. URL input */}
                             <div className="studio-link-field studio-link-url-col">
+                              <span className="studio-mobile-field-tag" aria-hidden="true">
+                                <SvgLinkIcon size={11} /> URL
+                              </span>
                               <input
                                 required
                                 type="url"
@@ -986,8 +1073,8 @@ export function CardPortal({
                               title="Remove link"
                               aria-label={`Remove link ${index + 1}`}
                             >
-                              <SvgTrashIcon size={14} />
-                              <span className="studio-btn-remove-text">Remove link</span>
+                              <SvgTrashIcon size={15} />
+                              <span className="sr-only">Remove link</span>
                             </button>
                           </div>
                         );
@@ -1026,7 +1113,10 @@ export function CardPortal({
               <div className="studio-settings-tab-view">
                 <form onSubmit={save} className="studio-form">
                   <fieldset className="studio-card">
-                    <legend>Card theme</legend>
+                    <legend className="studio-card-legend">
+                      <span className="studio-legend-icon"><SvgPaletteIcon size={14} /></span>
+                      <span>Card theme</span>
+                    </legend>
                     <p className="studio-card-helper">Choose the color palette and atmosphere for your digital card:</p>
                     <div className="studio-theme-grid">
                       {(["MIDNIGHT", "IVORY", "MINT"] as const).map(themeName => (
@@ -1074,7 +1164,10 @@ export function CardPortal({
                   </fieldset>
 
                   <fieldset className="studio-card">
-                    <legend>Card mode</legend>
+                    <legend className="studio-card-legend">
+                      <span className="studio-legend-icon"><SvgLayersIcon size={14} /></span>
+                      <span>Card mode</span>
+                    </legend>
                     <p className="studio-card-helper">Switch between business card, event badge, or portfolio presentation:</p>
                     <div className="studio-mode-pills">
                       {(["BUSINESS", "EVENT", "PORTFOLIO"] as const).map(m => (

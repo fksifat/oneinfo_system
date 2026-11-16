@@ -6642,12 +6642,30 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   margin-bottom: 20px;
 }
 
-.studio-card legend {
+.studio-card legend,
+.studio-card-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   font-size: 1.05rem;
   font-weight: 800;
   color: #dfb877;
   padding: 0 8px;
   letter-spacing: -0.01em;
+}
+
+.studio-legend-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(223, 184, 119, 0.12);
+  color: #dfb877;
+  border: 1px solid rgba(223, 184, 119, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
 }
 
 .studio-card label {
@@ -6656,6 +6674,13 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   font-size: 0.83rem;
   font-weight: 650;
   color: #cbd5e1;
+}
+
+.studio-card .studio-field-group label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
 }
 
 .studio-card input,
@@ -6738,7 +6763,8 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
+  min-height: 26px;
+  margin-bottom: 7px;
 }
 
 .studio-field-label-row label,
@@ -7534,9 +7560,9 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 /* Table header for links list on desktop */
 .studio-links-table-header {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) minmax(120px, 160px) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(125px, 145px) minmax(95px, 115px) minmax(200px, 1fr) 38px;
   gap: 10px;
-  padding: 0 14px 6px 14px;
+  padding: 0 12px 6px 12px;
   font-size: 0.72rem;
   font-weight: 700;
   text-transform: uppercase;
@@ -7545,12 +7571,18 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   align-items: center;
 }
 
-.studio-links-table-header .col-action {
-  text-align: right;
-  padding-right: 4px;
+.studio-links-table-header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
-@media (max-width: 640px) {
+.studio-links-table-header .col-action {
+  text-align: center;
+  justify-content: center;
+}
+
+@media (max-width: 680px) {
   .studio-links-table-header {
     display: none;
   }
@@ -7559,12 +7591,12 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 /* Link Card Item - 4 items in 1 single sleek row */
 .studio-link-item {
   display: grid;
-  grid-template-columns: minmax(140px, 180px) minmax(120px, 160px) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(125px, 145px) minmax(95px, 115px) minmax(200px, 1fr) 38px;
   align-items: center;
   gap: 10px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.03);
   margin-bottom: 10px;
   transition: all 0.2s ease;
@@ -7585,8 +7617,13 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
 .studio-link-item .studio-platform-trigger {
   min-height: 40px !important;
-  padding: 6px 12px !important;
+  padding: 6px 10px !important;
   font-size: 0.85rem !important;
+  gap: 7px !important;
+}
+
+.studio-mobile-field-tag {
+  display: none;
 }
 
 .studio-link-field input {
@@ -7600,33 +7637,35 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .studio-link-item .studio-btn-remove {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 40px !important;
-  padding: 6px 14px !important;
+  justify-content: center;
+  width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
   border: 1px solid rgba(239, 68, 68, 0.22) !important;
   border-radius: 10px !important;
   background: rgba(239, 68, 68, 0.08) !important;
   color: #f87171 !important;
-  font-weight: 650 !important;
-  font-size: 0.8rem !important;
   cursor: pointer;
   transition: all 0.15s ease;
   margin: 0 !important;
-  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .studio-link-item .studio-btn-remove:hover {
-  background: rgba(239, 68, 68, 0.18) !important;
+  background: rgba(239, 68, 68, 0.2) !important;
   border-color: #ef4444 !important;
   color: #ffffff !important;
-  text-decoration: none;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.3) !important;
 }
 
-@media (max-width: 640px) {
+@media (max-width: 680px) {
   .studio-link-item {
-    grid-template-columns: 1fr auto;
-    gap: 8px;
+    grid-template-columns: 1fr 38px;
+    gap: 10px 8px;
     padding: 12px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.035);
   }
 
   .studio-link-item .studio-platform-picker {
@@ -7635,6 +7674,8 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
   .studio-link-item .studio-btn-remove {
     grid-column: 2 / 3;
+    width: 38px !important;
+    height: 38px !important;
   }
 
   .studio-link-label-col {
@@ -7643,6 +7684,18 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
   .studio-link-url-col {
     grid-column: 1 / 3;
+  }
+
+  .studio-mobile-field-tag {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.72rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8fa5b5;
+    margin-bottom: 4px;
   }
 }
 
