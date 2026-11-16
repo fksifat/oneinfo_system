@@ -3250,6 +3250,11 @@ a.quick-action-btn,
 
 
 
+.action-icon.action-wa svg {
+  width: clamp(21px, 5.2vw, 23px);
+  height: clamp(21px, 5.2vw, 23px);
+}
+
 .action-icon.action-wa:hover {
   background: rgba(37, 211, 102, 0.18);
   border-color: #25d366 !important;
