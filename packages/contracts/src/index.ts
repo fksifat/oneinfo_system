@@ -176,6 +176,7 @@ export const ProfileModesSchema = z.object({
   whatsappSameAsPhone: z.boolean().optional(),
   mapUrl: z.string().trim().max(500).optional(),
   address: z.string().trim().max(300).optional(),
+  coverUrl: z.union([HttpUrlSchema, z.literal("")]).optional(),
 });
 export const CustomerProfileSchema = CreateProfileSchema.omit({ publicSlug: true, published: true }).extend({
   bio: z.string().max(PROFILE_BIO_MAX_LENGTH).default(""),
