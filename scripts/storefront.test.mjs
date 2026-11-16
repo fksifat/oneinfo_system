@@ -953,6 +953,8 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(cardPortalSrc, /analytics-stat-source-badge/);
   assert.match(cardPortalSrc, /analytics-controls-row/);
   assert.match(cardPortalSrc, /analytics-select-box/);
+  // Redundant "Shared via" text removed as requested for professional luxury look
+  assert.doesNotMatch(cardPortalSrc, /Shared via /);
   // Quick link chips removed as requested
   assert.doesNotMatch(cardPortalSrc, /analytics-quick-links-row/);
 
