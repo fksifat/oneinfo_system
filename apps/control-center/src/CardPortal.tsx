@@ -1,6 +1,6 @@
 import { AccountSettings } from "./AccountAccess.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ActivateCardSchema, CustomerProfileSchema, type ContactLead } from "@oneinfo/contracts";
+import { ActivateCardSchema, CustomerProfileSchema, HttpUrlSchema, type ContactLead } from "@oneinfo/contracts";
 import { ProfileView, ProfileSkeleton, ShareContact, SocialBrandIcon, WhatsAppIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
 import { customerApi } from "./customer-api.js";
 import type { z } from "zod";
@@ -256,6 +256,7 @@ export function CardPortal({
   const lastEditorTabRef = useRef<"edit" | "settings" | "contacts">("edit");
   const [openPlatformIndex, setOpenPlatformIndex] = useState<number | null>(null);
   const [profile, setProfile] = useState<Draft>(emptyProfile);
+  const [hasSavedWebsite, setHasSavedWebsite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState("");
@@ -370,6 +371,7 @@ export function CardPortal({
   async function loadOwner(accessToken: string) {
     const owner = await customerApi<{ email: string; profile: Draft; cards: { publicSlug: string }[] }>(claimToken ? "/me" : `/me?cardSlug=${encodeURIComponent(slug)}`, "GET", undefined, accessToken);
     if (!claimToken && !owner.cards.some(card => card.publicSlug === slug)) throw new Error("Your account does not own this card. Start activation to claim an unactivated card.");
+    setHasSavedWebsite(Boolean(owner.profile.website));
     setEmail(owner.email); setProfile({ ...emptyProfile, ...owner.profile }); navigate("details");
   }
   useEffect(() => {
@@ -422,6 +424,7 @@ export function CardPortal({
 
       const profileToSave = {
         ...profile,
+        website: profile.website.trim(),
         links: sanitizedLinks,
       };
 
@@ -643,13 +646,13 @@ export function CardPortal({
       bio: profile.bio || "",
       phone: profile.phone || "",
       email: profile.email || "",
-      website: profile.website || "",
+      website: HttpUrlSchema.safeParse(profile.website.trim()).data ?? "",
       avatarUrl: profile.avatarUrl || "",
       theme: profile.theme,
       profileMode: profile.profileMode,
       modeContent: profile.modeContent,
     },
-    links: profile.links.filter(l => l.url || l.label),
+    links: profile.links.filter(link => link.label.trim() && HttpUrlSchema.safeParse(link.url.trim()).success),
   };
 
   const isWaSameAsPhone =
@@ -707,6 +710,7 @@ export function CardPortal({
               <button
                 type="button"
                 className="quiet studio-btn-back"
+                aria-label="Back to card"
                 disabled={busy}
                 onClick={() => navigate("public")}
               >
@@ -802,7 +806,7 @@ export function CardPortal({
           <div className="studio-editor-column">
             {/* Tab: Edit Profile */}
             {studioTab === "edit" && (
-              <form onSubmit={save} className="studio-form">
+              <form onSubmit={save} className="studio-form studio-profile-form">
                 {mode === "signup" && (
                   <fieldset className="studio-card">
                     <legend className="studio-card-legend">
@@ -910,14 +914,11 @@ export function CardPortal({
 
                     {/* Address / Google Maps Location Field */}
                     <label className="studio-col-span-2">
-                      <div className="studio-field-label-row">
-                        <span>Address / Map location</span>
-                        <span className="studio-field-hint-inline">Google Maps link or physical address</span>
-                      </div>
+                      Address or map link
                       <input
                         maxLength={300}
                         value={profile.modeContent?.mapUrl ?? ""}
-                        placeholder="e.g. https://maps.app.goo.gl/... or House 12, Road 4, Dhanmondi, Dhaka"
+                        placeholder="Street address or Google Maps URL"
                         onChange={event => update("modeContent", { ...profile.modeContent, mapUrl: event.target.value })}
                       />
                     </label>
@@ -936,8 +937,58 @@ export function CardPortal({
 
                   <div className="studio-links-header">
                     <p className="studio-card-helper">Add your social channels, messaging apps, and website links:</p>
-                    <span className="studio-links-counter">{profile.links.length} / 12 links</span>
+                    <span className="studio-links-counter">{profile.links.length} / 12 {hasSavedWebsite ? "additional links" : "links"}</span>
                   </div>
+
+                  {(hasSavedWebsite || profile.links.length > 0) && (
+                    <div className="studio-links-table-header" aria-hidden="true">
+                      <span className="col-platform"><SvgGlobeIcon size={11} /> Platform</span>
+                      <span className="col-label"><SvgTagIcon size={11} /> Label</span>
+                      <span className="col-url"><SvgLinkIcon size={11} /> URL</span>
+                      <span className="col-action">Action</span>
+                    </div>
+                  )}
+
+                  {hasSavedWebsite && (
+                    <div className="studio-link-item" role="group" aria-label="Saved website">
+                      <span className="studio-website-kind"><SvgGlobeIcon size={14} /> Website</span>
+                      <div className="studio-link-field studio-link-label-col">
+                        <span className="studio-mobile-field-tag" aria-hidden="true"><SvgTagIcon size={11} /> Label</span>
+                        <input
+                          aria-label="Website label"
+                          placeholder="Official Website"
+                          maxLength={40}
+                          value={profile.modeContent?.websiteLabel ?? ""}
+                          onChange={event => update("modeContent", { ...profile.modeContent, websiteLabel: event.target.value })}
+                        />
+                      </div>
+                      <div className="studio-link-field studio-link-url-col">
+                        <span className="studio-mobile-field-tag" aria-hidden="true"><SvgLinkIcon size={11} /> URL</span>
+                        <input
+                          aria-label="Website URL"
+                          type="url"
+                          placeholder="https://…"
+                          maxLength={500}
+                          value={profile.website}
+                          onChange={event => update("website", event.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="quiet studio-btn-remove"
+                        aria-label="Remove website"
+                        title="Remove website"
+                        disabled={!profile.website && !profile.modeContent?.websiteLabel}
+                        onClick={() => setProfile(previous => ({
+                          ...previous,
+                          website: "",
+                          modeContent: { ...previous.modeContent, websiteLabel: "" },
+                        }))}
+                      >
+                        <SvgTrashIcon size={15} />
+                      </button>
+                    </div>
+                  )}
 
                   {profile.links.length === 0 ? (
                     <div className="studio-links-empty">
@@ -945,12 +996,6 @@ export function CardPortal({
                     </div>
                   ) : (
                     <>
-                      <div className="studio-links-table-header" aria-hidden="true">
-                        <span className="col-platform"><SvgGlobeIcon size={11} /> Platform</span>
-                        <span className="col-label"><SvgTagIcon size={11} /> Label</span>
-                        <span className="col-url"><SvgLinkIcon size={11} /> URL</span>
-                        <span className="col-action">Action</span>
-                      </div>
                       {profile.links.map((link, index) => {
                         const brand = detectSocialBrand(link.url, link.label);
                         const matchedPreset = PRESET_PLATFORMS.find(p => p.id === brand.kind) ?? PRESET_PLATFORMS[PRESET_PLATFORMS.length - 1];
@@ -1280,8 +1325,6 @@ export function CardPortal({
 
               <p className="studio-preview-caption">Updates in real-time as you type. Save your changes to share them with visitors.</p>
             </div>
-
-            <small className="profile-footer">Powered by AriseStudio</small>
           </aside>
         </div>
 
