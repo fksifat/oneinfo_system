@@ -76,10 +76,10 @@ function MapPinIcon() {
 
 function SaveContactIcon() {
   return (
-    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-      <path d="M12 11v6m-3-3 3 3 3-3" />
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="4" />
+      <circle cx="12" cy="10" r="3.2" />
+      <path d="M7 17.5a5 5 0 0 1 10 0" />
     </svg>
   );
 }
