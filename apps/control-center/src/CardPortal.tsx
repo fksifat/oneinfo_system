@@ -1428,8 +1428,13 @@ export function CardPortal({
 
                 {token && (
                   <div className="studio-card studio-security-card">
-                    <h3 className="studio-card-title">Account Security</h3>
-                    <p className="studio-card-helper">Manage your email verification and password:</p>
+                    <div className="studio-card-head-row">
+                      <span className="studio-legend-icon"><SvgLockIcon size={14} /></span>
+                      <div>
+                        <h3 className="studio-card-title">Account Security</h3>
+                        <p className="studio-card-helper">Manage your email verification and update your password.</p>
+                      </div>
+                    </div>
                     <AccountSettings token={token} onSignOut={() => { sessionStorage.removeItem("oneinfo.customer.token"); setToken(""); navigate("login"); }} />
                   </div>
                 )}

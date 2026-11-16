@@ -884,3 +884,23 @@ test("profile photo expands in lightbox on click and editor supports custom cove
   assert.match(coverEditorSrc, /handleFileChange/);
   assert.match(coverEditorSrc, /handleRemove/);
 });
+
+test("account security card has luxury UI, omits native accordion details, and supports password visibility toggles", () => {
+  const accountAccessSrc = readFileSync("apps/control-center/src/AccountAccess.tsx", "utf8");
+  assert.doesNotMatch(accountAccessSrc, /<details><summary>Account security/);
+  assert.match(accountAccessSrc, /account-security-settings/);
+  assert.match(accountAccessSrc, /security-status-block/);
+  assert.match(accountAccessSrc, /security-pill is-verified/);
+  assert.match(accountAccessSrc, /security-pill is-unverified/);
+  assert.match(accountAccessSrc, /security-toggle-eye/);
+  assert.match(accountAccessSrc, /showCurrentPassword/);
+  assert.match(accountAccessSrc, /showNewPassword/);
+  assert.match(accountAccessSrc, /security-submit-btn/);
+
+  const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
+  assert.match(stylesCss, /\.account-security-settings\s*\{/);
+  assert.match(stylesCss, /\.security-status-block\s*\{/);
+  assert.match(stylesCss, /\.security-pill\.is-verified\s*\{/);
+  assert.match(stylesCss, /\.security-submit-btn\s*\{/);
+  assert.match(stylesCss, /\.security-fields-grid\s*\{/);
+});

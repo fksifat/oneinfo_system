@@ -626,6 +626,8 @@ function CompanyWorkspace() {
 
           {/* Account Security */}
           <div className="studio-card studio-side-panel studio-security-panel" id="company-security">
+            <h3 className="studio-card-title">Account Security</h3>
+            <p className="studio-card-helper">Manage your email verification and update your password.</p>
             <AccountSettings token={token} onSignOut={signOut} />
           </div>
 

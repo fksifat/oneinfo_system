@@ -217,37 +217,226 @@ export function AccountAccess({ secret }: { secret?: string | undefined }) {
   );
 }
 
+function SvgCheckShieldIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  );
+}
+
+function SvgAlertCircleIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="8" x2="12" y2="12" />
+      <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+  );
+}
+
+function SvgRefreshIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 2v6h-6" />
+      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+      <path d="M3 22v-6h6" />
+      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+    </svg>
+  );
+}
+
 export function AccountSettings({ token, onSignOut }: { token: string; onSignOut: () => void }) {
   const [verified, setVerified] = useState<boolean>();
-  const [message, setMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [errorMessageStr, setErrorMessageStr] = useState("");
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(true);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+
   async function checkVerification() {
     setChecking(true);
-    try { setVerified((await customerApi<{ emailVerified: boolean }>("/me", "GET", undefined, token)).emailVerified); }
-    catch (error) { setMessage(errorMessage(error)); }
-    finally { setChecking(false); }
+    try {
+      setVerified((await customerApi<{ emailVerified: boolean }>("/me", "GET", undefined, token)).emailVerified);
+    } catch (error) {
+      setErrorMessageStr(errorMessage(error));
+    } finally {
+      setChecking(false);
+    }
   }
-  useEffect(() => { void checkVerification(); }, [token]);
+
+  useEffect(() => {
+    void checkVerification();
+  }, [token]);
+
   async function run(path: string, body?: unknown) {
     if (busy) return;
-    setBusy(true); setMessage("");
+    setBusy(true);
+    setStatusMessage("");
+    setErrorMessageStr("");
     try {
       const result = await customerApi<{ message: string }>(path, "POST", body, token);
-      setMessage(result.message);
+      setStatusMessage(result.message);
       if (path.endsWith("/password")) onSignOut();
-    } catch (error) { setMessage(errorMessage(error)); }
-    finally { setBusy(false); }
+    } catch (error) {
+      setErrorMessageStr(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   }
-  return <details><summary>Account security</summary>
-    {message && <p role="status">{message}</p>}
-    <p role="status">{checking ? "Checking email status…" : verified === true ? "Email verified" : verified === false ? "Email awaiting verification" : "Email status unavailable"}</p>
-    {verified === false && <button type="button" disabled={busy || checking} onClick={() => void run("/me/verify-email")}>Send verification email</button>}
-    {verified !== true && <button type="button" className="quiet" disabled={busy || checking} onClick={() => { setMessage(""); void checkVerification(); }}>Refresh verification status</button>}
-    <form onSubmit={event => { event.preventDefault(); void run("/me/password", Object.fromEntries(new FormData(event.currentTarget))); }}>
-      <label>Current password<input name="currentPassword" type="password" autoComplete="current-password" required maxLength={128} /></label>
-      <label>New password<input name="password" type="password" autoComplete="new-password" required minLength={12} maxLength={128} /></label>
-      <button disabled={busy}>Change password and sign out</button>
-    </form>
-  </details>;
+
+  return (
+    <div className="account-security-settings">
+      {/* Email Verification Status Row */}
+      <div className="security-status-block">
+        <div className="security-status-info">
+          <span className="security-status-label">Email status</span>
+          <div className="security-badge-row">
+            {checking ? (
+              <span className="security-pill is-checking">
+                <span className="security-spinner" /> Checking…
+              </span>
+            ) : verified === true ? (
+              <span className="security-pill is-verified">
+                <SvgCheckShieldIcon size={13} /> Verified
+              </span>
+            ) : verified === false ? (
+              <span className="security-pill is-unverified">
+                <SvgAlertCircleIcon size={13} /> Unverified
+              </span>
+            ) : (
+              <span className="security-pill is-unavailable">Unavailable</span>
+            )}
+          </div>
+        </div>
+
+        <div className="security-status-actions">
+          {verified === false && (
+            <button
+              type="button"
+              className="security-btn-verify"
+              disabled={busy || checking}
+              onClick={() => void run("/me/verify-email")}
+            >
+              <FormEmailIcon />
+              <span>Send verification link</span>
+            </button>
+          )}
+          {verified !== true && !checking && (
+            <button
+              type="button"
+              className="security-btn-refresh"
+              disabled={busy || checking}
+              onClick={() => {
+                setStatusMessage("");
+                setErrorMessageStr("");
+                void checkVerification();
+              }}
+              title="Refresh status"
+            >
+              <SvgRefreshIcon size={13} />
+              <span>Refresh</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Alerts */}
+      {statusMessage && (
+        <div className="security-alert is-success" role="status">
+          <SvgCheckShieldIcon size={15} />
+          <span>{statusMessage}</span>
+        </div>
+      )}
+      {errorMessageStr && (
+        <div className="security-alert is-error" role="alert">
+          <SvgAlertCircleIcon size={15} />
+          <span>{errorMessageStr}</span>
+        </div>
+      )}
+
+      {/* Password Change Form */}
+      <form
+        className="security-password-form"
+        onSubmit={event => {
+          event.preventDefault();
+          void run("/me/password", Object.fromEntries(new FormData(event.currentTarget)));
+        }}
+      >
+        <div className="security-form-header">
+          <span className="security-section-title">Change password</span>
+          <span className="security-section-hint">At least 12 characters</span>
+        </div>
+
+        <div className="security-fields-grid">
+          <div className="security-field-wrap">
+            <label htmlFor="sec-current-password">Current password</label>
+            <div className="security-input-with-toggle">
+              <input
+                id="sec-current-password"
+                name="currentPassword"
+                type={showCurrentPassword ? "text" : "password"}
+                autoComplete="current-password"
+                placeholder="Enter current password"
+                required
+                maxLength={128}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="security-toggle-eye"
+                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                tabIndex={-1}
+                aria-label={showCurrentPassword ? "Hide password" : "Show password"}
+              >
+                <FormEyeIcon show={showCurrentPassword} />
+              </button>
+            </div>
+          </div>
+
+          <div className="security-field-wrap">
+            <label htmlFor="sec-new-password">New password</label>
+            <div className="security-input-with-toggle">
+              <input
+                id="sec-new-password"
+                name="password"
+                type={showNewPassword ? "text" : "password"}
+                autoComplete="new-password"
+                placeholder="At least 12 characters"
+                required
+                minLength={12}
+                maxLength={128}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="security-toggle-eye"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                tabIndex={-1}
+                aria-label={showNewPassword ? "Hide password" : "Show password"}
+              >
+                <FormEyeIcon show={showNewPassword} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="security-submit-wrap">
+          <button
+            type="submit"
+            className="security-submit-btn"
+            disabled={busy}
+          >
+            <FormLockIcon />
+            <span>{busy ? "Updating password…" : "Change password and sign out"}</span>
+          </button>
+          <span className="security-submit-note">
+            For security, updating your password signs out active sessions on all devices.
+          </span>
+        </div>
+      </form>
+    </div>
+  );
 }
