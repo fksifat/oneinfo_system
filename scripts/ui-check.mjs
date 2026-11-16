@@ -444,14 +444,16 @@ try {
   assert.equal(await evaluate(`document.body.innerText.includes('browser-owner@example.com')`), false);
   await until(`document.querySelector('.public-avatar img')?.naturalWidth === 600`);
   await screenshot('customer-public-profile');
-  await evaluate(`document.querySelector('.share-contact').open=true`);
+  assert.equal(await evaluate(`document.querySelector('.share-contact').open`), false);
+  await evaluate(`document.querySelector('.share-contact > summary').click()`);
+  await until(`document.querySelector('.share-contact').open`);
   for(const width of [320,390,1440]){
     await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
     assert.equal(await evaluate(`document.querySelector('.share-contact-submit, .submit-lead-btn, .share-contact button[type=submit]').getBoundingClientRect().width > 0`),true);
     await inspect('customer-share-contact-'+width);
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await fill('Your Full Name','Browser Visitor');await fill('Email','');await click('Send my contact');
+  await fill('Full name','Browser Visitor');await fill('Email','');await click('Send my contact');
   await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
@@ -473,8 +475,23 @@ try {
   assert.equal(await evaluate(`document.querySelector('input[autocomplete=name]').value`),'Browser Test Owner');
   const previousPhoto=await evaluate(`document.querySelector('.photo-editor-avatar img').src`);await uploadPhoto();assert.notEqual(await evaluate(`document.querySelector('.photo-editor-avatar img').src`),previousPhoto);
   await click('Remove photo');assert.equal(await evaluate(`!!document.querySelector('.photo-editor-avatar img')`),false);
+  const aboutText = '  Main bio\n\nTwo  spaces\n';
+  const sectionText = '  First line\n\nSecond  line\n';
+  await fill('About you', aboutText);
+  await click('Add section');
+  await set('[aria-label="About section 1"] input', 'Research interests');
+  await set('[aria-label="About section 1"] textarea', sectionText);
+  await click('Add section');
+  await set('[aria-label="About section 2"] textarea', 'Text without a heading');
+  await click('Add section');
+  await evaluate(`document.querySelector('[aria-label="Remove section 3"]').click()`);
   await fill('Full name', 'Updated Browser Owner'); await click('Save profile');
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.profile-about-card')].map(card => [
+    card.querySelector('h2')?.textContent ?? '',
+    card.querySelector('p')?.textContent ?? '',
+    getComputedStyle(card.querySelector('p')).whiteSpace,
+  ])`), [['About', aboutText, 'pre-wrap'], ['Research interests', sectionText, 'pre-wrap'], ['', 'Text without a heading', 'pre-wrap']]);
   assert.equal(await evaluate(`document.body.innerText.includes('visitor@example.com')`),false);
   assert.equal(await evaluate(`!!document.querySelector('.public-avatar img')`),false);
   await evaluate('sessionStorage.clear()'); await command('Page.navigate', { url });

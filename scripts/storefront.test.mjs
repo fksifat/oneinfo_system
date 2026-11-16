@@ -834,3 +834,25 @@ test("profile saves paragraph breaks and saved website display order", () => {
   assert.equal(CustomerProfileSchema.safeParse({ ...saved, bio: "x".repeat(PROFILE_BIO_MAX_LENGTH + 1) }).success, false);
   assert.equal(CustomerProfileSchema.safeParse({ ...saved, modeContent: { websiteSortOrder: 13 } }).success, false);
 });
+
+test("profile preserves typed About text and keeps optional section headings", () => {
+  const bio = "  First line\n\nIndented  words\n";
+  const body = "  Line one\n\nLine  two\n";
+  const saved = CustomerProfileSchema.parse({
+    displayName: "Example Owner",
+    bio,
+    modeContent: {
+      aboutSections: [
+        { heading: "  Research interests  ", body },
+        { body: "Section without a heading" },
+        { heading: " ", body: "\n  " },
+      ],
+    },
+  });
+  assert.equal(saved.bio, bio);
+  assert.deepEqual(saved.modeContent.aboutSections, [
+    { heading: "Research interests", body },
+    { heading: "", body: "Section without a heading" },
+  ]);
+  assert.equal(CustomerProfileSchema.parse({ displayName: "Existing Owner", bio }).modeContent.aboutSections, undefined);
+});

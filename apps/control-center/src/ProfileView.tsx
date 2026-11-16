@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ShareContactSchema } from "@oneinfo/contracts";
+import { ShareContactSchema, type ProfileModesSchema } from "@oneinfo/contracts";
 import type { z } from "zod";
 import oneinfoLogo from "../../../sites/storefront/assets/oneinfo-logo.svg";
 
@@ -17,16 +17,7 @@ export interface PublicProfileData {
     avatarUrl: string;
     theme: string;
     profileMode?: "BUSINESS" | "EVENT" | "PORTFOLIO";
-    modeContent?: {
-      EVENT?: { title: string; description: string } | undefined;
-      PORTFOLIO?: { title: string; description: string } | undefined;
-      websiteLabel?: string | undefined;
-      websiteSortOrder?: number | undefined;
-      whatsapp?: string | undefined;
-      whatsappSameAsPhone?: boolean | undefined;
-      mapUrl?: string | undefined;
-      address?: string | undefined;
-    };
+    modeContent?: z.infer<typeof ProfileModesSchema> | undefined;
   };
   links: { id?: string; label: string; url: string }[];
 }
@@ -227,6 +218,14 @@ function DocumentIcon() {
       <polyline points="14 2 14 8 20 8" />
       <line x1="16" y1="13" x2="8" y2="13" />
       <line x1="16" y1="17" x2="8" y2="17" />
+    </svg>
+  );
+}
+
+function LinkIcon() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a4 4 0 0 0 6 .5l3-3a4 4 0 1 0-5.7-5.7l-1.7 1.7m2.4 4.5a4 4 0 0 0-6-.5l-3 3a4 4 0 1 0 5.7 5.7l1.7-1.7" />
     </svg>
   );
 }
@@ -760,17 +759,36 @@ export function ProfileView({
         </div>
 
         {/* Detailed Professional Description / About Section */}
-        {profile.bio && (
+        {profile.bio.trim() && (
           <section className="profile-about-card">
-            <h2 className="about-heading">ABOUT</h2>
+            <h2 className="profile-section-heading">
+              <span className="profile-section-icon"><DocumentIcon /></span>
+              <span>About</span>
+            </h2>
             <p className="about-description">{profile.bio}</p>
           </section>
+        )}
+        {profile.modeContent?.aboutSections?.map(({ heading, body }, index) =>
+          (heading.trim() || body.trim()) && (
+            <section className="profile-about-card" key={index}>
+              {heading.trim() && (
+                <h2 className="profile-section-heading">
+                  <span className="profile-section-icon"><DocumentIcon /></span>
+                  <span>{heading.trim()}</span>
+                </h2>
+              )}
+              {body.trim() && <p className="about-description">{body}</p>}
+            </section>
+          )
         )}
 
         {/* Mode Specific Content (Portfolio or Event) */}
         {content?.title && (
           <section className="profile-showcase-card">
-            <h2 className="showcase-title">{content.title}</h2>
+            <h2 className="profile-section-heading">
+              <span className="profile-section-icon">{mode === "EVENT" ? <CalendarScheduleIcon /> : <PortfolioBriefcaseIcon />}</span>
+              <span>{content.title}</span>
+            </h2>
             {content.description && <p className="showcase-description">{content.description}</p>}
           </section>
         )}
@@ -778,7 +796,7 @@ export function ProfileView({
         {/* Social Media & Links Section */}
         {visibleSocialLinks.length > 0 && (
           <section className="profile-social-section" aria-label="Social Media & Links">
-            <h2 className="section-label">SOCIAL & WEB LINKS</h2>
+            <h2 className="section-label"><LinkIcon /> Social &amp; web links</h2>
 
             <div className="social-links-grid">
               {visibleSocialLinks
@@ -874,14 +892,13 @@ export function ShareContact({
   }
 
   return (
-    <details className="share-contact share-contact-accordion" open>
+    <details className="share-contact share-contact-accordion">
       <summary className="share-contact-summary">
-        <div className="summary-content">
-          <span className="summary-icon">
-            <ContactExchangeIcon />
-          </span>
-          <strong className="summary-title">Exchange Contact Details</strong>
-        </div>
+        <span className="profile-section-icon"><ContactExchangeIcon /></span>
+        <strong className="summary-title">Exchange Contact Details</strong>
+        <svg className="share-contact-chevron" aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </summary>
 
       <div className="share-contact-body">
@@ -896,7 +913,7 @@ export function ShareContact({
         ) : (
           <form onSubmit={submit} className="share-contact-form">
             <div className="field-group">
-              <label htmlFor="lead-name">Your Full Name *</label>
+              <label htmlFor="lead-name">Full name *</label>
               <input
                 id="lead-name"
                 name="name"
@@ -908,12 +925,14 @@ export function ShareContact({
               />
             </div>
 
+            <p className="share-contact-hint" id="lead-contact-hint">Enter an email or phone number.</p>
             <div className="field-group">
-              <label htmlFor="lead-email">Email Address</label>
+              <label htmlFor="lead-email">Email address</label>
               <input
                 id="lead-email"
                 name="email"
                 type="email"
+                aria-describedby="lead-contact-hint"
                 autoComplete="email"
                 maxLength={254}
                 placeholder="name@example.com"
@@ -921,11 +940,12 @@ export function ShareContact({
             </div>
 
             <div className="field-group">
-              <label htmlFor="lead-phone">Phone Number (Optional)</label>
+              <label htmlFor="lead-phone">Phone number</label>
               <input
                 id="lead-phone"
                 name="phone"
                 type="tel"
+                aria-describedby="lead-contact-hint"
                 autoComplete="tel"
                 maxLength={40}
                 placeholder="+880 1..."
@@ -933,7 +953,7 @@ export function ShareContact({
             </div>
 
             <div className="field-group">
-              <label htmlFor="lead-message">Short Note (Optional)</label>
+              <label htmlFor="lead-message">Note (optional)</label>
               <textarea
                 id="lead-message"
                 name="message"
@@ -946,7 +966,7 @@ export function ShareContact({
             {error && <p className="form-error-alert share-contact-error" role="alert">{error}</p>}
 
             <button type="submit" className="submit-lead-btn share-contact-submit" disabled={busy}>
-              {busy ? "Sending..." : "Send My Contact"}
+              {busy ? "Sending…" : "Send my contact"}
             </button>
           </form>
         )}
