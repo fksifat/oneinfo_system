@@ -473,6 +473,21 @@ try {
   console.log('Contact share consent/validation, retry recovery, duplicate prevention and private owner inbox PASS');
   await reload();await until(`document.querySelector('h1')?.textContent.includes('Edit')`);
   assert.equal(await evaluate(`document.querySelector('input[autocomplete=name]').value`),'Browser Test Owner');
+  for (const width of [320, 768]) {
+    await command('Emulation.setDeviceMetricsOverride', { width, height: 844, deviceScaleFactor: 1, mobile: true });
+    await until(`innerWidth === ${width}`);
+    const editor = await evaluate(`(() => {
+      const tabs = [...document.querySelectorAll('.studio-tab-pill')];
+      return {
+        columns: getComputedStyle(document.querySelector('.studio-form-grid')).gridTemplateColumns.split(' ').length,
+        tabsFit: tabs.length === 4 && tabs.every(tab => tab.getBoundingClientRect().height >= 44 &&
+          tab.querySelector('svg').getBoundingClientRect().width > 0 && tab.lastElementChild.scrollWidth <= tab.lastElementChild.clientWidth),
+      };
+    })()`);
+    assert.deepEqual(editor, { columns: width === 320 ? 1 : 2, tabsFit: true });
+    await inspect('customer-profile-editor-' + width);
+  }
+  await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   const previousPhoto=await evaluate(`document.querySelector('.photo-editor-avatar img').src`);await uploadPhoto();assert.notEqual(await evaluate(`document.querySelector('.photo-editor-avatar img').src`),previousPhoto);
   await click('Remove photo');assert.equal(await evaluate(`!!document.querySelector('.photo-editor-avatar img')`),false);
   const aboutText = '  Main bio\n\nTwo  spaces\n';
@@ -487,7 +502,7 @@ try {
   await evaluate(`document.querySelector('[aria-label="Remove section 3"]').click()`);
   await fill('Full name', 'Updated Browser Owner'); await click('Save profile');
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
-  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.profile-about-card')].map(card => [
+  assert.deepEqual(await evaluate(`[...document.querySelectorAll('.profile-about-section, section.profile-about-card')].map(card => [
     card.querySelector('h2')?.textContent ?? '',
     card.querySelector('p')?.textContent ?? '',
     getComputedStyle(card.querySelector('p')).whiteSpace,

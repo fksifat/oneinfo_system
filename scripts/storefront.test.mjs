@@ -701,7 +701,7 @@ test("exchange contact details card is clean, has modern centered icon, and omit
 
 test("profile editor supports WhatsApp number toggle: asks if same as phone, syncs and disables field when same, and enables custom number when toggled off", () => {
   const cardPortalSrc = readFileSync("apps/control-center/src/CardPortal.tsx", "utf8");
-  assert.match(cardPortalSrc, /WhatsApp number same as phone number\?/);
+  assert.match(cardPortalSrc, /aria-label="Use public phone for WhatsApp"/);
   assert.match(cardPortalSrc, /className="studio-switch"/);
   assert.match(cardPortalSrc, /className="studio-slider round"/);
   assert.match(cardPortalSrc, /isWaSameAsPhone/);
