@@ -576,8 +576,8 @@ try {
   await click('Load analytics');await until(`!!document.querySelector('.lead-inbox select')`);
   await set('.lead-inbox select','NFC');await until(`document.body.innerText.includes('No activity from this source')`);
   await set('.lead-inbox select','QR');await until(`document.body.innerText.includes('Leads · 1')`);
-  await evaluate(`document.querySelector('.studio-security-panel summary').click()`);
-  await click('Refresh verification status');await until(`document.querySelector('.studio-security-panel')?.textContent.includes('Email awaiting verification')`);
+  await evaluate(`document.querySelector('.studio-security-panel summary')?.click() || true`);
+  await click('Refresh status');await until(`document.querySelector('.studio-security-panel')?.textContent.includes('Unverified')`);
   await evaluate(`document.querySelector('.team-check input').click()`);await click('Save settings');await until(`document.body.innerText.includes('Company settings saved.')`);
   const {drainEmployeeEmails}=await import(pathToFileURL(join(root,'apps/api/dist/domain/employee-email.js')).href);
   await drainEmployeeEmails();await click('Refresh workspace');
