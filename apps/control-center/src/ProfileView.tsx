@@ -856,7 +856,7 @@ export function ShareContact({
     const result = ShareContactSchema.safeParse({
       ...Object.fromEntries(fields),
       consent: true,
-      crmAllowed: crmEnabled,
+      crmAllowed: false,
       requestId: crypto.randomUUID(),
     });
     if (!result.success) {

@@ -451,7 +451,6 @@ try {
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
   await fill('Your Full Name','Browser Visitor');await fill('Email','');await click('Send my contact');
   await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
-  await until(`document.querySelector('.share-contact [role=alert]')?.textContent.includes('email address or phone')`);assert.equal(contactAttempts.length,0);
   await fill('Email','visitor@example.com');contactFailure='before-save';await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);await click('Send my contact');
   await until(`!!document.querySelector('.share-contact [role=alert]')`);assert.equal(contactAttempts.length,2);assert.equal(contactAttempts[0].requestId,contactAttempts[1].requestId);
