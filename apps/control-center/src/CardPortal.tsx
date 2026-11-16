@@ -1,6 +1,6 @@
 import { AccountSettings } from "./AccountAccess.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ActivateCardSchema, CustomerProfileSchema, HttpUrlSchema, type ContactLead } from "@oneinfo/contracts";
+import { ActivateCardSchema, CustomerProfileSchema, HttpUrlSchema, PROFILE_BIO_MAX_LENGTH, type ContactLead } from "@oneinfo/contracts";
 import { ProfileView, ProfileSkeleton, ShareContact, SocialBrandIcon, WhatsAppIcon, detectSocialBrand, type PublicProfileData } from "./ProfileView.js";
 import { customerApi } from "./customer-api.js";
 import type { z } from "zod";
@@ -13,6 +13,8 @@ type CardResponse = { status: "PROFILE"; canShareContact?: boolean | undefined; 
   { status: "ACTIVATION_REQUIRED"; activationMethod?: "SECRET" | "INVOICE" } | { status: "UNAVAILABLE" };
 const emptyProfile: Draft = { displayName: "", headline: "", company: "", bio: "", phone: "", email: "", website: "", avatarUrl: "", theme: "MIDNIGHT", links: [], profileMode: "BUSINESS", modeContent: {} };
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
+const isPreviewableLink = (link: Draft["links"][number]) =>
+  Boolean(link.label.trim()) && HttpUrlSchema.safeParse(link.url.trim()).success;
 
 const PRESET_PLATFORMS = [
   { id: "facebook", label: "Facebook", prefix: "https://facebook.com/", placeholder: "https://facebook.com/yourprofile" },
@@ -256,10 +258,14 @@ export function CardPortal({
   const lastEditorTabRef = useRef<"edit" | "settings" | "contacts">("edit");
   const [openPlatformIndex, setOpenPlatformIndex] = useState<number | null>(null);
   const [profile, setProfile] = useState<Draft>(emptyProfile);
+  const bioInputRef = useRef<HTMLTextAreaElement>(null);
   const [hasSavedWebsite, setHasSavedWebsite] = useState(false);
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [error, setError] = useState("");
+  const websitePosition = Math.min(profile.modeContent?.websiteSortOrder ?? 0, profile.links.length);
+  const linkPositions = profile.links.map((_, index) => index);
+  if (profile.website.trim()) linkPositions.splice(websitePosition, 0, -1);
   const trackedView = useRef("");
   const base = `/c/${encodeURIComponent(slug)}`;
   const rawSource = new URLSearchParams(location.search).get("source");
@@ -425,6 +431,10 @@ export function CardPortal({
       const profileToSave = {
         ...profile,
         website: profile.website.trim(),
+        modeContent: {
+          ...profile.modeContent,
+          websiteSortOrder: profile.website.trim() ? sanitizedLinks.filter(link => link.sortOrder < websitePosition).length : undefined,
+        },
         links: sanitizedLinks,
       };
 
@@ -440,6 +450,18 @@ export function CardPortal({
   };
   const save = (event: FormEvent) => { event.preventDefault(); executeSave(); };
   const update = <K extends keyof Draft>(key: K, value: Draft[K]) => setProfile(previous => ({ ...previous, [key]: value }));
+  const moveLink = (index: number, position: number) => {
+    const positions = linkPositions.filter(item => item !== index);
+    positions.splice(position, 0, index);
+    const links = positions.map(item => profile.links[item]).filter(link => link !== undefined);
+    const websiteSortOrder = positions.indexOf(-1);
+    setProfile(previous => ({
+      ...previous,
+      links,
+      modeContent: { ...previous.modeContent, websiteSortOrder: websiteSortOrder < 0 ? undefined : websiteSortOrder },
+    }));
+    setOpenPlatformIndex(null);
+  };
 
   if (!card) {
     if (mode === "public") return <ProfileSkeleton error={error} onRetry={() => void run(refresh)} />;
@@ -650,9 +672,12 @@ export function CardPortal({
       avatarUrl: profile.avatarUrl || "",
       theme: profile.theme,
       profileMode: profile.profileMode,
-      modeContent: profile.modeContent,
+      modeContent: {
+        ...profile.modeContent,
+        websiteSortOrder: profile.links.slice(0, websitePosition).filter(isPreviewableLink).length,
+      },
     },
-    links: profile.links.filter(link => link.label.trim() && HttpUrlSchema.safeParse(link.url.trim()).success),
+    links: profile.links.filter(isPreviewableLink),
   };
 
   const isWaSameAsPhone =
@@ -923,10 +948,27 @@ export function CardPortal({
                       />
                     </label>
                   </div>
-                  <label className="studio-bio-label">
-                    About you
-                    <textarea maxLength={600} value={profile.bio} placeholder="Share a brief introduction for visitors who scan or tap your card..." onChange={event => update("bio", event.target.value)} />
-                  </label>
+                  <div>
+                    <label className="studio-bio-label">
+                      About you
+                      <textarea ref={bioInputRef} maxLength={PROFILE_BIO_MAX_LENGTH} value={profile.bio} placeholder="Share a brief introduction for visitors who scan or tap your card..." onChange={event => update("bio", event.target.value)} />
+                    </label>
+                    <button
+                      type="button"
+                      className="quiet studio-add-paragraph"
+                      disabled={profile.bio.trimEnd().length > PROFILE_BIO_MAX_LENGTH - 3}
+                      onClick={() => {
+                        const text = profile.bio.trimEnd();
+                        const bio = text ? `${text}\n\n` : "";
+                        update("bio", bio);
+                        const input = bioInputRef.current;
+                        input?.focus();
+                        requestAnimationFrame(() => input?.setSelectionRange(bio.length, bio.length));
+                      }}
+                    >
+                      <SvgPlusIcon size={14} /> Add paragraph
+                    </button>
+                  </div>
                 </fieldset>
 
                 <fieldset className="studio-card studio-social-fieldset">
@@ -939,6 +981,31 @@ export function CardPortal({
                     <p className="studio-card-helper">Add your social channels, messaging apps, and website links:</p>
                     <span className="studio-links-counter">{profile.links.length} / 12 {hasSavedWebsite ? "additional links" : "links"}</span>
                   </div>
+
+                  {linkPositions.length > 1 && (
+                    <details className="studio-link-order">
+                      <summary>Display order</summary>
+                      <ol>
+                        {linkPositions.map((index, position) => {
+                          const label = index === -1
+                            ? profile.modeContent?.websiteLabel?.trim() || "Official Website"
+                            : profile.links[index]?.label.trim() || `Link ${index + 1}`;
+                          return (
+                            <li key={index}>
+                              <span>{label}</span>
+                              <select
+                                aria-label={`Position of ${label}`}
+                                value={position}
+                                onChange={event => moveLink(index, Number(event.target.value))}
+                              >
+                                {linkPositions.map((_, slot) => <option key={slot} value={slot}>{slot + 1}</option>)}
+                              </select>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </details>
+                  )}
 
                   {(hasSavedWebsite || profile.links.length > 0) && (
                     <div className="studio-links-table-header" aria-hidden="true">
@@ -1112,8 +1179,15 @@ export function CardPortal({
                               type="button"
                               className="quiet studio-btn-remove"
                               onClick={() => {
-                                update("links", profile.links.filter((_, i) => i !== index));
-                                if (openPlatformIndex === index) setOpenPlatformIndex(null);
+                                setProfile(previous => ({
+                                  ...previous,
+                                  links: previous.links.filter((_, i) => i !== index),
+                                  modeContent: {
+                                    ...previous.modeContent,
+                                    websiteSortOrder: index < websitePosition ? websitePosition - 1 : previous.modeContent?.websiteSortOrder,
+                                  },
+                                }));
+                                setOpenPlatformIndex(null);
                               }}
                               title="Remove link"
                               aria-label={`Remove link ${index + 1}`}

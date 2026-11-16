@@ -3425,6 +3425,8 @@ button.save-cta-share-btn,
 }
 
 .about-description {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
   margin: 0;
   font-size: 0.9rem;
   line-height: 1.65;
@@ -3457,6 +3459,7 @@ button.save-cta-share-btn,
 
 /* Social Media & Links Section */
 .profile-social-section {
+  container-type: inline-size;
   padding: 0 24px;
   margin-bottom: 20px;
 }
@@ -3488,7 +3491,7 @@ button.save-cta-share-btn,
   flex-wrap: wrap;
   justify-content: center;
   align-items: flex-start;
-  gap: 16px 14px;
+  gap: 12px 6px;
   margin: 0 auto;
   padding: 4px 0 10px;
 }
@@ -3498,8 +3501,8 @@ button.save-cta-share-btn,
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  width: clamp(74px, 21vw, 86px);
+  gap: 6px;
+  width: min(76px, calc((100% - 24px) / 5));
   padding: 4px 2px;
   border-radius: 18px;
   background: transparent;
@@ -3508,6 +3511,12 @@ button.save-cta-share-btn,
   text-decoration: none;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   text-align: center;
+}
+
+@container (max-width: 305px) {
+  .social-card {
+    width: calc((100% - 18px) / 4);
+  }
 }
 
 .social-card:hover {
@@ -6752,6 +6761,18 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   resize: vertical;
 }
 
+.studio-card .studio-add-paragraph {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  border: 0;
+  background: transparent;
+  color: #dfb877;
+}
+
 /* Studio Form Field Groups & Inline Label Elements */
 .studio-field-group {
   display: flex;
@@ -7534,6 +7555,49 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   color: #dfb877;
   font-weight: 750;
   border: 1px solid rgba(223, 184, 119, 0.3);
+}
+
+.studio-link-order {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0 10px;
+}
+
+.studio-link-order summary {
+  padding-block: 10px;
+  color: #dfb877;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.studio-link-order ol {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 8px;
+}
+
+.studio-link-order li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #cbd5e1;
+  font-size: 0.84rem;
+}
+
+.studio-link-order li span {
+  overflow-wrap: anywhere;
+}
+
+.studio-card .studio-link-order select {
+  flex: 0 0 64px;
+  width: 64px;
+  min-height: 44px;
+  padding: 6px 8px;
+  font-size: 1rem !important;
 }
 
 .studio-links-empty {

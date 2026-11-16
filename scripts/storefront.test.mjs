@@ -10,7 +10,7 @@ import {
   isColorLight, defaultCustomization, renderSurfaceMotifSvg,
   renderBackMotifSvg, renderQrSvg,
 } from "../sites/storefront/catalog.js";
-import { ProductCustomizationSchema } from "@oneinfo/contracts";
+import { CustomerProfileSchema, ProductCustomizationSchema, PROFILE_BIO_MAX_LENGTH } from "@oneinfo/contracts";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
 
@@ -649,7 +649,7 @@ test("customer profile simplifies Save Contact button, makes share button compac
   assert.doesNotMatch(profileViewSrc, /Save to Contacts/);
 
   // WhatsApp excluded from social & web links grid
-  assert.match(profileViewSrc, /links\s*\.filter\(\(link\)\s*=>\s*detectSocialBrand\(link\.url,\s*link\.label\)\.kind\s*!==\s*"whatsapp"\)/);
+  assert.match(profileViewSrc, /socialLinks\s*\.filter\(\(link\)\s*=>\s*detectSocialBrand\(link\.url,\s*link\.label\)\.kind\s*!==\s*"whatsapp"\)/);
 
   // Authentic brand vector paths
   assert.match(profileViewSrc, /M20\.447 20\.452h-3\.554v-5\.569/); // Official LinkedIn path
@@ -822,4 +822,15 @@ test("social links editor uses a desktop table and compact mobile rows", () => {
   assert.match(stylesCss, /\.studio-link-item\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*[\d.]+fr\)\s+minmax\(0,\s*[\d.]+fr\)\s+44px/);
   assert.match(stylesCss, /\.studio-link-label-col\s*\{\s*grid-column:\s*span 2/);
   assert.match(stylesCss, /\.studio-link-url-col\s*\{\s*grid-column:\s*span 2/);
+});
+
+test("profile saves paragraph breaks and saved website display order", () => {
+  const profile = { displayName: "Example Owner", website: "https://example.com" };
+  const bio = "First paragraph.\n\n" + "Additional profile details. ".repeat(25).trimEnd();
+  const saved = CustomerProfileSchema.parse({ ...profile, bio, modeContent: { websiteSortOrder: 12 } });
+  assert.equal(saved.bio, bio);
+  assert.equal(saved.modeContent.websiteSortOrder, 12);
+  assert.equal(CustomerProfileSchema.parse(profile).modeContent.websiteSortOrder, undefined);
+  assert.equal(CustomerProfileSchema.safeParse({ ...saved, bio: "x".repeat(PROFILE_BIO_MAX_LENGTH + 1) }).success, false);
+  assert.equal(CustomerProfileSchema.safeParse({ ...saved, modeContent: { websiteSortOrder: 13 } }).success, false);
 });

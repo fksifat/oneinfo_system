@@ -21,6 +21,7 @@ export interface PublicProfileData {
       EVENT?: { title: string; description: string } | undefined;
       PORTFOLIO?: { title: string; description: string } | undefined;
       websiteLabel?: string | undefined;
+      websiteSortOrder?: number | undefined;
       whatsapp?: string | undefined;
       whatsappSameAsPhone?: boolean | undefined;
       mapUrl?: string | undefined;
@@ -595,6 +596,10 @@ export function ProfileView({
   const wireId = `coverWire-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
   const shineId = `coverShine-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
   const websiteLabel = profile.modeContent?.websiteLabel?.trim() || "Official Website";
+  const websiteLink = { label: websiteLabel, url: profile.website };
+  const socialLinks = [...links];
+  if (profile.website) socialLinks.splice(profile.modeContent?.websiteSortOrder ?? 0, 0, websiteLink);
+  const visibleSocialLinks = socialLinks.filter((link) => detectSocialBrand(link.url, link.label).kind !== "whatsapp");
 
   return (
     <div className={`profile-page ${themeClass}`}>
@@ -771,41 +776,17 @@ export function ProfileView({
         )}
 
         {/* Social Media & Links Section */}
-        {((profile.website && detectSocialBrand(profile.website, websiteLabel).kind !== "whatsapp") ||
-          links.some((l) => detectSocialBrand(l.url, l.label).kind !== "whatsapp")) && (
+        {visibleSocialLinks.length > 0 && (
           <section className="profile-social-section" aria-label="Social Media & Links">
             <h2 className="section-label">SOCIAL & WEB LINKS</h2>
 
             <div className="social-links-grid">
-              {profile.website && detectSocialBrand(profile.website, websiteLabel).kind !== "whatsapp" && (
-                <a
-                  href={profile.website}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="social-card"
-                  title={websiteLabel}
-                  onClick={() => onActivity?.("LINK")}
-                >
-                  <div className="social-card-icon is-globe">
-                    <SocialBrandIcon kind="globe" url={profile.website} label={websiteLabel} />
-                  </div>
-                  <div className="social-card-details">
-                    <span className="social-card-name">{websiteLabel}</span>
-                    <span className="social-card-url">{profile.website.replace(/^https?:\/\//i, "").replace(/\/$/, "")}</span>
-                  </div>
-                  <div className="social-card-arrow" aria-hidden="true">
-                    <ArrowUpRightIcon />
-                  </div>
-                </a>
-              )}
-
-              {links
-                .filter((link) => detectSocialBrand(link.url, link.label).kind !== "whatsapp")
+              {visibleSocialLinks
                 .map((link) => {
                   const brand = detectSocialBrand(link.url, link.label);
                   return (
                     <a
-                      key={link.id ?? link.url}
+                      key={link === websiteLink ? "website" : link.id ?? link.url}
                       href={link.url}
                       target="_blank"
                       rel="noreferrer"
