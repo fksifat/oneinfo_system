@@ -3675,11 +3675,13 @@ button.save-cta-share-btn,
   background: var(--profile-accent-bg-subtle, rgba(223, 184, 119, 0.18));
 }
 
-.summary-content strong {
+.summary-content strong,
+.summary-content .summary-title {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.94rem;
   font-weight: 750;
   letter-spacing: -0.01em;
+  color: var(--profile-text);
 }
 
 .summary-content small {
