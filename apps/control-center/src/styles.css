@@ -7143,27 +7143,24 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 }
 
 .platform-trigger-badge {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent !important;
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-.is-whatsapp .platform-trigger-badge { background: #25d366; }
-.is-facebook .platform-trigger-badge { background: #1877f2; }
-.is-youtube .platform-trigger-badge { background: #ff0000; }
-.is-instagram .platform-trigger-badge { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); }
-.is-linkedin .platform-trigger-badge { background: #0077b5; }
-.is-twitter .platform-trigger-badge { background: #000; border: 1px solid rgba(255, 255, 255, 0.2); }
-.is-tiktok .platform-trigger-badge { background: #010101; border: 1px solid rgba(255, 255, 255, 0.2); }
-.is-telegram .platform-trigger-badge { background: #0088cc; }
-.is-github .platform-trigger-badge { background: #24292e; }
-.is-globe .platform-trigger-badge { background: rgba(223, 184, 119, 0.22); color: #dfb877; }
+.platform-trigger-badge svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block;
+}
 
 .platform-trigger-name {
   flex: 1;
@@ -7190,15 +7187,18 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  width: max(280px, 100%);
+  width: 100%;
+  min-width: 280px;
+  max-width: 360px;
   max-height: 340px;
   overflow-y: auto;
   background: #0c1824;
-  border: 1px solid rgba(223, 184, 119, 0.35);
+  border: 1px solid rgba(223, 184, 119, 0.4);
   border-radius: 14px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.9);
   padding: 8px;
   z-index: 100;
+  box-sizing: border-box;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
@@ -7238,24 +7238,25 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 }
 
 .platform-popover-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .platform-popover-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 7px 10px !important;
-  border-radius: 9px !important;
+  box-sizing: border-box;
+  padding: 8px 12px !important;
+  border-radius: 10px !important;
   border: 1px solid transparent !important;
   background: transparent !important;
   color: #cbd5e1 !important;
   cursor: pointer;
   transition: all 0.12s ease;
-  font-size: 0.82rem !important;
+  font-size: 0.85rem !important;
   font-weight: 650 !important;
   text-align: left;
   margin: 0 !important;
@@ -7277,23 +7278,21 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   width: 22px;
   height: 22px;
   border-radius: 6px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent !important;
   color: #ffffff;
 }
 
-.platform-popover-item.is-whatsapp .popover-item-icon { background: #25d366; }
-.platform-popover-item.is-facebook .popover-item-icon { background: #1877f2; }
-.platform-popover-item.is-youtube .popover-item-icon { background: #ff0000; }
-.platform-popover-item.is-instagram .popover-item-icon { background: linear-gradient(45deg, #f09433, #dc2743, #bc1888); }
-.platform-popover-item.is-linkedin .popover-item-icon { background: #0077b5; }
-.platform-popover-item.is-twitter .popover-item-icon { background: #000; border: 1px solid rgba(255, 255, 255, 0.2); }
-.platform-popover-item.is-tiktok .popover-item-icon { background: #010101; border: 1px solid rgba(255, 255, 255, 0.2); }
-.platform-popover-item.is-telegram .popover-item-icon { background: #0088cc; }
-.platform-popover-item.is-github .popover-item-icon { background: #24292e; }
-.platform-popover-item.is-globe .popover-item-icon { background: rgba(223, 184, 119, 0.22); color: #dfb877; }
+.popover-item-icon svg {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block;
+}
 
 .popover-item-label {
   flex: 1;
