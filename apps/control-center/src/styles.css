@@ -6712,42 +6712,202 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .studio-bio-label {
   display: grid;
   gap: 8px;
-  margin-top: 16px;
+  margin-top: 14px;
   font-weight: 650;
   font-size: 0.85rem;
   color: #cbd5e1;
 }
 
+.studio-bio-label-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.studio-bio-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #e2e8f0;
+}
+
+.studio-bio-title svg {
+  color: #dfb877;
+}
+
+.studio-char-limit {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  letter-spacing: 0.01em;
+}
+
 .studio-bio-label textarea {
-  min-height: 110px;
+  min-height: 100px;
+  line-height: 1.55;
+  resize: vertical;
+}
+
+.studio-about-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.studio-about-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 0;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(223, 184, 119, 0.18);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.studio-about-section:focus-within {
+  border-color: rgba(223, 184, 119, 0.4);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.studio-about-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.studio-about-section-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  letter-spacing: -0.01em;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.studio-about-section-title .title-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-section-index-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(223, 184, 119, 0.14);
+  color: #dfb877;
+  border: 1px solid rgba(223, 184, 119, 0.28);
+  flex-shrink: 0;
+}
+
+.studio-about-section .studio-btn-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 32px !important;
+  padding: 4px 10px !important;
+  border-radius: 8px !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+  border: 1px solid rgba(239, 68, 68, 0.22) !important;
+  color: #fca5a5 !important;
+  font-size: 0.76rem !important;
+  font-weight: 650 !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.studio-about-section .studio-btn-remove:hover {
+  background: rgba(239, 68, 68, 0.18) !important;
+  border-color: rgba(239, 68, 68, 0.45) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+
+.studio-about-section .studio-btn-remove:active {
+  transform: translateY(0);
+}
+
+.studio-about-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-about-field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #94a3b8;
+  letter-spacing: 0.01em;
+}
+
+.studio-about-field-label svg {
+  color: #dfb877;
+  opacity: 0.85;
+}
+
+.studio-about-field textarea {
+  min-height: 85px;
   line-height: 1.5;
   resize: vertical;
 }
 
-.studio-about-section {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-}
-
-.studio-about-section .studio-btn-remove {
-  justify-self: end;
-  min-height: 44px !important;
-}
-
 .studio-card .studio-add-about-section {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
   min-height: 44px;
-  margin-top: 6px;
-  padding: 4px 8px;
-  border: 0;
-  background: transparent;
+  margin-top: 14px;
+  padding: 10px 16px;
+  border: 1.5px dashed rgba(223, 184, 119, 0.35);
+  background: rgba(223, 184, 119, 0.05);
+  border-radius: 12px;
   color: #dfb877;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+.studio-card .studio-add-about-section:hover:not(:disabled) {
+  background: rgba(223, 184, 119, 0.12);
+  border-color: rgba(223, 184, 119, 0.6);
+  transform: translateY(-1px);
+}
+
+.studio-card .studio-add-about-section:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.studio-card .studio-add-about-section:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-style: solid;
 }
 
 /* Studio Form Field Groups & Inline Label Elements */
@@ -9220,6 +9380,37 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
   .customer-profile-studio .studio-bio-label textarea {
     min-height: 88px;
+  }
+
+  .customer-profile-studio .studio-about-sections-list {
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .customer-profile-studio .studio-about-section {
+    padding: 10px 12px;
+    gap: 10px;
+    border-radius: 12px;
+  }
+
+  .customer-profile-studio .studio-about-section-header {
+    padding-bottom: 8px;
+  }
+
+  .customer-profile-studio .studio-about-section .studio-btn-remove {
+    min-height: 32px !important;
+    padding: 4px 8px !important;
+    font-size: 0.74rem !important;
+  }
+
+  .customer-profile-studio .studio-about-field textarea {
+    min-height: 75px;
+  }
+
+  .customer-profile-studio .studio-card .studio-add-about-section {
+    min-height: 44px;
+    margin-top: 12px;
+    font-size: 0.86rem;
   }
 
   .customer-profile-studio .profile-photo-editor {

@@ -972,45 +972,68 @@ export function CardPortal({
                     <span className="studio-legend-icon"><SvgTextIcon /></span>
                     <span>About</span>
                   </legend>
-                  <div>
+                  <p className="studio-card-helper">Share your background and add custom titled sections to highlight your career, research, or interests.</p>
+
+                  <div className="studio-about-card-body">
                     <label className="studio-bio-label">
-                      About you
+                      <span className="studio-bio-label-header">
+                        <span className="studio-bio-title"><SvgUserIcon size={13} /> About you</span>
+                        <span className="studio-char-limit">{profile.bio.length} / {PROFILE_BIO_MAX_LENGTH}</span>
+                      </span>
                       <textarea maxLength={PROFILE_BIO_MAX_LENGTH} value={profile.bio} placeholder="Share a brief introduction for visitors who scan or tap your card..." onChange={event => update("bio", event.target.value)} />
                     </label>
-                    {aboutSections.map((section, index) => (
-                      <div className="studio-about-section" role="group" aria-label={`About section ${index + 1}`} key={index}>
-                        <label>
-                          Heading (optional)
-                          <input
-                            maxLength={PROFILE_ABOUT_HEADING_MAX_LENGTH}
-                            placeholder="e.g. Research interests"
-                            value={section.heading}
-                            onChange={event => updateAboutSections(aboutSections.map((item, position) =>
-                              position === index ? { ...item, heading: event.target.value } : item))}
-                          />
-                        </label>
-                        <label>
-                          Section text
-                          <textarea
-                            maxLength={PROFILE_BIO_MAX_LENGTH}
-                            value={section.body}
-                            onChange={event => updateAboutSections(aboutSections.map((item, position) =>
-                              position === index ? { ...item, body: event.target.value } : item))}
-                          />
-                        </label>
-                        <button
-                          type="button"
-                          className="quiet studio-btn-remove"
-                          aria-label={`Remove section ${index + 1}`}
-                          onClick={() => updateAboutSections(aboutSections.filter((_, position) => position !== index))}
-                        >
-                          <SvgTrashIcon size={14} /> Remove section
-                        </button>
+
+                    {aboutSections.length > 0 && (
+                      <div className="studio-about-sections-list">
+                        {aboutSections.map((section, index) => (
+                          <div className="studio-about-section" role="group" aria-label={`About section ${index + 1}`} key={index}>
+                            <div className="studio-about-section-header">
+                              <div className="studio-about-section-title">
+                                <span className="studio-section-index-badge">#{index + 1}</span>
+                                <span className="title-text">{section.heading.trim() || `Section ${index + 1}`}</span>
+                              </div>
+                              <button
+                                type="button"
+                                className="studio-btn-remove"
+                                aria-label={`Remove section ${index + 1}`}
+                                onClick={() => updateAboutSections(aboutSections.filter((_, position) => position !== index))}
+                                title={`Remove section ${index + 1}`}
+                              >
+                                <SvgTrashIcon size={13} /> <span>Remove section</span>
+                              </button>
+                            </div>
+                            <label className="studio-about-field">
+                              <span className="studio-about-field-label">
+                                <SvgTagIcon size={12} /> Heading (optional)
+                              </span>
+                              <input
+                                maxLength={PROFILE_ABOUT_HEADING_MAX_LENGTH}
+                                placeholder="e.g. Research interests, Experience, Education"
+                                value={section.heading}
+                                onChange={event => updateAboutSections(aboutSections.map((item, position) =>
+                                  position === index ? { ...item, heading: event.target.value } : item))}
+                              />
+                            </label>
+                            <label className="studio-about-field">
+                              <span className="studio-about-field-label">
+                                <SvgTextIcon /> Section text
+                              </span>
+                              <textarea
+                                maxLength={PROFILE_BIO_MAX_LENGTH}
+                                placeholder="Write your section content here..."
+                                value={section.body}
+                                onChange={event => updateAboutSections(aboutSections.map((item, position) =>
+                                  position === index ? { ...item, body: event.target.value } : item))}
+                              />
+                            </label>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+
                     <button
                       type="button"
-                      className="quiet studio-add-about-section"
+                      className="studio-add-about-section"
                       disabled={aboutSections.length >= PROFILE_ABOUT_MAX_SECTIONS}
                       onClick={() => updateAboutSections([...aboutSections, { heading: "", body: "" }])}
                     >
