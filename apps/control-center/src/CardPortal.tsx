@@ -863,18 +863,26 @@ export function CardPortal({
                       <p>No links added yet. Click &quot;Add link&quot; below to add Facebook, Instagram, LinkedIn, YouTube, or your website.</p>
                     </div>
                   ) : (
-                    profile.links.map((link, index) => {
-                      const brand = detectSocialBrand(link.url, link.label);
-                      const matchedPreset = PRESET_PLATFORMS.find(p => p.id === brand.kind) ?? PRESET_PLATFORMS[PRESET_PLATFORMS.length - 1];
-                      return (
-                        <div className="portal-link studio-link-item" key={index}>
-                          <div className="studio-link-item-top">
+                    <>
+                      <div className="studio-links-table-header" aria-hidden="true">
+                        <span className="col-platform">Platform</span>
+                        <span className="col-label">Label</span>
+                        <span className="col-url">URL</span>
+                        <span className="col-action">Action</span>
+                      </div>
+                      {profile.links.map((link, index) => {
+                        const brand = detectSocialBrand(link.url, link.label);
+                        const matchedPreset = PRESET_PLATFORMS.find(p => p.id === brand.kind) ?? PRESET_PLATFORMS[PRESET_PLATFORMS.length - 1];
+                        return (
+                          <div className="portal-link studio-link-item studio-link-single-row" key={index}>
+                            {/* 1. Platform picker */}
                             <div className="studio-platform-picker">
                               <button
                                 type="button"
                                 className={`studio-platform-trigger is-${brand.kind}`}
                                 onClick={() => setOpenPlatformIndex(openPlatformIndex === index ? null : index)}
                                 aria-expanded={openPlatformIndex === index}
+                                title="Select platform"
                               >
                                 <span className="platform-trigger-badge">
                                   <SocialBrandIcon kind={brand.kind} size={22} />
@@ -942,6 +950,32 @@ export function CardPortal({
                               </select>
                             </div>
 
+                            {/* 2. Label input */}
+                            <div className="studio-link-field studio-link-label-col">
+                              <input
+                                required
+                                maxLength={40}
+                                value={link.label}
+                                aria-label={`Link ${index + 1} label`}
+                                placeholder={matchedPreset?.label ?? "Label"}
+                                onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, label: event.target.value } : item))}
+                              />
+                            </div>
+
+                            {/* 3. URL input */}
+                            <div className="studio-link-field studio-link-url-col">
+                              <input
+                                required
+                                type="url"
+                                maxLength={500}
+                                value={link.url}
+                                aria-label={`Link ${index + 1} URL`}
+                                placeholder={matchedPreset?.placeholder ?? "https://..."}
+                                onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, url: event.target.value } : item))}
+                              />
+                            </div>
+
+                            {/* 4. Remove button */}
                             <button
                               type="button"
                               className="quiet studio-btn-remove"
@@ -950,38 +984,15 @@ export function CardPortal({
                                 if (openPlatformIndex === index) setOpenPlatformIndex(null);
                               }}
                               title="Remove link"
+                              aria-label={`Remove link ${index + 1}`}
                             >
                               <SvgTrashIcon size={14} />
-                              <span>Remove link</span>
+                              <span className="studio-btn-remove-text">Remove link</span>
                             </button>
                           </div>
-
-                          <div className="studio-link-inputs-grid">
-                            <label>
-                              Label
-                              <input
-                                required
-                                maxLength={40}
-                                value={link.label}
-                                placeholder={matchedPreset?.label ?? "Label"}
-                                onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, label: event.target.value } : item))}
-                              />
-                            </label>
-                            <label>
-                              URL
-                              <input
-                                required
-                                type="url"
-                                maxLength={500}
-                                value={link.url}
-                                placeholder={matchedPreset?.placeholder ?? "https://..."}
-                                onChange={event => update("links", profile.links.map((item, i) => i === index ? { ...item, url: event.target.value } : item))}
-                              />
-                            </label>
-                          </div>
-                        </div>
-                      );
-                    })
+                        );
+                      })}
+                    </>
                   )}
 
                   <button
