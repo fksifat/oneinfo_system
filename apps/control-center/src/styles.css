@@ -3503,7 +3503,7 @@ button.save-cta-share-btn,
   justify-content: flex-start;
   gap: 6px;
   width: min(76px, calc((100% - 24px) / 5));
-  padding: 4px 2px;
+  padding: 4px 0;
   border-radius: 18px;
   background: transparent;
   border: none;
@@ -3511,12 +3511,6 @@ button.save-cta-share-btn,
   text-decoration: none;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   text-align: center;
-}
-
-@container (max-width: 305px) {
-  .social-card {
-    width: calc((100% - 18px) / 4);
-  }
 }
 
 .social-card:hover {
@@ -3597,19 +3591,25 @@ button.save-cta-share-btn,
 
 .social-card-name {
   font-size: 0.74rem;
+  font-size: clamp(0.625rem, 3.1cqi, 0.74rem);
   font-weight: 700;
   line-height: 1.25;
   color: var(--profile-text);
   max-width: 100%;
-  word-break: break-word;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
   text-align: center;
   letter-spacing: 0.01em;
   transition: color 0.15s ease;
+}
+
+@container (max-width: 305px) {
+  .social-card {
+    width: calc((100% - 18px) / 4);
+  }
+
+  .social-card-name {
+    font-size: 0.74rem;
+  }
 }
 
 .social-card:hover .social-card-name {

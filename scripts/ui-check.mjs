@@ -481,6 +481,25 @@ try {
   await until(`document.querySelector('h1')?.textContent === 'Updated Browser Owner'`);
   assert.equal(browserErrors.length, 0, browserErrors.join('\n'));
   console.log('PASS: Admin/activation/owner photo upload, public image, replacement/removal; signup → owner edit → fresh scan; private email hidden.');
+  const socialTileLabels = ['Facebook', 'Instagram', 'LinkedIn', 'GitHub', 'Portfolio'];
+  await api('/api/v1/profiles', {
+    publicSlug: 'social-tile-layout-qa',
+    displayName: 'Social Tile Layout',
+    published: true,
+    links: socialTileLabels.map((label, sortOrder) => ({ label, sortOrder, url: 'https://example.com/' + label.toLowerCase() })),
+  }, headers);
+  await command('Emulation.setDeviceMetricsOverride', { width: 352, height: 844, deviceScaleFactor: 1, mobile: true });
+  await command('Page.navigate', { url: 'http://127.0.0.1:5174/?profile=social-tile-layout-qa' });
+  await until(`document.querySelectorAll('.social-card-name').length === 5`);
+  const labels = await evaluate(`[...document.querySelectorAll('.social-card-name')].map(label => {
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    return { text: label.textContent, lines: range.getClientRects().length };
+  })`);
+  assert.deepEqual(labels, socialTileLabels.map(text => ({ text, lines: 1 })));
+  assert.equal(await evaluate(`new Set([...document.querySelectorAll('.social-card')].map(link => link.getBoundingClientRect().top)).size`), 1);
+  console.log('PASS: Five social tiles stay on one row with complete platform labels at 352px.');
+  await command('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
   await command('Page.navigate',{url:'http://127.0.0.1:5174/#cards'});await until(`!!document.querySelector('table[aria-label="Unassigned printed QR stock"]')`);
   await until(`!document.querySelector('table[aria-label="Unassigned printed QR stock"]').textContent.includes(${JSON.stringify(card.publicSlug)})`);
   await evaluate(`location.hash='assigned'`);await until(`document.querySelector('table[aria-label="Assigned client cards"]')?.textContent.includes(${JSON.stringify(card.publicSlug)})`);
