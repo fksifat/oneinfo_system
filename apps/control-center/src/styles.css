@@ -3186,7 +3186,7 @@ button.banner-action-btn,
   padding: 4px;
   gap: 2px;
   border: 1px solid var(--profile-link-border);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--profile-link-bg);
 }
 
@@ -3199,7 +3199,7 @@ button.banner-action-btn,
   padding: 6px 2px;
   min-height: 52px;
   min-width: 0;
-  border-radius: 10px;
+  border-radius: 12px;
   flex: 1 1 0;
   text-decoration: none;
 }
@@ -3251,7 +3251,7 @@ button.banner-action-btn,
   height: 48px;
   min-height: 48px;
   padding: 0 18px;
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--profile-accent-gradient, var(--profile-accent));
   color: var(--profile-accent-ink);
   text-decoration: none;
@@ -3285,7 +3285,7 @@ button.save-cta-share-btn,
   justify-content: center !important;
   margin: 0 !important;
   padding: 0 !important;
-  border-radius: 14px !important;
+  border-radius: 16px !important;
   background: var(--profile-link-bg) !important;
   border: 1.5px solid var(--profile-accent-border) !important;
   color: var(--profile-text) !important;
@@ -3377,7 +3377,7 @@ fieldset.profile-about-card,
   display: inline-flex;
   align-items: center;
   padding: 0 8px;
-  margin-left: 12px;
+  margin-left: 14px;
   line-height: 1.2;
 }
 
@@ -3486,7 +3486,7 @@ fieldset.profile-about-card,
   gap: 6px;
   width: min(76px, calc((100% - 24px) / 5));
   padding: 4px 0;
-  border-radius: 18px;
+  border-radius: 14px;
   background: transparent;
   border: none;
   color: var(--profile-text);
@@ -3700,7 +3700,7 @@ fieldset.profile-about-card,
   box-sizing: border-box;
   min-height: 44px;
   padding: 8px 10px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--profile-accent-border-subtle, rgba(223, 184, 119, 0.25));
   background: var(--profile-input-bg, rgba(8, 16, 24, 0.6));
   color: var(--profile-text, #ffffff);
@@ -3741,7 +3741,7 @@ fieldset.profile-about-card,
 .form-error-alert {
   margin: 0;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: rgba(239, 68, 68, 0.15);
   border: 1px solid rgba(239, 68, 68, 0.3);
   color: #f87171;
@@ -3752,7 +3752,7 @@ fieldset.profile-about-card,
 button.submit-lead-btn {
   min-height: 44px;
   padding: 12px 18px;
-  border-radius: 12px;
+  border-radius: 16px;
   border: 1px solid var(--profile-accent-border, rgba(223, 184, 119, 0.6)) !important;
   background: var(--profile-accent-gradient, var(--profile-accent)) !important;
   color: var(--profile-accent-ink, #0c151e) !important;
@@ -10410,7 +10410,7 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
   position: relative;
   width: 100%;
   height: clamp(120px, 20vw, 155px);
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: #111a24;
@@ -10548,7 +10548,7 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 @media (max-width: 640px) {
   .cover-editor-banner {
     height: clamp(110px, 28vw, 135px);
-    border-radius: 12px;
+    border-radius: 14px;
   }
   .cover-editor-controls {
     bottom: 8px;
