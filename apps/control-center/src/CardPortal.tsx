@@ -37,6 +37,34 @@ const PRESET_PLATFORMS = [
   { id: "globe", label: "Website / Other", prefix: "https://", placeholder: "https://yourwebsite.com" },
 ] as const;
 
+const PROFILE_THEMES = [
+  {
+    id: "MIDNIGHT",
+    name: "Midnight",
+    subtitle: "Dark obsidian with gold wireframe accents",
+  },
+  {
+    id: "IVORY",
+    name: "Ivory Luxe",
+    subtitle: "Warm pearl ivory with crisp dark contrast",
+  },
+  {
+    id: "MINT",
+    name: "Mint Emerald",
+    subtitle: "Deep emerald green with radiant metallic luster",
+  },
+  {
+    id: "SAPPHIRE",
+    name: "Royal Sapphire",
+    subtitle: "Deep corporate navy with luminous azure and platinum",
+  },
+  {
+    id: "TITANIUM",
+    name: "Titanium Noir",
+    subtitle: "Sleek space graphite with brushed silver elegance",
+  },
+] as const;
+
 function FormEmailIcon() {
   return (
     <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1330,37 +1358,36 @@ export function CardPortal({
                     </legend>
                     <p className="studio-card-helper">Choose the color palette and atmosphere for your digital card:</p>
                     <div className="studio-theme-grid">
-                      {(["MIDNIGHT", "IVORY", "MINT"] as const).map(themeName => (
-                        <div
-                          key={themeName}
-                          className={`studio-theme-card theme-${themeName.toLowerCase()} ${profile.theme === themeName ? "is-selected" : ""}`}
-                          onClick={() => update("theme", themeName)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={e => { if (e.key === "Enter" || e.key === " ") update("theme", themeName); }}
-                        >
-                          <div className="theme-card-preview-banner">
-                            <span className="theme-card-preview-chip">ONEINFO</span>
-                          </div>
-                          <div className="theme-card-info">
-                            <div className="theme-card-header">
-                              <strong>{themeName === "MIDNIGHT" ? "Midnight" : themeName === "IVORY" ? "Ivory Luxe" : "Mint Emerald"}</strong>
-                              {profile.theme === themeName && (
-                                <span className="theme-card-check">
-                                  <SvgCheckIcon size={14} />
-                                </span>
-                              )}
+                      {PROFILE_THEMES.map(theme => {
+                        const isSelected = (profile.theme || "MIDNIGHT") === theme.id;
+                        return (
+                          <div
+                            key={theme.id}
+                            className={`studio-theme-card theme-card-${theme.id.toLowerCase()} ${isSelected ? "is-selected" : ""}`}
+                            onClick={() => update("theme", theme.id as Draft["theme"])}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") update("theme", theme.id as Draft["theme"]); }}
+                          >
+                            <div className={`theme-card-preview-banner theme-banner-${theme.id.toLowerCase()}`}>
+                              <span className="theme-card-preview-chip">ONEINFO</span>
                             </div>
-                            <span className="theme-card-desc">
-                              {themeName === "MIDNIGHT"
-                                ? "Dark obsidian with gold wireframe accents"
-                                : themeName === "IVORY"
-                                ? "Warm ivory background with crisp dark contrast"
-                                : "Deep emerald green with refined metallic luster"}
-                            </span>
+                            <div className="theme-card-info">
+                              <div className="theme-card-header">
+                                <strong className="theme-card-title">{theme.name}</strong>
+                                {isSelected ? (
+                                  <span className="theme-card-check">
+                                    <SvgCheckIcon size={13} />
+                                  </span>
+                                ) : (
+                                  <span className="theme-card-check-placeholder" />
+                                )}
+                              </div>
+                              <span className="theme-card-desc">{theme.subtitle}</span>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <select
                       className="studio-theme-select-accessible"
@@ -1371,6 +1398,8 @@ export function CardPortal({
                       <option value="MIDNIGHT">Midnight</option>
                       <option value="IVORY">Ivory</option>
                       <option value="MINT">Mint</option>
+                      <option value="SAPPHIRE">Royal Sapphire</option>
+                      <option value="TITANIUM">Titanium Noir</option>
                     </select>
                   </fieldset>
 

@@ -169,6 +169,13 @@
       "when": 1794768000000,
       "tag": "0023_product_category",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794770000000,
+      "tag": "0024_profile_theme_sapphire_titanium",
+      "breakpoints": true
     }
   ]
 }
