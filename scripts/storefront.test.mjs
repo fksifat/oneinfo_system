@@ -941,6 +941,7 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(cardPortalSrc, /lead-channels-row/);
   assert.match(cardPortalSrc, /lead-channel-pill/);
   assert.match(cardPortalSrc, /lead-channel-whatsapp/);
+  assert.match(cardPortalSrc, /lead-btn-delete/);
   assert.match(cardPortalSrc, /analytics-stat-grid/);
   assert.match(cardPortalSrc, /analytics-stat-tile/);
   assert.match(cardPortalSrc, /analytics-stat-row/);
@@ -949,11 +950,16 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   // Quick link chips removed as requested
   assert.doesNotMatch(cardPortalSrc, /analytics-quick-links-row/);
 
+  // Check customer contact lead deletion endpoint in API
+  const customerRoutesSrc = readFileSync("apps/api/src/routes/customers.ts", "utf8");
+  assert.match(customerRoutesSrc, /app\.delete\("\/me\/contact-leads\/:id"/);
+
   // Check CSS styles for shared contacts & profile analytics
   const stylesCss = readFileSync("apps/control-center/src/styles.css", "utf8");
   assert.match(stylesCss, /\.lead-contact-card\s*\{/);
   assert.match(stylesCss, /\.lead-channels-row\s*\{/);
   assert.match(stylesCss, /\.lead-channel-pill\s*\{/);
+  assert.match(stylesCss, /\.lead-btn-delete\s*\{/);
   assert.match(stylesCss, /\.analytics-stat-grid\s*\{/);
   assert.match(stylesCss, /\.analytics-stat-tile\s*\{/);
   assert.match(stylesCss, /\.analytics-select-box\s*\{/);

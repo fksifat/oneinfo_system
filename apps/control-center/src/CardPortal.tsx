@@ -1835,6 +1835,20 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
     }
   }
 
+  async function removeLead(leadId: string) {
+    if (loading || !confirm("Delete this shared contact permanently?")) return;
+    setLoading(true);
+    setError("");
+    try {
+      await customerApi(`/me/contact-leads/${leadId}`, "DELETE", undefined, token);
+      setItems(previous => previous?.filter(item => item.id !== leadId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete contact.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <section className="lead-inbox" aria-labelledby="lead-inbox-heading">
       <div className="lead-inbox-header-row">
@@ -1900,8 +1914,13 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                   <div className="lead-contact-avatar">
                     {(lead.name || "C").trim().charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <strong className="lead-contact-name">{lead.name}</strong>
+                  <div className="lead-contact-text">
+                    <div className="lead-name-row">
+                      <strong className="lead-contact-name">{lead.name}</strong>
+                      <time className="lead-time-inline" dateTime={lead.createdAt}>
+                        {formatLeadDate(lead.createdAt)}
+                      </time>
+                    </div>
                     {lead.recipientName && (
                       <small className="lead-recipient-pill">
                         Shared via {lead.recipientName}’s card
@@ -1909,9 +1928,36 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                     )}
                   </div>
                 </div>
-                <time className="lead-time-badge" dateTime={lead.createdAt}>
-                  {formatLeadDate(lead.createdAt)}
-                </time>
+
+                <div className="lead-card-actions">
+                  {(lead.forwardedAt || (crmEnabled && lead.crmAllowed)) && (
+                    lead.forwardedAt ? (
+                      <small className="lead-crm-forwarded" title="Sent to CRM">
+                        <SvgCheckIcon size={11} /> CRM
+                      </small>
+                    ) : (
+                      <button
+                        className="lead-btn-crm"
+                        type="button"
+                        disabled={loading}
+                        onClick={() => void forward(lead)}
+                        title="Send to CRM"
+                      >
+                        CRM
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    className="lead-btn-delete"
+                    disabled={loading}
+                    onClick={() => void removeLead(lead.id)}
+                    title="Delete contact"
+                    aria-label="Delete contact"
+                  >
+                    <SvgTrashIcon size={13} />
+                  </button>
+                </div>
               </div>
 
               {/* Quick Connect action pills (Email, Phone, WhatsApp) */}
@@ -1924,7 +1970,7 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                 )}
                 {lead.phone && (
                   <a href={`tel:${lead.phone}`} className="lead-channel-pill" title="Call phone">
-                    <SvgPhoneIcon size={13} />
+                    <SvgPhoneIcon size={12} />
                     <span>{lead.phone}</span>
                   </a>
                 )}
@@ -1936,7 +1982,7 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                     className="lead-channel-pill lead-channel-whatsapp"
                     title="Chat on WhatsApp"
                   >
-                    <SvgWhatsAppIcon size={13} />
+                    <SvgWhatsAppIcon size={12} />
                     <span>WhatsApp</span>
                   </a>
                 )}
@@ -1947,26 +1993,6 @@ export function LeadInbox({ token, companyId }: { token: string; companyId?: str
                 <div className="lead-message-box">
                   <span className="lead-message-quote">&ldquo;</span>
                   <p>{lead.message}</p>
-                </div>
-              )}
-
-              {/* CRM forwarding footer if enabled */}
-              {(lead.forwardedAt || (crmEnabled && lead.crmAllowed)) && (
-                <div className="lead-crm-footer">
-                  {lead.forwardedAt ? (
-                    <small className="lead-crm-forwarded">
-                      <SvgCheckIcon size={12} /> Sent to CRM
-                    </small>
-                  ) : (
-                    <button
-                      className="lead-btn-crm"
-                      type="button"
-                      disabled={loading}
-                      onClick={() => void forward(lead)}
-                    >
-                      Send to CRM
-                    </button>
-                  )}
                 </div>
               )}
             </div>

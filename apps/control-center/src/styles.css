@@ -8905,101 +8905,157 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .lead-cards-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   margin-top: 4px;
 }
 
 .lead-contact-card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 10px 14px;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
 
 .lead-contact-card:hover {
-  border-color: rgba(223, 184, 119, 0.35);
+  border-color: rgba(223, 184, 119, 0.3);
   background: rgba(255, 255, 255, 0.045);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
 }
 
 .lead-card-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .lead-contact-main {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .lead-contact-avatar {
-  width: 38px;
-  height: 38px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: linear-gradient(135deg, rgba(223, 184, 119, 0.25), rgba(223, 184, 119, 0.1));
   color: #dfb877;
-  border: 1.5px solid rgba(223, 184, 119, 0.4);
+  border: 1px solid rgba(223, 184, 119, 0.35);
   display: grid;
   place-items: center;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 800;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+}
+
+.lead-contact-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lead-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .lead-contact-name {
-  display: block;
-  font-size: 0.96rem;
-  font-weight: 750;
+  font-size: 0.88rem;
+  font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lead-time-inline {
+  font-size: 0.7rem;
+  color: #728a9c;
+  white-space: nowrap;
 }
 
 .lead-recipient-pill {
   display: inline-block;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: #8fa5b5;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .lead-time-badge {
-  font-size: 0.74rem;
+  font-size: 0.7rem;
   color: #728a9c;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  padding: 3px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 2px 7px;
   border-radius: 6px;
   white-space: nowrap;
+}
+
+/* Card Actions: Delete & CRM */
+.lead-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lead-btn-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  padding: 0;
+}
+
+.lead-btn-delete:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.22);
+  border-color: #ef4444;
+  color: #ffffff;
+  transform: scale(1.06);
+}
+
+.lead-btn-delete:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Channels: Email, Phone, WhatsApp */
 .lead-channels-row {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
 .lead-channel-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  min-height: 36px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 5px;
+  padding: 3px 9px;
+  min-height: 26px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: #d1dde6;
-  font-size: 0.8rem;
+  font-size: 0.74rem;
   font-weight: 600;
   text-decoration: none;
   transition: all 0.18s ease;
@@ -9007,36 +9063,36 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 }
 
 .lead-channel-pill:hover {
-  background: rgba(223, 184, 119, 0.15);
-  border-color: rgba(223, 184, 119, 0.45);
+  background: rgba(223, 184, 119, 0.14);
+  border-color: rgba(223, 184, 119, 0.4);
   color: #ffffff;
-  transform: translateY(-1px);
 }
 
 .lead-channel-pill.lead-channel-whatsapp {
-  background: rgba(37, 211, 102, 0.1);
-  border-color: rgba(37, 211, 102, 0.28);
+  background: rgba(37, 211, 102, 0.08);
+  border-color: rgba(37, 211, 102, 0.22);
   color: #25d366;
 }
 
 .lead-channel-pill.lead-channel-whatsapp:hover {
-  background: rgba(37, 211, 102, 0.2);
-  border-color: rgba(37, 211, 102, 0.5);
+  background: rgba(37, 211, 102, 0.18);
+  border-color: rgba(37, 211, 102, 0.45);
   color: #ffffff;
 }
 
 /* Note / message box */
 .lead-message-box {
   display: flex;
-  gap: 8px;
-  padding: 10px 14px;
-  background: rgba(0, 0, 0, 0.25);
-  border-left: 3px solid #dfb877;
-  border-radius: 4px 10px 10px 4px;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 5px 10px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 2.5px solid #dfb877;
+  border-radius: 3px 6px 6px 3px;
 }
 
 .lead-message-quote {
-  font-size: 1.2rem;
+  font-size: 0.95rem;
   line-height: 1;
   color: #dfb877;
   opacity: 0.8;
@@ -9044,8 +9100,8 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 
 .lead-message-box p {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.45;
+  font-size: 0.76rem;
+  line-height: 1.35;
   color: #cad8e2;
   white-space: pre-wrap;
   word-break: break-word;
@@ -9055,32 +9111,32 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .lead-crm-footer {
   display: flex;
   justify-content: flex-end;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding-top: 4px;
 }
 
 .lead-crm-forwarded {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  font-size: 0.74rem;
+  gap: 4px;
+  font-size: 0.7rem;
   color: #2ed573;
   background: rgba(46, 213, 115, 0.1);
-  padding: 3px 8px;
-  border-radius: 6px;
-  border: 1px solid rgba(46, 213, 115, 0.25);
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(46, 213, 115, 0.22);
 }
 
 .lead-btn-crm {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: 4px;
+  padding: 3px 8px;
+  min-height: 24px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   color: #8fa5b5;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;

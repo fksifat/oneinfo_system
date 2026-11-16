@@ -247,6 +247,17 @@ export const customerRoutes: FastifyPluginAsync = async app => {
     });
   });
 
+  app.delete("/me/contact-leads/:id", async (request, reply) => {
+    const account = await requireCustomer(request);
+    const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
+    reply.header("Cache-Control", "no-store");
+    const result = await db.delete(customerContactLeads)
+      .where(and(eq(customerContactLeads.id, id), eq(customerContactLeads.accountId, account.id)))
+      .returning({ id: customerContactLeads.id });
+    if (!result.length) fail("Contact not found.", 404);
+    return { ok: true, id };
+  });
+
   app.post("/cards/:cardSlug/invoice-activation", { bodyLimit: 1024 }, async (request, reply) => {
     await limit(request);
     reply.header("Cache-Control", "no-store");
