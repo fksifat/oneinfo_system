@@ -96,7 +96,7 @@ export const productMediaRoutes: FastifyPluginAsync = async app => {
     }
   });
 
-  for (const kind of ["upload", "profile", "profile-claim", "profile-employee", "custom-logo"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: kind === "upload" ? maxMediaBytes : 2 * 1024 * 1024 }, async (request, reply) => {
+  for (const kind of ["upload", "profile", "profile-claim", "profile-employee", "custom-logo"] as const) app.post<{ Params: { extension: string } }>(`/${kind}/:extension`, { bodyLimit: maxMediaBytes }, async (request, reply) => {
     if (kind === "upload") await requireOperator(request, ["SUPER_ADMIN"]);
     else if (kind === "custom-logo") {
       if (!await allowAuthAttempt(`custom-logo:${request.ip}`, 60, 60 * 60_000)) return reply.code(429).header("Retry-After", "3600").send({ message: "Photo upload limit reached. Please try again in an hour." });

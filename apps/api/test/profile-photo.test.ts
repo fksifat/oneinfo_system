@@ -31,7 +31,7 @@ it("allows only authenticated owners or a live activation claim to upload a boun
     expect((await upload("profile-claim/png", "invalid")).statusCode).toBe(401);
     expect((await upload("profile/svg")).statusCode).toBe(415);
     expect((await upload("profile/png", "owner", Buffer.from("not an image"))).statusCode).toBe(415);
-    expect((await upload("profile/png", "owner", Buffer.alloc(2 * 1024 * 1024 + 1))).statusCode).toBe(413);
+    expect((await upload("profile/png", "owner", Buffer.alloc(10 * 1024 * 1024 + 1))).statusCode).toBe(413);
     expect(put).not.toHaveBeenCalled();
     expect((await upload()).statusCode).toBe(201);
     expect((await upload("profile-claim/png", "claim")).statusCode).toBe(201);
