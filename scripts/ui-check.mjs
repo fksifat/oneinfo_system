@@ -163,7 +163,9 @@ try {
   }
   const uploadPhoto = async () => {
   await evaluate(`(async()=>{const canvas=document.createElement('canvas');canvas.width=900;canvas.height=600;const ctx=canvas.getContext('2d');ctx.fillStyle='#367c7a';ctx.fillRect(0,0,900,600);ctx.fillStyle='#f4d7a4';ctx.beginPath();ctx.arc(450,280,160,0,Math.PI*2);ctx.fill();const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));const transfer=new DataTransfer();transfer.items.add(new File([blob],'portrait.png',{type:'image/png'}));const input=document.querySelector('input[aria-label="Upload profile photo"]');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));})()`);
-  await until(`!!document.querySelector('.photo-editor-avatar img') && !document.querySelector('input[aria-label="Upload profile photo"]').disabled`);
+  await until(`!!document.querySelector('.crop-btn-save:not([disabled])')`);
+  await evaluate(`(()=>{document.querySelector('.crop-btn-save:not([disabled])')?.click();})()`);
+  await until(`!document.querySelector('.photo-crop-modal') && !!document.querySelector('.photo-editor-avatar img') && !document.querySelector('input[aria-label="Upload profile photo"]').disabled`);
   assert.equal(await evaluate(`document.querySelector('.photo-editor-avatar img').src.includes('/api/v1/product-media/')`),true);
   };
   for(const width of [1440,768,390,320]){
