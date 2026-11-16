@@ -876,11 +876,6 @@ export function CardPortal({
                   </legend>
                   <div className="studio-visual-media-section">
                     <div className="studio-media-block">
-                      <span className="studio-media-label">Profile photo</span>
-                      <ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
-                    </div>
-
-                    <div className="studio-media-block">
                       <span className="studio-media-label">Cover photo</span>
                       <CoverPhotoEditor
                         value={profile.modeContent?.coverUrl ?? ""}
@@ -890,6 +885,11 @@ export function CardPortal({
                         onChange={url => update("modeContent", { ...profile.modeContent, coverUrl: url })}
                         onBusy={setCoverBusy}
                       />
+                    </div>
+
+                    <div className="studio-media-block">
+                      <span className="studio-media-label">Profile photo</span>
+                      <ProfilePhoto value={profile.avatarUrl} name={profile.displayName} token={token} claimToken={claimToken} onChange={url => update("avatarUrl", url)} onBusy={setPhotoBusy} />
                     </div>
                   </div>
                   <div className="studio-form-grid">

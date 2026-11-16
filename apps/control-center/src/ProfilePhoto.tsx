@@ -358,7 +358,7 @@ export function ProfilePhoto({
     onBusy(true);
     setError("");
     try {
-      if (blob.size > 2 * 1024 * 1024) {
+      if (blob.size > 10 * 1024 * 1024) {
         throw new Error("Could not prepare this photo (size exceeded). Try a slightly smaller zoom.");
       }
       const route = operator ? "upload" : claimToken ? "profile-claim" : "profile";

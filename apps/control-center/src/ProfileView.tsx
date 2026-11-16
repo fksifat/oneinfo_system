@@ -502,7 +502,7 @@ export function ProfileView({
   const [copyFeedback, setCopyFeedback] = useState(false);
   const [photoFailed, setPhotoFailed] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
-  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string; title: string } | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string; title: string; kind?: "avatar" | "cover" } | null>(null);
   const { profile, links } = data;
 
   const coverUrl = profile.coverUrl || profile.modeContent?.coverUrl;
@@ -621,7 +621,8 @@ export function ProfileView({
                 setLightboxImage({
                   src: coverUrl,
                   alt: `${profile.displayName} cover photo`,
-                  title: "Cover Photo",
+                  title: profile.displayName || "Cover Photo",
+                  kind: "cover",
                 });
               }}
               title="Click to view full cover photo"
@@ -632,7 +633,8 @@ export function ProfileView({
                   setLightboxImage({
                     src: coverUrl,
                     alt: `${profile.displayName} cover photo`,
-                    title: "Cover Photo",
+                    title: profile.displayName || "Cover Photo",
+                    kind: "cover",
                   });
                 }
               }}
@@ -712,6 +714,7 @@ export function ProfileView({
                   src: profile.avatarUrl,
                   alt: `${profile.displayName} profile photo`,
                   title: profile.displayName,
+                  kind: "avatar",
                 });
               }
             }}
@@ -724,6 +727,7 @@ export function ProfileView({
                   src: profile.avatarUrl,
                   alt: `${profile.displayName} profile photo`,
                   title: profile.displayName,
+                  kind: "avatar",
                 });
               }
             }}
@@ -919,22 +923,22 @@ export function ProfileView({
           aria-label="Enlarged photo preview"
           onClick={() => setLightboxImage(null)}
         >
+          <button
+            type="button"
+            className="profile-lightbox-close"
+            onClick={() => setLightboxImage(null)}
+            aria-label="Close enlarged photo"
+          >
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+
           <div
-            className="profile-lightbox-content"
+            className={`profile-lightbox-content is-${lightboxImage.kind || "avatar"}`}
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              type="button"
-              className="profile-lightbox-close"
-              onClick={() => setLightboxImage(null)}
-              aria-label="Close enlarged photo"
-            >
-              <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-
             <div className="profile-lightbox-image-wrap">
               <img
                 src={lightboxImage.src}
@@ -946,6 +950,11 @@ export function ProfileView({
             {lightboxImage.title && (
               <div className="profile-lightbox-caption">
                 <span>{lightboxImage.title}</span>
+                {lightboxImage.kind && (
+                  <span className="profile-lightbox-badge">
+                    {lightboxImage.kind === "cover" ? "Cover Photo" : "Profile Photo"}
+                  </span>
+                )}
               </div>
             )}
           </div>

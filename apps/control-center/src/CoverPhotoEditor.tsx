@@ -49,8 +49,8 @@ export function CoverPhotoEditor({
       setError("Please select a JPEG, PNG, or WebP image.");
       return;
     }
-    if (file.size > 2 * 1024 * 1024) {
-      setError("Cover image must be under 2 MB.");
+    if (file.size > 10 * 1024 * 1024) {
+      setError("Cover image must be under 10 MB.");
       return;
     }
 
@@ -110,6 +110,8 @@ export function CoverPhotoEditor({
           </div>
         )}
 
+        <div className="cover-editor-overlay" aria-hidden="true" />
+
         <div className="cover-editor-controls">
           <button
             type="button"
@@ -138,7 +140,7 @@ export function CoverPhotoEditor({
 
       {error && <p className="cover-editor-error" role="alert">{error}</p>}
       <p className="cover-editor-hint">
-        Recommended: Landscape image (PNG, JPEG, WebP up to 2 MB).
+        Recommended: Landscape image (PNG, JPEG, WebP up to 10 MB).
       </p>
     </div>
   );
