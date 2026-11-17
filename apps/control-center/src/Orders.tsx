@@ -1,7 +1,7 @@
 import { OrderPrint } from "./OrderPrint.js";
 import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
+import { bkashNumber, paymentMethodLabels, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api, productMediaUrl } from "./api.js";
 import { downloadOrderEps } from "./eps-generator.js";
 import { AdminCardPreview } from "./AdminCardPreview.js";
@@ -29,6 +29,7 @@ function nextOrderStage(order: StoreOrder): OrderStage {
 }
 
 const orderDate = new Intl.DateTimeFormat("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" });
+const paymentWallet = (order: StoreOrder) => order.paymentMethod === "COD" ? "bKash" : paymentMethodLabels[order.paymentMethod];
 const codBalance = (order: StoreOrder) => Math.max(0, order.totalMinor - (order.paymentStatus === "VERIFIED" ? order.paymentAmountMinor ?? 0 : 0));
 
 export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: initialCustomOnly = false }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void; customOnly?: boolean }) {
@@ -289,14 +290,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
 
   async function verifyPayment(order: StoreOrder) {
     if (verifyingPayment || !order.transactionId || !order.paymentAmountMinor) return;
-    if (!window.confirm(`Confirm you received ${bdt(order.paymentAmountMinor)} in bKash for transaction ${order.transactionId}.`)) return;
+    const sender = order.paymentSenderNumber ? ` from ${order.paymentSenderNumber}` : "";
+    if (!window.confirm(`Confirm you received ${bdt(order.paymentAmountMinor)} in ${paymentWallet(order)}${sender} for transaction ${order.transactionId}.`)) return;
     selectStage(order.id, "payment");
     setVerifyingPayment(order.id);
     setActionNotice(undefined);
     try {
       const updated = await api<OrderReceipt>(`${path}/admin/${order.id}/verify-payment`, token, { method: "POST" });
       updateOrder(order.id, item => ({ ...item, ...updated }));
-      setActionNotice({ orderId: order.id, stage: "payment", text: "bKash payment verified." });
+      setActionNotice({ orderId: order.id, stage: "payment", text: `${paymentWallet(order)} payment verified.` });
     } catch (error) {
       setActionNotice({ orderId: order.id, stage: "payment", text: error instanceof Error ? error.message : "Could not verify payment.", error: true });
     } finally {
@@ -489,11 +491,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 <h3 id={`${actionId}-title`}>{orderStages.find(item => item.id === stage)?.title}</h3>
                 {notice && <p className={`store-order-notice${notice.error ? " is-error" : ""}`} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
                 {closed && <p>{order.status === "CANCELLED" ? "This order was cancelled." : "Waiting for the customer to submit payment details."}</p>}
-                {stage === "payment" && !closed && (paid ? <p>{order.paymentStatus === "VERIFIED" ? "bKash payment is verified." : "Order received. No advance payment is required."}</p>
-                  : <p>Check the bKash transaction before verifying payment.</p>)}
+                {stage === "payment" && !closed && (paid ? <p>{order.paymentStatus === "VERIFIED" ? `${paymentWallet(order)} payment is verified.` : "Order received. No advance payment is required."}</p>
+                  : <p>Check the {paymentWallet(order)} transaction before verifying payment.</p>)}
                 {stage === "processing" && !closed && order.status !== "RECEIVED" && <p>{order.status === "SHIPPED" || order.status === "DELIVERED" ? "The order has left packing." : "Processing started."}</p>}
                 {(stage === "shipping" || stage === "delivery") && !closed && order.status !== "DELIVERED" && (!paid || needsPacking(order)) && (
-                  <p>{!paid ? "Verify bKash payment before continuing." : "Confirm packing before continuing."} <button type="button" className="button-action button-action-primary"
+                  <p>{!paid ? "Verify payment before continuing." : "Confirm packing before continuing."} <button type="button" className="button-action button-action-primary"
                     onClick={() => chooseStage(paid ? "processing" : "payment")}>{paid ? "Open packing checklist" : "Open payment verification"}</button></p>
                 )}
                 {stage === "shipping" && order.status === "DELIVERED" && <p>{order.courierTrackingId ? `Courier tracking ID ${order.courierTrackingId}` : "This order was delivered."}</p>}
@@ -505,7 +507,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                   )}
                   {stage === "payment" && !closed && order.transactionId && !paid && (
                     <button className="button-action button-action-verify" type="button" disabled={busy} onClick={() => void verifyPayment(order)}>
-                      <span aria-hidden="true">✓</span> {verifyingPayment === order.id ? "Verifying…" : "Verify bKash payment"}
+                      <span aria-hidden="true">✓</span> {verifyingPayment === order.id ? "Verifying…" : `Verify ${paymentWallet(order)} payment`}
                     </button>
                   )}
                   {stage === "delivery" && !closed && (order.status === "DELIVERED" || paid && !needsPacking(order)) && (
@@ -569,9 +571,10 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                     <h3>Payment summary</h3>
                   </div>
                   <dl>
-                    <div><dt>Payment method</dt><dd><strong>{order.paymentMethod === "BKASH" ? "bKash Digital" : "Cash on Delivery (COD)"}</strong></dd></div>
-                    {order.transactionId && <div><dt>bKash transaction</dt><dd>{bdt(order.paymentAmountMinor ?? 0)} · <code className="mono-code">{order.transactionId}</code><br />
+                    <div><dt>Payment method</dt><dd><strong>{paymentMethodLabels[order.paymentMethod]}</strong></dd></div>
+                    {order.transactionId && <div><dt>{paymentWallet(order)} transaction</dt><dd>{bdt(order.paymentAmountMinor ?? 0)} · <code className="mono-code">{order.transactionId}</code><br />
                       <span className={`order-status-badge ${order.paymentStatus === "VERIFIED" ? "is-verified" : "is-pending"}`}>{order.paymentStatus === "VERIFIED" ? "✓ Verified" : "⏳ Pending verification"}</span></dd></div>}
+                    {order.paymentSenderNumber && <div><dt>Number used to pay</dt><dd>{order.paymentSenderNumber}</dd></div>}
                     {order.transactionId && order.paymentMethod === "COD" && <div><dt>Due on delivery</dt>
                       <dd><strong>{bdt(codBalance(order))}</strong></dd></div>}
                     {order.couponCode && <div><dt>Coupon discount</dt><dd className="coupon-tag">{order.couponCode} (−{bdt(order.discountMinor)})</dd></div>}

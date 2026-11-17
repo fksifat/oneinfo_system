@@ -1,4 +1,4 @@
-import type { OrderLine, OrderReceipt } from "@oneinfo/contracts";
+import { paymentMethodLabels, type OrderLine, type OrderReceipt } from "@oneinfo/contracts";
 import logo from "./assets/oneinfo-logo.svg";
 
 type InvoiceOrder = Pick<OrderReceipt, "id" | "invoiceNumber" | "status" | "createdAt" | "paymentMethod" |
@@ -25,7 +25,7 @@ export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[]
     </header>
     <dl class="invoice-reference">
       <div><dt>Order ID</dt><dd>${escape(order.id)}</dd></div>
-      <div><dt>Payment</dt><dd>${order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery"}</dd></div>
+      <div><dt>Payment</dt><dd>${paymentMethodLabels[order.paymentMethod]}</dd></div>
     </dl>
     ${cancelled ? '<p class="invoice-cancelled">Order cancelled</p>' : ""}
     <table class="invoice-table" aria-label="Invoice items">
