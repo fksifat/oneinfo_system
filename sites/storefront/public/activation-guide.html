@@ -11,7 +11,7 @@
       font: 1rem/1.7 "Noto Sans Bengali", "Bangla Sangam MN", Nirmala UI, system-ui, sans-serif;
     }
     a { color: #173a34; text-underline-offset: .2em; }
-    a:focus-visible, summary:focus-visible { outline: 2px solid #173a34; outline-offset: 4px; }
+    a:focus-visible { outline: 2px solid #173a34; outline-offset: 4px; }
     .shell { max-width: 42rem; margin: auto; padding: 18px clamp(14px, 4vw, 28px) 44px; }
     .brand { display: inline-flex; align-items: center; min-height: 44px; font: 750 1.25rem/1 system-ui, sans-serif; text-decoration: none; }
     main { padding: clamp(18px, 5vw, 36px); background: #fff; border: 1px solid #dce4df; border-top: 4px solid #173a34; border-radius: 12px; }
@@ -23,9 +23,6 @@
     h2 { margin: 0; font-size: 1.05rem; }
     li p { margin: 4px 0 0; color: #43564f; }
     .note { margin: 0; padding: 10px 12px; border-radius: 7px; background: #edf3ef; }
-    details { margin-top: 18px; border-top: 1px solid #e2e9e3; }
-    summary { padding: 12px 0 0; cursor: pointer; font-weight: 700; }
-    details p { margin: 6px 0 0; color: #43564f; }
   </style>
 </head>
 <body>
@@ -53,10 +50,6 @@
         </li>
       </ol>
       <p class="note">প্রতিটি Secret code একবার ব্যবহার করা যায়। কোডটি নিজের কাছে রাখুন।</p>
-      <details>
-        <summary>স্ক্রিনে Invoice number চাইলে</summary>
-        <p>কার্ড হাতে পাওয়ার পরে ইনভয়েস নম্বর লিখে <strong lang="en">Send verification link</strong> চাপুন। অর্ডারে দেওয়া ইমেইলে যে লিংক আসবে, সেটি খুলে প্রোফাইল সেটআপ করুন।</p>
-      </details>
     </main>
   </div>
 </body>

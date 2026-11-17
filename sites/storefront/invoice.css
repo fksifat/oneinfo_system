@@ -22,14 +22,19 @@
 .invoice-table th:first-child { text-align: left; overflow-wrap: anywhere; }
 .invoice-table td { font-variant-numeric: tabular-nums; }
 .invoice-table small { display: block; }
-.invoice-totals { max-width: 365px; margin: 16px 0 20px auto; font-size: 14px; }
+.invoice-summary {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: center;
+  gap: 16px; margin: 16px 0 20px;
+}
+.invoice-totals { grid-column: 2; justify-self: end; width: 100%; max-width: 365px; margin: 0; font-size: 14px; }
 .invoice-totals div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 8px; }
 .invoice-totals dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .invoice-totals .invoice-total { margin: 4px 0; padding-block: 8px; border-block: 1px solid #9eafa6; font-weight: 750; color: #173a34; }
-.invoice-guide { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border: 1px solid #dce4df; border-radius: 8px; color: #173a34; text-decoration: none; }
-.invoice-guide img { width: 76px; height: 76px; flex: none; }
-.invoice-guide strong { text-decoration: underline; text-underline-offset: 2px; }
-.invoice-guide [lang="bn"] { display: block; color: #51635b; font-size: 13px; }
+.invoice-guide {
+  display: grid; grid-area: 1 / 1; justify-items: center; justify-self: center;
+  color: #173a34; text-align: center; text-underline-offset: 3px; font-size: 13px; font-weight: 700;
+}
+.invoice-guide img { display: block; width: 112px; height: 112px; flex: none; }
 .invoice-warranties { margin-top: 20px; padding-top: 12px; border-top: 1px solid #dce4df; }
 .invoice-warranties h2 { margin: 0 0 8px; font-size: 18px; }
 .invoice-warranty + .invoice-warranty { margin-top: 12px; }
@@ -47,12 +52,15 @@
   #invoice-portal { padding-inline: 12px; }
   .invoice-card { padding: 16px 12px; }
   .invoice-table { font-size: 12px; }
+  .invoice-summary { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .invoice-totals { grid-column: 1; max-width: none; }
+  .invoice-guide { display: flex; grid-area: auto / 1; align-items: center; justify-self: start; text-align: start; }
 }
 @media print {
   body:has(.invoice-card):not(:has(#invoice-portal[hidden])) { background: white; color: black; }
   body:has(#invoice-portal:not([hidden])) > :not(main), .invoice-actions { display: none !important; }
   #invoice-portal:not([hidden]), .invoice-card { min-height: auto; max-width: none; margin: 0; padding: 0; border: 0; border-radius: 0; background: white; }
-  .invoice-header, .invoice-table tr, .invoice-totals, .invoice-code, .invoice-guide, .invoice-warranty { break-inside: avoid; }
+  .invoice-header, .invoice-table tr, .invoice-summary, .invoice-code, .invoice-warranty { break-inside: avoid; }
   .invoice-activation header, .invoice-warranties h2 { break-after: avoid; }
   .invoice-table thead, .invoice-activation { background: white; }
   .invoice-code code { font-size: 20pt; }
