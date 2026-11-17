@@ -243,6 +243,12 @@ In hosted Admin → **NFC & QR operations**, select **Open production console on
 
 The authorized Neon-to-VPS consolidation retained old cards, orders, activation secrets and production history alongside existing VPS data. Subsequent workstation changes use the shared VPS database. Order emails, company invitations, email verification and password resets use the configured Brevo SMTP or Resend credentials and a verified sender. Apply migration `0017_profile_handles` before rolling out the updated API and frontend.
 
+## Meta sales measurement
+
+The storefront measures checkout starts, submitted payment details and confirmed orders after marketing consent. It sends catalog variant IDs, quantities and BDT values. A `Purchase` is a confirmed storefront order, including COD orders awaiting payment verification.
+
+After deploying the storefront and API, add `https://www.oneinfo.online/api/v1/products/public/meta-catalog.csv` as a scheduled data feed in Meta Commerce Manager and connect the Oneinfo Website Pixel as its event source. The feed uses published variants with public HTTPS images and shares their IDs with the Pixel. Add product artwork in Admin before importing a variant without a public image.
+
 ## Repository layout
 
 ```text

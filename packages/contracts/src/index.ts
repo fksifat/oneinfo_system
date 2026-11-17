@@ -355,6 +355,7 @@ export function productGallery(variants: ProductVariant[], selected: ProductVari
     .flatMap(variant => productMedia(variant).map((media, index) => ({variant, media, index})));
 }
 export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) => v.salePriceMinor ?? v.priceMinor;
+export const catalogVariantId = (productId: string, variantId: string) => `${productId}_${variantId}`;
 export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
   v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
 
