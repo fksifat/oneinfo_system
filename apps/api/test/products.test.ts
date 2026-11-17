@@ -1,9 +1,26 @@
 import { describe, it, expect } from "vitest";
 import { ProductInputSchema, ProductMediaSchema, UpdateProductSchema, productMedia, productGallery, discountPercent, variantPrice, resolveProductImageUrl, resolveProductModelUrl } from "../../../packages/contracts/src/index.js";
 import { addCartVariant, reconcileCartItems, productRoute, spinFrame } from "../../../sites/storefront/catalog.js";
+import { metaCatalogCsv } from "../src/domain/meta-catalog.js";
 const variant = { id:"01800000-0000-4000-8000-000000000011", name:"White", colorHex:"#ffffff", priceMinor:129000, salePriceMinor:null, available:true, finish:"Satin", appearance:"light", imageUrl:"" };
 const product = { id:"01800000-0000-4000-8000-000000000001", name:"Example card", slug:"example-card", variants:[variant] };
 const blue = {...variant, id:"01800000-0000-4000-8000-000000000012", name:"Blue", colorHex:"#193c66", priceMinor:200000, salePriceMinor:150000};
+
+it("exports only image-backed variants with their real storefront links, stock and prices", () => {
+  const imageUrl = `/api/v1/product-media/${blue.id}.png`;
+  const item = ProductInputSchema.parse({ ...product, description: '=Some "card", with details', variants: [variant, {
+    ...blue, stockQuantity: 0, imageUrl,
+  }] });
+  const csv = metaCatalogCsv([{ ...item, id: product.id }], "https://www.oneinfo.online");
+  const [header, row, blank] = csv.split("\r\n");
+  expect(header).toContain("availability,condition,price,sale_price,link,image_link");
+  expect(row).toContain(`${product.id}_${blue.id}`);
+  expect(row).toContain('"out of stock","new","2000.00 BDT","1500.00 BDT"');
+  expect(row).toContain(`https://www.oneinfo.online/#product/${product.slug}?colour=${blue.id}`);
+  expect(row).toContain(`https://www.oneinfo.online${imageUrl}`);
+  expect(row).toContain(`"'=Some ""card"", with details"`);
+  expect(blank).toBe("");
+});
 describe("catalog input boundaries", () => {
   it("accepts a Drive share link for a model and resolves it to the GLB endpoint", () => {
     const model = { id:variant.id, type:"model", url:"https://drive.google.com/file/d/sample-id/view?resourcekey=0-key" };

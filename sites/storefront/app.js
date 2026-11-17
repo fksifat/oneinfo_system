@@ -5,7 +5,7 @@ import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
 import ariseLogoUrl from "./assets/arise-studio-logo.png";
 import { invoiceMarkup } from "./invoice.ts";
-import { initializeStorefrontPixel, trackPurchase, trackStorefront } from "./meta-pixel.js";
+import { catalogEventDetails, initializeStorefrontPixel, trackCheckout, trackPaymentInfo, trackPurchase, trackStorefront } from "./meta-pixel.js";
 import "./invoice.css";
 
 (function () {
@@ -35,7 +35,7 @@ import "./invoice.css";
     return cover?.type === "image" ? cover.url : cover?.poster;
   }
   let products = [];
-  let lastTrackedProduct;
+  let lastTrackedVariant;
   const selectedVariants = new Map();
   const selectedMedia = new Map();
   const selectedModels = new Map();
@@ -1226,6 +1226,7 @@ import "./invoice.css";
     const trackingToken = location.hash.startsWith("#track/") ? location.hash.slice(7) : "";
     const invoicePage = location.hash.startsWith("#invoice/");
     const route = productRoute(location.hash);
+    if (!route) lastTrackedVariant = undefined;
     document.body.classList.toggle("product-page", Boolean(route));
     const page = order ? "order-draft" : reviewToken ? "review-portal" : trackingPage ? "tracking-portal" : invoicePage ? "invoice-portal" : route ? "product-detail" : "";
     $$("#main > section").forEach(section => {
@@ -1246,16 +1247,12 @@ import "./invoice.css";
       return;
     }
     if (!route) {
-      lastTrackedProduct = undefined;
       document.title = "Oneinfo Smart Business Cards";
       if (focus && location.hash === "#top") window.scrollTo({ top: 0, behavior: "instant" });
       else if (focus) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior:"instant" });
       return;
     }
     const product = products.find(p => p.slug === route.slug);
-    if (product && lastTrackedProduct !== product.id && trackStorefront("ViewContent", { content_ids: [product.id], content_type: "product" })) {
-      lastTrackedProduct = product.id;
-    }
     const host = $("#product-detail");
     if (route.variantId && product?.variants.some(v => v.id === route.variantId)) selectedVariants.set(product.id, route.variantId);
     const focused = document.activeElement;
@@ -1266,7 +1263,14 @@ import "./invoice.css";
     const quantityFocused = focused?.closest("#product-detail") ? focused.dataset.quantityStep : null;
     const openDisclosures = new Map($$(".purchase-disclosure", host).map(el => [el.dataset.disclosure, el.open]));
     host.innerHTML = `<a class="back-to-products" href="#products">${icon("arrow-left")} Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup(product) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
-    if (product) void loadProductReviews(product, host);
+    if (product) {
+      const viewed = product.variants.find(item => item.id === selectedVariants.get(product.id));
+      if (viewed && lastTrackedVariant !== `${product.id}:${viewed.id}` && trackStorefront("ViewContent",
+        catalogEventDetails([{ productId: product.id, variantId: viewed.id, quantity: 1, unitPriceMinor: variantPrice(viewed) }]))) {
+        lastTrackedVariant = `${product.id}:${viewed.id}`;
+      }
+      void loadProductReviews(product, host);
+    }
     if (!catalogReady && catalogFailed) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
     document.title = product ? `${product.name} | Oneinfo` : "Product | Oneinfo";
     watchImages();
@@ -2527,8 +2531,9 @@ import "./invoice.css";
       }
 
       const nextCart = addCartVariant(cart, product, variant, quantity, customization);
+      const added = nextCart.find((item, index) => item !== cart[index]);
       save(storageKey, nextCart); cart = nextCart; renderCart();
-      trackStorefront("AddToCart", { content_ids: [product.id], content_type: "product", num_items: quantity });
+      if (added) trackStorefront("AddToCart", catalogEventDetails([{ productId: product.id, variantId: variant.id, quantity, unitPriceMinor: added.priceMinor }]));
       toast(`${quantity} x ${product.name} · ${variant.name}${customization ? ` (${customization.name})` : ""} added to cart`);
     } catch (error) { toast(error instanceof RangeError ? error.message : "Could not save the cart. Please try again."); }
     finally { addingToCart = false; renderRoute(); }
@@ -3288,6 +3293,7 @@ import "./invoice.css";
     renderCartItems($(".order-items"));
     const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
     $(".order-total").textContent = money.format(subtotal / 100);
+    if (location.hash === "#order-draft") trackCheckout(checkoutItems(cart));
     renderDelivery();
   }
 
@@ -3516,6 +3522,7 @@ import "./invoice.css";
     orderSubmit.disabled = retryButton.disabled = true;
     retryButton.textContent = "Checking order…";
     try {
+      if (request.payment?.transactionId) trackPaymentInfo(request.requestId, request.items);
       const response = await fetch(`${apiUrl}/api/v1/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -3545,6 +3552,7 @@ import "./invoice.css";
         throw new Error("Confirmation unavailable");
       }
       if (!result.id || !Number.isSafeInteger(result.totalMinor)) throw new Error("Invalid order receipt");
+      trackPurchase(result, request.items);
       save(receiptKey, result);
       if (JSON.stringify(checkoutItems(load(storageKey, []))) === JSON.stringify(request.items)) {
         save(storageKey, []);
@@ -3557,7 +3565,6 @@ import "./invoice.css";
       $(".order-coupon").reset();
       $(".order-coupon-status").textContent = "";
       lastReceipt = result;
-      trackPurchase(result);
       showNewReceipt = true;
       showReceiptDetails();
       renderCart();
