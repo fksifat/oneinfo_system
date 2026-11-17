@@ -36,18 +36,20 @@ export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[]
       <thead><tr><th scope="col">Item</th><th scope="col">Qty</th><th scope="col">Price</th><th scope="col">Amount</th></tr></thead>
       <tbody>${order.items.map(item => `<tr><th scope="row">${escape(item.name)}<small>${escape(item.variantName)}</small></th><td>${item.quantity}</td><td>${money(item.unitPriceMinor)}</td><td>${money(item.unitPriceMinor * item.quantity)}</td></tr>`).join("")}</tbody>
     </table>
-    <dl class="invoice-totals">
-      <div><dt>Items</dt><dd>${money(order.subtotalMinor)}</dd></div>
-      ${order.discountMinor ? `<div><dt>Discount</dt><dd>−${money(order.discountMinor)}</dd></div>` : ""}
-      <div><dt>Delivery</dt><dd>${money(order.shippingMinor)}</dd></div>
-      <div class="invoice-total"><dt>Total</dt><dd>${money(order.totalMinor)}</dd></div>
-      ${!cancelled && payment > 0 ? `<div><dt>${verified ? "Paid" : "Payment to verify"}</dt><dd>${money(payment)}</dd></div>
-      ${balance > 0 ? `<div><dt>${verified ? "Due on delivery" : "Due after payment check"}</dt><dd>${money(balance)}</dd></div>` : ""}` : ""}
-    </dl>
-    ${cancelled ? "" : `<a class="invoice-guide" href="${activationGuideUrl}" target="_blank" rel="noopener noreferrer">
-      <img src="${escape(new URL(activationGuideQr, location.href).href)}" alt="" width="76" height="76">
-      <span><strong>How to activate your card</strong><span lang="bn">বাংলা নির্দেশিকা · স্ক্যান করুন বা লিংকটি খুলুন</span></span>
-    </a>`}
+    <div class="invoice-summary">
+      <dl class="invoice-totals">
+        <div><dt>Items</dt><dd>${money(order.subtotalMinor)}</dd></div>
+        ${order.discountMinor ? `<div><dt>Discount</dt><dd>−${money(order.discountMinor)}</dd></div>` : ""}
+        <div><dt>Delivery</dt><dd>${money(order.shippingMinor)}</dd></div>
+        <div class="invoice-total"><dt>Total</dt><dd>${money(order.totalMinor)}</dd></div>
+        ${!cancelled && payment > 0 ? `<div><dt>${verified ? "Paid" : "Payment to verify"}</dt><dd>${money(payment)}</dd></div>
+        ${balance > 0 ? `<div><dt>${verified ? "Due on delivery" : "Due after payment check"}</dt><dd>${money(balance)}</dd></div>` : ""}` : ""}
+      </dl>
+      ${cancelled ? "" : `<a class="invoice-guide" href="${activationGuideUrl}" target="_blank" rel="noopener noreferrer">
+        <img src="${escape(new URL(activationGuideQr, location.href).href)}" alt="" width="112" height="112">
+        <span>How to activate your card</span>
+      </a>`}
+    </div>
     ${unused.length ? `<section class="invoice-activation" aria-labelledby="invoice-activation-title">
       <header><h2 id="invoice-activation-title">${unused.length === 1 ? "Activation code" : "Activation codes"}</h2>
       <p>Tap or scan your card, then enter the code. Keep it private.</p></header>
