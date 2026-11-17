@@ -3403,7 +3403,7 @@ import "./invoice.css";
     const walletBox = $(".order-payment-wallet-number");
     const stepsEl = $(".order-payment-steps");
     if (guideBadge) {
-      guideBadge.textContent = method === "BKASH" ? "bKash Payment" : method === "ROCKET" ? "Rocket Payment" : "Cash on Delivery (Advance)";
+      guideBadge.textContent = method === "BKASH" ? "bKash" : method === "ROCKET" ? "Rocket" : "Cash on Delivery";
     }
     if (guideDue) {
       guideDue.textContent = method === "COD" ? `${money.format(displayAmount / 100)} Advance` : money.format(displayAmount / 100);
@@ -3412,15 +3412,11 @@ import "./invoice.css";
       walletBox.textContent = walletNumber;
     }
     if (stepsEl) {
-      if (method === "BKASH") {
-        stepsEl.innerHTML = `1. Send <strong>${money.format(displayAmount / 100)}</strong> via bKash (Send Money) to <strong>${walletNumber}</strong>.<br>2. Enter your bKash mobile number and Transaction ID (TrxID) below to verify.`;
-      } else if (method === "ROCKET") {
-        stepsEl.innerHTML = `1. Send <strong>${money.format(displayAmount / 100)}</strong> via Rocket (Send Money) to <strong>${walletNumber}</strong>.<br>2. Enter your Rocket mobile number and Transaction ID (TrxID) below to verify.`;
+      if (method === "BKASH" || method === "ROCKET") {
+        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)}</strong> via ${paymentMethodLabels[method]} (Send Money) to the number above, then enter the TrxID below.`;
       } else {
-        const remainingNote = typeof fee === "number"
-          ? ` The remaining <strong>${money.format(Math.max(0, total - displayAmount) / 100)}</strong> will be paid in cash upon delivery.`
-          : ` The remaining balance will be collected in cash upon delivery.`;
-        stepsEl.innerHTML = `1. Pay <strong>${money.format(displayAmount / 100)} advance</strong> via bKash to <strong>${paymentSettings?.bkashNumber || "01760320810"}</strong>${rocketNumber ? ` or Rocket to <strong>${rocketNumber}</strong>` : ""} to confirm your order.<br>2. Enter your payment number and Transaction ID (TrxID) below.${remainingNote}`;
+        const remaining = Math.max(0, total - displayAmount);
+        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)} advance</strong> to confirm your order.${remaining > 0 ? ` Remaining <strong>${money.format(remaining / 100)}</strong> is due on delivery.` : ""}`;
       }
     }
 
@@ -3432,7 +3428,7 @@ import "./invoice.css";
       preparePayment.disabled = !canSubmit || !needsPayment || prepared;
       preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
     }
-    paymentInstructions.hidden = false;
+    paymentInstructions.hidden = true;
     paymentInstructions.textContent = `Pay ${money.format(displayAmount / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.`;
     senderField.disabled = transactionField.disabled = placingOrder;
     senderField.required = transactionField.required = needsPayment;

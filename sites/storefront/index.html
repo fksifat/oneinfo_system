@@ -152,7 +152,6 @@
                       <input type="radio" name="paymentMethod" value="BKASH" checked />
                       <div class="order-payment-option-text">
                         <strong>bKash</strong>
-                        <small class="order-bkash-status">Instant wallet</small>
                       </div>
                       <img class="order-payment-mark" src="/assets/payment/bkash.png" alt="" width="24" height="24" />
                     </label>
@@ -204,9 +203,9 @@
                           <span class="order-copy-text">Copy</span>
                         </button>
                       </div>
-                      <p class="order-payment-steps">1. Send payment via bKash (Send Money) to <strong>01760320810</strong>.<br>2. Enter your mobile number & Transaction ID below to verify.</p>
+                      <p class="order-payment-steps">Send payment via bKash (Send Money) to the number above, then enter the TrxID below.</p>
                     </div>
-                    <p class="order-payment-instructions" role="status" hidden></p>
+                    <p class="order-payment-instructions" role="status" hidden style="display: none;"></p>
                     <div class="order-payment-inputs-grid">
                       <div class="order-payment-field">
                         <label for="order-payment-number">Number used to pay <span class="order-field-required">*</span></label>
@@ -215,9 +214,8 @@
                       </div>
                       <div class="order-payment-field">
                         <label for="order-transaction">Transaction ID <span class="order-field-required">*</span></label>
-                        <input id="order-transaction" name="transactionId" aria-describedby="order-transaction-hint" autocomplete="off"
+                        <input id="order-transaction" name="transactionId" autocomplete="off"
                           autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="e.g. BL9A2K9Z" />
-                        <small id="order-transaction-hint">From your payment confirmation SMS / app.</small>
                       </div>
                     </div>
                   </div>
