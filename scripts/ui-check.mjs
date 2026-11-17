@@ -399,12 +399,28 @@ try {
     if(width===1440){
       await set('#order-form input[name=name]','UI Checkout Buyer');await set('#order-phone','01712345678');await set('#order-email','checkout-ui@example.com');await set('#order-form [name=addressLine]','UI test address, Dhaka');await set('#order-form [name=district]','Dhaka');
       await evaluate(`document.querySelector('.order-coupon-toggle').click()`);await set('#order-coupon-form [name=code]','UICHECK');await evaluate(`document.querySelector('#order-coupon-form').requestSubmit()`);await until(`document.querySelector('.order-coupon-status').textContent.includes('15')`);
-      await evaluate(`document.querySelector('[name=paymentMethod][value=BKASH]').click();document.querySelector('#order-form').requestSubmit()`);await until(`location.hash==='#arisepay'&&!document.querySelector('#arisepay-form').hidden`);await inspect('storefront-payment-'+width);
+      await until(`!document.querySelector('[name=paymentMethod][value=ROCKET]').disabled`);
+      await evaluate(`document.querySelector('[name=paymentMethod][value=ROCKET]').click()`);
+      assert.equal(await evaluate(`document.querySelector('.order-submit').disabled`),true);
+      await click('Show payment details');
+      await until(`location.hash==='#order-draft' && document.querySelector('.order-payment-instructions').textContent.includes('Rocket') && !document.querySelector('#order-transaction').disabled`);
+      await inspect('storefront-payment-'+width);
       const [reservation]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.awaitingPayment,true));
       assert.ok(reservation,'Checkout must reserve stock before displaying payment instructions');
-      await set('#arisepay-transaction','UICHECK123456');await click('Submit payment for verification');await until(`!document.querySelector('.order-saved').hidden`);assert.ok(await evaluate(`document.querySelector('.order-receipt-activation').textContent.includes('private secret code')`));await inspect('storefront-order-receipt-'+width);console.log('Storefront coupon/bKash submission/order receipt PASS (test transaction, no payment sent)');
+      assert.equal(reservation.paymentMethod,'ROCKET');
+      await set('#order-transaction','UICHECK123456');
+      assert.equal(await evaluate(`document.querySelector('.order-submit').disabled`),true);
+      await set('#order-payment-number','01900000001');
+      await set('#order-transaction','SHORT');
+      assert.equal(await evaluate(`document.querySelector('.order-submit').disabled`),true);
+      await set('#order-transaction','UICHECK123456');await click('Pay');await until(`!document.querySelector('.order-saved').hidden && location.hash==='#order-draft'`);assert.ok(await evaluate(`document.querySelector('.order-receipt-activation').textContent.includes('private secret code')`));await inspect('storefront-order-receipt-'+width);console.log('Storefront coupon/Rocket inline validation/order receipt PASS (test transaction, no payment sent)');
       const [finalized]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,reservation.id));
       assert.equal(finalized.awaitingPayment,false);
+      assert.equal(finalized.transactionId,'UICHECK123456');
+      assert.equal(finalized.paymentSenderNumber,'01900000001');
+      const visibleOrders=await api('/api/v1/orders/admin',undefined,headers);
+      assert.equal(visibleOrders.items.find(order=>order.id===reservation.id)?.paymentSenderNumber,'01900000001');
+      assert.equal((await api(`/api/v1/orders/admin/${reservation.id}/verify-payment`,{},headers)).paymentStatus,'VERIFIED');
     }
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});

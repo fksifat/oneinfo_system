@@ -512,7 +512,6 @@ export const bkashNumber = "01760320810";
 export const rocketNumber = "01305087389";
 export const PaymentMethodSchema = z.enum(["COD", "BKASH", "ROCKET"]);
 export const TransactionIdSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{8,20}$/);
-export const BkashTransactionIdSchema = TransactionIdSchema;
 export const PaymentSenderNumberSchema = z.string().trim().regex(/^01\d{9,10}$/);
 export const paymentMethodLabels = { COD: "Cash on delivery", BKASH: "bKash", ROCKET: "Rocket" } as const;
 

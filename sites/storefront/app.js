@@ -1,5 +1,5 @@
-import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, PaymentMethodSchema, BkashTransactionIdSchema, paymentDueNow } from "@oneinfo/contracts";
-import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
+import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow } from "@oneinfo/contracts";
+import { addCartVariant, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
@@ -143,6 +143,7 @@ import "./invoice.css";
         cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && (item.customization ? JSON.stringify(item.customization) : "") === customKey));
         save(storageKey, cart);
         renderCart();
+        if (productRoute(location.hash)) renderRoute();
         toast("Removed from cart");
       });
     });
@@ -188,6 +189,12 @@ import "./invoice.css";
   }
 
   function reconcileCart() {
+    // An active checkout already reserved these exact items on the server.
+    if (location.hash === "#order-draft" && reservation?.reserved &&
+        JSON.stringify(checkoutItems(cart)) === JSON.stringify(reservation.request.items)) {
+      renderCart();
+      return;
+    }
     const before = JSON.stringify(cart);
     cart = reconcileCartItems(cart, products);
     save(storageKey, cart);
@@ -472,6 +479,11 @@ import "./invoice.css";
     return "";
   }
 
+  function purchaseQuantityLimit(product, variant) {
+    const inSameLine = product.customizable ? 0 : cart.find(item => item.id === product.id && item.variantId === variant.id && !item.customization)?.quantity ?? 0;
+    return Math.min(99 - inSameLine, remainingVariantStock(cart, product.id, variant));
+  }
+
   function productMarkup(p, detail = false) {
       const v = p.variants.find(v => v.id === selectedVariants.get(p.id)) ?? p.variants.find(v => v.available) ?? p.variants[0];
       selectedVariants.set(p.id, v.id);
@@ -490,7 +502,9 @@ import "./invoice.css";
       const imageUrl = !detail ? "" : item?.type === "image" ? item.url : "";
       const drivePreview = detail && item?.type === "video" ? driveVideoPreview(item.url) : null;
       const hasMedia = imageUrl || (detail && item?.type === "video");
-      const quantity = quantities.get(p.id) ?? 1;
+      const quantityLimit = detail ? purchaseQuantityLimit(p, v) : 99;
+      const quantity = Math.min(quantityLimit, quantities.get(p.id) ?? 1);
+      const quantityHint = !quantityLimit ? "Quantity limit reached for this colour." : `Up to ${quantityLimit} available to add.`;
       const custom = productCustomizations.get(p.id) ?? defaultCustomization("01");
       const isCustomizable = detail && p.customizable;
       const hasLogo = !p.customizable || (custom.hasOneinfoLogo !== false && custom.brandingMode !== "without-logo");
@@ -1044,8 +1058,8 @@ import "./invoice.css";
             </div>
           </div>
         </section>` : ""}
-        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${!v.available || quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${!v.available || quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Out of stock'}</button></div>
-        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
+        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity <= 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity >= quantityLimit ? 'disabled' : ''}>${icon("plus")}</button></div></div>${v.available && (v.orderQuantityLimit !== undefined || !quantityLimit) ? `<p class="purchase-stock-limit" role="status">${quantityHint}</p>` : ""}<div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !quantityLimit || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : !v.available ? 'Out of stock' : quantityLimit ? 'Add to cart' : 'Limit reached'}</button></div>
+        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge and payment options at checkout.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
   function reviewsMarkup(product) {
@@ -1200,34 +1214,24 @@ import "./invoice.css";
   $(".invoice-print").addEventListener("click", () => window.print());
 
   function renderRoute(focus = false) {
+    if (location.hash === "#arisepay") {
+      location.replace("#order-draft");
+      return;
+    }
     const order = location.hash === "#order-draft";
-    const payment = location.hash === "#arisepay";
     const reviewToken = location.hash.startsWith("#review/") ? location.hash.slice(8) : "";
     const trackingPage = location.hash === "#track" || location.hash.startsWith("#track/");
     const trackingToken = location.hash.startsWith("#track/") ? location.hash.slice(7) : "";
     const invoicePage = location.hash.startsWith("#invoice/");
     const route = productRoute(location.hash);
     document.body.classList.toggle("product-page", Boolean(route));
-    const page = order ? "order-draft" : payment ? "arisepay" : reviewToken ? "review-portal" : trackingPage ? "tracking-portal" : invoicePage ? "invoice-portal" : route ? "product-detail" : "";
+    const page = order ? "order-draft" : reviewToken ? "review-portal" : trackingPage ? "tracking-portal" : invoicePage ? "invoice-portal" : route ? "product-detail" : "";
     $$("#main > section").forEach(section => {
-      section.hidden = page ? section.id !== page : ["order-draft", "arisepay", "product-detail", "review-portal", "tracking-portal", "invoice-portal"].includes(section.id);
+      section.hidden = page ? section.id !== page : ["order-draft", "product-detail", "review-portal", "tracking-portal", "invoice-portal"].includes(section.id);
     });
     if (reviewToken) { document.title = "Your review | Oneinfo"; void renderReviewPortal(reviewToken); return; }
     if (trackingPage) { document.title = "Track your order | Oneinfo"; void renderTracking(trackingToken); if (focus) $("#tracking-portal-title").focus(); return; }
     if (invoicePage) { document.title = "Invoice | Oneinfo"; void renderInvoice(location.hash.slice(9), focus); return; }
-    if (payment) {
-      if (pendingOrder) {
-        location.replace("#order-draft");
-        return;
-      }
-      document.title = "ArisePay | Oneinfo";
-      renderArisepay();
-      if (focus) {
-        $("#arisepay-title").focus({ preventScroll: true });
-        $("#arisepay").scrollIntoView({ behavior: "instant" });
-      }
-      return;
-    }
     if (order) {
       document.title = "Checkout | Oneinfo";
       renderOrder();
@@ -1295,11 +1299,11 @@ import "./invoice.css";
       products = data.items;
       catalogReady = true;
       catalogFailed = false;
-      if (changed) renderProducts();
       $("#catalog-status").textContent = products.length ? "" : "New cards are coming soon.";
       $("#catalog-retry").hidden = true;
       catalogReady = true;
       reconcileCart();
+      if (changed) renderProducts();
       $(".checkout-trigger").disabled = cart.length === 0;
       return true;
     } catch {
@@ -1833,7 +1837,12 @@ import "./invoice.css";
     const quantityButton = event.target.closest("[data-quantity-step]");
     if (quantityButton && !quantityButton.disabled) {
       const id = quantityButton.closest(".product").dataset.id;
-      quantities.set(id, Math.min(99, Math.max(1, (quantities.get(id) ?? 1) + Number(quantityButton.dataset.quantityStep))));
+      const product = products.find(item => item.id === id);
+      const variant = product?.variants.find(item => item.id === selectedVariants.get(id));
+      if (!variant) return;
+      const limit = purchaseQuantityLimit(product, variant);
+      const displayed = Math.min(limit, quantities.get(id) ?? 1);
+      quantities.set(id, Math.min(limit, Math.max(1, displayed + Number(quantityButton.dataset.quantityStep))));
       renderRoute(); return;
     }
     const mediaButton = event.target.closest("button[data-media-variant]");
@@ -2453,7 +2462,7 @@ import "./invoice.css";
     const productId = button.closest(".product").dataset.id;
     const variantId = selectedVariants.get(productId);
     const before = products.find(p => p.id === productId)?.variants.find(v => v.id === variantId);
-    const quantity = quantities.get(productId) ?? 1;
+    const quantity = Number($(".purchase-quantity", button.closest(".product"))?.textContent ?? 1);
     addingToCart = true;
     button.disabled = true;
     button.setAttribute("aria-busy", "true"); button.textContent = "Adding…";
@@ -3278,10 +3287,13 @@ import "./invoice.css";
   const orderForm = $("#order-form");
   const orderSubmit = $(".order-submit");
   const orderMessage = $("#order-message");
-  const arisepayForm = $("#arisepay-form");
-  const arisepayError = $("#arisepay-error");
-  const arisepaySubmit = $('button[type="submit"]', arisepayForm);
-  const arisepayKey = "oneinfo.storefront.arisepay";
+  const preparePayment = $(".order-prepare-payment");
+  const paymentInstructions = $(".order-payment-instructions");
+  const senderField = orderForm.elements.paymentSenderNumber;
+  const transactionField = orderForm.elements.transactionId;
+  const rocketOption = $('[name="paymentMethod"][value="ROCKET"]', orderForm);
+  const legacyCod = $(".order-legacy-cod");
+  const reservationKey = "oneinfo.storefront.arisepay";
   const pendingOrderKey = "oneinfo.storefront.pendingOrder";
   const receiptKey = "oneinfo.storefront.lastReceipt";
   let pendingOrder = load(pendingOrderKey, null);
@@ -3292,10 +3304,10 @@ import "./invoice.css";
   let shippingRequest;
   let shippingFailed = false;
   let placingOrder = false;
-  let arisepayDraft = load(arisepayKey, null, true);
-  let appliedCoupon = arisepayDraft?.coupon ?? null;
+  let reservation = load(reservationKey, null, true);
+  let appliedCoupon = reservation?.coupon ?? null;
   let applyingCoupon = false;
-  const savedDraft = pendingOrder ?? arisepayDraft?.request ?? load(draftKey, {});
+  const savedDraft = pendingOrder ?? reservation?.request ?? load(draftKey, {});
   const savedFields = { ...savedDraft.customer, ...savedDraft.deliveryAddress };
   // Older drafts stored the area separately.
   savedFields.addressLine = [savedFields.addressLine, savedFields.area]
@@ -3305,7 +3317,10 @@ import "./invoice.css";
   }
 
   if (savedDraft.payment) {
-    orderForm.elements.paymentMethod.value = savedDraft.payment.method;
+    const resumeCod = reservation?.request?.payment?.method === "COD";
+    legacyCod.hidden = !resumeCod;
+    $("input", legacyCod).disabled = !resumeCod;
+    if (savedDraft.payment.method !== "COD" || resumeCod) orderForm.elements.paymentMethod.value = savedDraft.payment.method;
   }
   if (appliedCoupon) {
     $(".order-coupon-toggle").hidden = true;
@@ -3314,23 +3329,13 @@ import "./invoice.css";
     $(".order-coupon-status").textContent = `${appliedCoupon.code} applied (${appliedCoupon.percent}% off items).`;
   }
 
-  function renderArisepay() {
-    arisepayForm.hidden = !arisepayDraft?.reserved;
-    $(".arisepay-unavailable").hidden = Boolean(arisepayDraft?.reserved);
-    if (!arisepayDraft?.reserved) return;
-    const { payment } = arisepayDraft.request;
-    $(".arisepay-amount-label").textContent = payment.method === "COD" ? "COD advance" : "Amount to pay";
-    $(".arisepay-amount").textContent = money.format(payment.amountMinor / 100);
-    $(".arisepay-number").textContent = arisepayDraft.bkashNumber;
-  }
-
-  function clearArisepayDraft() {
-    if (!arisepayDraft) return;
-    arisepayDraft = null;
-    sessionStorage.removeItem(arisepayKey);
-    arisepayForm.reset();
-    arisepayError.hidden = true;
-    arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
+  function clearReservation() {
+    reservation = null;
+    sessionStorage.removeItem(reservationKey);
+    senderField.value = "";
+    transactionField.value = "";
+    legacyCod.hidden = $("input", legacyCod).disabled = true;
+    orderForm.elements.paymentMethod.value = "BKASH";
   }
 
   function showReceiptDetails() {
@@ -3361,7 +3366,7 @@ import "./invoice.css";
     $(".order-receipt-total").textContent = money.format(lastReceipt.totalMinor / 100);
     const advance = lastReceipt.paymentAmountMinor ?? 0;
     const pending = lastReceipt.paymentStatus === "PENDING_VERIFICATION";
-    $(".order-receipt-payment").textContent = pending ? "We’ll verify your bKash payment before processing your order."
+    $(".order-receipt-payment").textContent = pending ? "We’ll verify your payment before processing your order."
       : lastReceipt.totalMinor > advance ? "Pay the remaining amount when your order is delivered." : "Keep your order ID for reference.";
     $(".order-receipt-advance").hidden = !advance;
     $(".order-receipt-advance dd").textContent = `${money.format(advance / 100)} · ${pending ? "Pending verification" : "Verified"}`;
@@ -3386,24 +3391,32 @@ import "./invoice.css";
       : fee === undefined ? "Checking rates…" : money.format(fee / 100);
     $(".order-refresh-rates").hidden = !zone || !shippingFailed;
     const total = subtotal + (fee ?? 0) - discount;
+    const rocketNumber = paymentSettings?.rocketNumber;
+    rocketOption.disabled = !rocketNumber;
     const method = orderForm.elements.paymentMethod.value;
-    const codAdvanceTaka = paymentSettings?.codAdvanceTaka ?? defaultCodAdvanceTaka;
-    const codAdvanceInsideDhaka = paymentSettings?.codAdvanceInsideDhaka ?? defaultCodAdvanceInsideDhaka;
-    const dueNow = paymentSettings && typeof fee === "number" && !applyingCoupon
-      ? paymentDueNow(total, method, codAdvanceTaka, { zone, codAdvanceInsideDhaka }) : null;
+    const checkout = typeof fee === "number" && !applyingCoupon ? readCheckoutRequest() : null;
+    const dueNow = checkout?.payment.amountMinor ?? null;
+    const needsPayment = dueNow > 0;
+    const walletNumber = method === "ROCKET" ? rocketNumber : paymentSettings?.bkashNumber;
+    const prepared = Boolean(checkout && walletNumber && matchesReservation(checkout) && reservation?.reserved);
+    const canSubmit = !placingOrder && !pendingOrder && Boolean(walletNumber && checkout);
+    $(".order-rocket-status").textContent = rocketNumber ? "" : paymentSettings || shippingFailed ? "Currently unavailable" : "Checking availability…";
+    $(".order-payment-details").hidden = dueNow === 0;
+    preparePayment.hidden = prepared;
+    preparePayment.disabled = !canSubmit || !needsPayment || prepared;
+    preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
+    paymentInstructions.hidden = !prepared;
+    paymentInstructions.textContent = prepared
+      ? `Pay ${money.format(dueNow / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.` : "";
+    senderField.disabled = transactionField.disabled = !prepared || !canSubmit;
+    senderField.required = transactionField.required = prepared;
+    orderSubmit.disabled = !canSubmit || (needsPayment && (!prepared || !PaymentSenderNumberSchema.safeParse(senderField.value).success || !TransactionIdSchema.safeParse(transactionField.value).success));
+    orderSubmit.textContent = placingOrder && pendingOrder ? "Submitting…" : dueNow === 0 ? "Place order" : "Pay";
     $(".order-payable span").textContent = typeof fee !== "number" ? "Total before shipping"
       : dueNow === 0 && method === "COD" ? "Total due on delivery" : "Order total";
     $(".order-payable strong").textContent = money.format(total / 100);
-    const codAdvance = typeof fee === "number"
-      ? paymentDueNow(total, "COD", codAdvanceTaka, { zone, codAdvanceInsideDhaka }) / 100
-      : codAdvanceTaka;
-    $(".order-cod-advance").textContent = codAdvance > 0
-      ? `Pay ${money.format(codAdvance)} to confirm order`
-      : (typeof fee === "number" && zone === "insideDhaka" && !codAdvanceInsideDhaka ? "No advance required" : "");
-    const needsPayment = dueNow > 0;
-    orderSubmit.textContent = needsPayment ? "Pay" : "Place order";
     $(".order-due-now").hidden = !needsPayment;
-    $(".order-due-now span").textContent = method === "BKASH" ? "Pay now with ArisePay" : "Pay now";
+    $(".order-due-now span").textContent = "Pay now";
     $(".order-due-now strong").textContent = money.format(dueNow / 100);
     $(".order-due-delivery").hidden = !needsPayment || method !== "COD" || dueNow === total;
     $(".order-due-delivery strong").textContent = money.format((total - dueNow) / 100);
@@ -3420,6 +3433,7 @@ import "./invoice.css";
         if (typeof checkout.bkashNumber !== "string" || !/^01\d{9}$/.test(checkout.bkashNumber)) throw new Error("Invalid bKash number");
         paymentSettings = {
           bkashNumber: checkout.bkashNumber,
+          rocketNumber: /^01\d{9,10}$/.test(checkout.rocketNumber) ? checkout.rocketNumber : undefined,
           codAdvanceTaka: CodAdvanceSchema.parse(checkout.codAdvanceTaka),
           codAdvanceInsideDhaka: checkout.codAdvanceInsideDhaka !== false,
         };
@@ -3449,7 +3463,7 @@ import "./invoice.css";
     placingOrder = true;
     const request = pendingOrder;
     const retryButton = $(".order-resume");
-    orderSubmit.disabled = retryButton.disabled = arisepaySubmit.disabled = true;
+    orderSubmit.disabled = retryButton.disabled = true;
     retryButton.textContent = "Checking order…";
     try {
       const response = await fetch(`${apiUrl}/api/v1/orders`, {
@@ -3461,7 +3475,6 @@ import "./invoice.css";
       const result = await response.json();
       if (!response.ok) {
         if (request.payment?.transactionId) {
-          if (location.hash === "#arisepay") location.replace("#order-draft");
           renderOrder();
           $(".order-recovery p").textContent = `${result.message || "We could not confirm your order."} Your transaction reference is saved. Do not pay again. Contact Oneinfo if retry does not work.`;
           return;
@@ -3469,8 +3482,7 @@ import "./invoice.css";
         if (response.status === 400 || response.status === 409) {
           localStorage.removeItem(pendingOrderKey);
           pendingOrder = null;
-          if (location.hash === "#arisepay") location.replace("#order-draft");
-          clearArisepayDraft();
+          clearReservation();
           if (/coupon/i.test(result.message || "")) {
             appliedCoupon = null;
             $(".order-coupon-status").textContent = "Apply a valid coupon to see the discount.";
@@ -3490,7 +3502,7 @@ import "./invoice.css";
       }
       localStorage.removeItem(pendingOrderKey);
       pendingOrder = null;
-      clearArisepayDraft();
+      clearReservation();
       appliedCoupon = null;
       $(".order-coupon").reset();
       $(".order-coupon-status").textContent = "";
@@ -3498,18 +3510,16 @@ import "./invoice.css";
       showNewReceipt = true;
       showReceiptDetails();
       renderCart();
-      if (location.hash === "#arisepay") location.replace("#order-draft");
-      else if (location.hash === "#order-draft") $(".order-saved h2").focus();
+      if (location.hash === "#order-draft") $(".order-saved h2").focus();
       else toast("Order received");
     } catch {
-      if (location.hash === "#arisepay") location.replace("#order-draft");
-      else if (location.hash === "#order-draft") {
+      if (location.hash === "#order-draft") {
         renderOrder();
         retryButton.focus();
       }
     } finally {
       placingOrder = false;
-      orderSubmit.disabled = retryButton.disabled = arisepaySubmit.disabled = false;
+      retryButton.disabled = false;
       retryButton.textContent = "Retry order";
       if (!pendingOrder) renderDelivery();
     }
@@ -3541,11 +3551,6 @@ import "./invoice.css";
 
   $(".order-edit-cart").addEventListener("click", openCart);
   $(".skip-link").addEventListener("click", event => {
-    if (location.hash === "#arisepay") {
-      event.preventDefault();
-      $("#arisepay-title").focus();
-      return;
-    }
     if (location.hash !== "#order-draft") return;
     event.preventDefault();
     $("#order-title").focus();
@@ -3613,54 +3618,58 @@ import "./invoice.css";
     renderDelivery();
   });
   $(".order-resume").addEventListener("click", () => void submitOrder());
-  orderForm.addEventListener("input", event => {
-    setOrderMessage("");
-    if (["district", "addressLine", "paymentMethod"].includes(event.target.name)) renderDelivery();
-  });
-  async function placeOrder(request, onStorageError) {
-    try {
-      save(pendingOrderKey, request);
-      pendingOrder = request;
-    } catch {
-      onStorageError("Allow browser storage and try again.");
-      return;
-    }
-    setOrderMessage("");
-    orderSubmit.textContent = "Placing order…";
-    await submitOrder();
+  function readCheckoutFields() {
+    const fields = Object.fromEntries(Object.entries(formToObject(orderForm)).map(([key, value]) => [key, value.trim()]));
+    const { addressLine, district, postalCode, paymentMethod, paymentSenderNumber, transactionId, ...customer } = fields;
+    const postal = PostalCodeSchema.optional().safeParse(postalCode || undefined);
+    return { addressLine, district, postal, paymentMethod, customer };
   }
 
-  arisepayForm.addEventListener("input", () => {
-    arisepayError.hidden = true;
-    arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
-  });
-  arisepayForm.addEventListener("submit", async event => {
-    event.preventDefault();
-    if (!arisepayDraft?.reserved || placingOrder || pendingOrder) return;
-    const field = arisepayForm.elements.transactionId;
-    const showError = message => {
-      arisepayError.textContent = message;
-      arisepayError.hidden = false;
+  function readCheckoutRequest(fields = readCheckoutFields()) {
+    const { addressLine, district, postal, paymentMethod, customer } = fields;
+    const zone = checkoutDeliveryZone(district, addressLine);
+    const method = PaymentMethodSchema.safeParse(paymentMethod);
+    if (!zone || !method.success || !postal.success || !shippingRates || !paymentSettings) return null;
+    const shippingMinor = shippingRates[zone];
+    const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
+    const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
+    return {
+      customer, deliveryAddress: { addressLine, district, postalCode: postal.data },
+      shippingMinor, items: checkoutItems(cart),
+      ...(appliedCoupon ? { coupon: { code: appliedCoupon.code, discountMinor: discount } } : {}),
+      payment: { method: method.data, amountMinor: paymentDueNow(subtotal + shippingMinor - discount,
+        method.data, paymentSettings.codAdvanceTaka, { zone, codAdvanceInsideDhaka: paymentSettings.codAdvanceInsideDhaka }) },
     };
-    const transaction = BkashTransactionIdSchema.safeParse(field.value);
-    if (!transaction.success) {
-      field.setAttribute("aria-invalid", "true");
-      showError("Enter a valid bKash transaction ID.");
-      field.focus();
-      return;
-    }
-    const { request } = arisepayDraft;
-    await placeOrder({ ...request, payment: { ...request.payment, transactionId: transaction.data } }, showError);
+  }
+
+  function matchesReservation(checkout) {
+    if (!reservation?.request) return false;
+    const { requestId, ...previous } = reservation.request;
+    return JSON.stringify(previous.customer) === JSON.stringify(checkout.customer) &&
+      JSON.stringify(previous.deliveryAddress) === JSON.stringify(checkout.deliveryAddress) &&
+      previous.shippingMinor === checkout.shippingMinor &&
+      JSON.stringify(previous.items) === JSON.stringify(checkout.items) &&
+      JSON.stringify(previous.coupon) === JSON.stringify(checkout.coupon) &&
+      JSON.stringify(previous.payment) === JSON.stringify(checkout.payment);
+  }
+
+  orderForm.addEventListener("input", event => {
+    setOrderMessage("");
+    if (event.target.name === "paymentMethod") senderField.value = transactionField.value = "";
+    renderDelivery();
+  });
+  transactionField.addEventListener("keydown", event => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    event.preventDefault();
+    if (!orderSubmit.disabled) orderForm.requestSubmit(orderSubmit);
   });
 
   orderForm.addEventListener("submit", async event => {
     event.preventDefault();
-    if (orderSubmit.disabled || !cart.length) return;
-    if (applyingCoupon) return setOrderMessage("Wait for the coupon check before placing your order.");
-    const fields = Object.fromEntries(Object.entries(formToObject(orderForm)).map(([key, value]) => [key, value.trim()]));
-    const { addressLine, district, postalCode, paymentMethod, ...customer } = fields;
-    const method = PaymentMethodSchema.safeParse(paymentMethod);
-    if (!method.success) return setOrderMessage("Choose a payment method.");
+    const preparing = event.submitter === preparePayment;
+    if (placingOrder || pendingOrder || !cart.length || (preparing ? preparePayment.disabled : orderSubmit.disabled)) return;
+    const fields = readCheckoutFields();
+    const { addressLine, district, postal, customer } = fields;
     if (!customer.name) return setOrderMessage("Enter your full name.", orderForm.elements.name);
     if (!/^\+?[\d(). -]+$/.test(customer.phone) || !/^\d{7,15}$/.test(customer.phone.replace(/\D/g, ""))) {
       return setOrderMessage("Enter a valid mobile number.", orderForm.elements.phone);
@@ -3669,57 +3678,63 @@ import "./invoice.css";
     if (!orderForm.elements.email.validity.valid) return setOrderMessage("Enter a valid email address.", orderForm.elements.email);
     if (!addressLine) return setOrderMessage("Enter your full address.", orderForm.elements.addressLine);
     if (!district) return setOrderMessage("Enter your district.", orderForm.elements.district);
-    const postal = PostalCodeSchema.optional().safeParse(postalCode || undefined);
     if (!postal.success) return setOrderMessage("Enter a 4-digit postal code.", orderForm.elements.postalCode);
-    const zone = checkoutDeliveryZone(district, addressLine);
-    if (!zone) return;
-    if (!shippingRates || !paymentSettings) return setOrderMessage("Wait for checkout details or retry loading them.");
     if (cart.length > 50) return setOrderMessage("You can order up to 50 different card options at a time.");
+    const checkout = readCheckoutRequest(fields);
+    if (!checkout) return setOrderMessage("Wait for checkout details or retry loading them.");
 
-    const request = { requestId: crypto.randomUUID(), customer, deliveryAddress: { addressLine, district, postalCode: postal.data },
-      shippingMinor: shippingRates[zone], items: checkoutItems(cart) };
-    const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
-    const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
-    if (appliedCoupon) request.coupon = { code: appliedCoupon.code, discountMinor: discount };
-    const amountMinor = paymentDueNow(
-      subtotal + request.shippingMinor - discount,
-      method.data,
-      paymentSettings.codAdvanceTaka,
-      { zone, codAdvanceInsideDhaka: paymentSettings.codAdvanceInsideDhaka }
-    );
-    request.payment = { method: method.data, amountMinor };
-    if (amountMinor > 0) {
-      const previous = arisepayDraft?.request;
-      if (previous && JSON.stringify({ ...previous, requestId: "" }) === JSON.stringify({ ...request, requestId: "" })) request.requestId = previous.requestId;
-      const draft = { request, bkashNumber: paymentSettings.bkashNumber, coupon: appliedCoupon, reserved: false };
+    const matches = matchesReservation(checkout);
+    const request = { requestId: matches ? reservation.request.requestId : crypto.randomUUID(), ...checkout };
+    if (preparing) {
+      const draft = { request, coupon: appliedCoupon, reserved: false };
       try {
-        sessionStorage.setItem(arisepayKey, JSON.stringify(draft));
+        sessionStorage.setItem(reservationKey, JSON.stringify(draft));
       } catch {
         return setOrderMessage("Allow browser storage and try again.");
       }
-      arisepayDraft = draft;
-      placingOrder = orderSubmit.disabled = true;
-      setOrderMessage("Checking stock and reserving your order before payment…");
+      reservation = draft;
+      placingOrder = true;
+      setOrderMessage("");
+      renderDelivery();
       try {
         const response = await fetch(`${apiUrl}/api/v1/orders/reserve`, {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(12000),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message || "Could not reserve your order. Try again before paying.");
-        if (!result.id || result.status !== "AWAITING_PAYMENT") throw new Error("Could not confirm the reservation. Do not pay; contact Oneinfo.");
-        draft.reserved = true;
-        sessionStorage.setItem(arisepayKey, JSON.stringify(draft));
+        if (!response.ok) throw new Error(result.message || "Could not reserve your order.");
+        if (!result.id || result.status !== "AWAITING_PAYMENT") throw new Error("Could not confirm the reservation. Contact Oneinfo before paying.");
+        const reserved = { ...draft, reserved: true };
+        sessionStorage.setItem(reservationKey, JSON.stringify(reserved));
+        reservation = reserved;
       } catch (error) {
-        setOrderMessage(error instanceof Error ? error.message : "Could not reserve your order. Try again before paying.");
-        return;
-      } finally { placingOrder = orderSubmit.disabled = false; }
-      arisepayForm.reset();
-      arisepayError.hidden = true;
-      arisepayForm.elements.transactionId.removeAttribute("aria-invalid");
-      location.hash = "arisepay";
+        setOrderMessage(error instanceof Error ? error.message : "Could not reserve your order.");
+      } finally {
+        placingOrder = false;
+        renderDelivery();
+      }
+      if (!senderField.disabled) senderField.focus();
       return;
     }
-    await placeOrder(request, setOrderMessage);
+
+    if (checkout.payment.amountMinor > 0) {
+      const transaction = TransactionIdSchema.safeParse(transactionField.value);
+      const sender = PaymentSenderNumberSchema.safeParse(senderField.value);
+      if (!matches || !reservation?.reserved || !transaction.success || !sender.success) {
+        renderDelivery();
+        return;
+      }
+      request.payment.transactionId = transaction.data;
+      request.payment.senderNumber = sender.data;
+    }
+    try {
+      save(pendingOrderKey, request);
+      pendingOrder = request;
+    } catch {
+      return setOrderMessage("Allow browser storage and try again.");
+    }
+    setOrderMessage("");
+    orderSubmit.textContent = "Submitting…";
+    await submitOrder();
   });
 
   $("#team-form").addEventListener("submit", async event => {

@@ -220,10 +220,6 @@ details p { max-width: 700px; padding: 0 45px 24px 0; line-height: 1.7; }
 .demo-caption { font-size: 0.84rem; text-align: center; }
 .order-page { min-height: 72vh; padding: clamp(24px, 4vw, 48px) var(--page-gutter) clamp(48px, 7vw, 80px); background: #f4f6f3; scroll-margin-top: 78px; font-size: .92rem; }
 .order-shell { max-width: 1030px; margin-inline: auto; }
-.arisepay-shell { max-width: 560px; }
-#arisepay-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 0; }
-#arisepay-form p { margin: 0; }
-#arisepay-form [aria-invalid="true"] { border-color: #9d392d; }
 .order-heading { margin-bottom: 26px; text-align: center; }
 .order-heading h1 { font-size: clamp(2.25rem, 4.5vw, 3.35rem); line-height: 1.04; margin: 0 0 10px; }
 .order-heading p { margin: 0; }
@@ -492,6 +488,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .quantity-control button:hover:not(:disabled) { background:var(--purchase-ground); }
 .quantity-control button:disabled { color:#aeaeb2; cursor:default; }
 .quantity-control output { min-width:28px; text-align:center; font-size:.85rem; }
+.purchase-stock-limit { margin:5px 0 0; color:var(--purchase-muted); font-size:.8rem; }
 .purchase-total { margin:20px 0 14px; }
 .purchase-total > span { color:var(--purchase-muted); }
 .purchase-total strong { font-variant-numeric:tabular-nums; font-size:1.1rem; font-weight:600; letter-spacing:-.02em; }
@@ -609,11 +606,14 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 }
 .order-payment-option:has(input:checked) { background: #edf4ef; }
 #order-form .order-payment-option:has(input:disabled) { color: var(--muted); cursor: default; }
-#order-form .order-cod-advance { margin-inline-start: auto; color: var(--muted); text-align: end; }
-.order-cod-advance:empty { display: none; }
-@media (max-width: 420px) {
-  #order-form .order-cod-advance { grid-column: 2 / -1; margin-inline-start: 0; text-align: start; }
-}
+#order-form .order-rocket-status { text-align: end; }
+.order-rocket-status:empty { display: none; }
+.order-payment-details { display: grid; gap: 8px; margin-top: 14px; }
+.order-prepare-payment { justify-self: start; min-height: 44px; }
+.order-payment-instructions { margin: 0 0 4px; padding: 10px 12px; background: #edf4ef; border-radius: 8px; }
+#order-transaction-hint { color: var(--muted); }
+#order-form .order-payment-details input:disabled { background: #f4f6f3; }
+.order-submit:disabled, .order-prepare-payment:disabled { opacity: .52; cursor: not-allowed; }
 .order-payable { border-top: 1px solid var(--line); padding-top: 10px; }
 .order-recovery, .order-saved { max-width: 620px; }
 .order-recovery p { margin: 10px 0 16px; }

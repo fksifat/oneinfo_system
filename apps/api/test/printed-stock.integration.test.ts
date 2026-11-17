@@ -1087,6 +1087,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     expect(original).toBeTruthy();
     await client.db.update(schema.products).set({ variants: original!.variants.map(variant => ({ ...variant, stockQuantity: 1 })) }).where(eq(schema.products.id, productId));
     try {
+      const available = (await request("/api/v1/products/public")).items.find((product: { id: string }) => product.id === productId);
+      expect(available.variants[0]).toMatchObject({ available: true, orderQuantityLimit: 1 });
       const submit = () => app.inject({ method: "POST", url: "/api/v1/orders", payload: orderPayload() });
       const orders = await Promise.all([submit(), submit()]);
       expect(orders.map(result => result.statusCode).sort()).toEqual([201, 409]);
@@ -1095,6 +1097,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       const publicProducts = await request("/api/v1/products/public");
       const item = publicProducts.items.find((product: { id: string }) => product.id === productId);
       expect(item.variants[0].available).toBe(false);
+      expect(item.variants[0].orderQuantityLimit).toBe(0);
       expect(item.variants[0].stockQuantity).toBeUndefined();
     } finally {
       await client.db.update(schema.products).set({ variants: original!.variants }).where(eq(schema.products.id, productId));

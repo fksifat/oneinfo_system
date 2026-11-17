@@ -99,7 +99,7 @@
               <div><dt>Shipping</dt><dd class="order-receipt-shipping"></dd></div>
               <div class="order-receipt-coupon" hidden><dt>Coupon discount</dt><dd></dd></div>
               <div><dt>Order total</dt><dd class="order-receipt-total"></dd></div>
-              <div class="order-receipt-advance" hidden><dt>bKash payment</dt><dd></dd></div>
+              <div class="order-receipt-advance" hidden><dt>Payment</dt><dd></dd></div>
               <div class="order-receipt-balance"><dt>Amount due on delivery</dt><dd></dd></div>
             </dl>
             <p class="order-receipt-activation" hidden>Keep your invoice number. After delivery, tap or scan your card to activate it with your order email.</p>
@@ -149,17 +149,31 @@
                   <h2 id="order-payment-title">Payment</h2>
                   <div class="order-payment-options" role="radiogroup" aria-labelledby="order-payment-title">
                     <label class="order-payment-option">
-                      <input type="radio" name="paymentMethod" value="BKASH" />
-                      <strong>ArisePay · bKash</strong>
+                      <input type="radio" name="paymentMethod" value="BKASH" checked />
+                      <strong>bKash</strong>
                       <span class="order-payment-brands">
-                        <img src="/assets/payment/bkash.png" alt="bKash" width="24" height="24" />
+                        <img src="/assets/payment/bkash.png" alt="" width="24" height="24" />
                       </span>
                     </label>
                     <label class="order-payment-option">
-                      <input type="radio" name="paymentMethod" value="COD" checked />
-                      <strong>Cash on Delivery (COD)</strong>
-                      <small class="order-cod-advance"></small>
+                      <input type="radio" name="paymentMethod" value="ROCKET" disabled />
+                      <strong>Rocket</strong><small class="order-rocket-status">Checking availability…</small>
                     </label>
+                    <label class="order-payment-option order-legacy-cod" hidden>
+                      <input type="radio" name="paymentMethod" value="COD" disabled />
+                      <strong>Cash on Delivery (COD)</strong>
+                    </label>
+                  </div>
+                  <div class="order-payment-details">
+                    <button class="button button-secondary order-prepare-payment" type="submit" disabled>Show payment details</button>
+                    <p class="order-payment-instructions" role="status" hidden></p>
+                    <label for="order-payment-number">Number used to pay</label>
+                    <input id="order-payment-number" name="paymentSenderNumber" type="tel" inputmode="numeric" autocomplete="off"
+                      maxlength="12" placeholder="Enter your payment number" disabled />
+                    <label for="order-transaction">Transaction ID</label>
+                    <input id="order-transaction" name="transactionId" aria-describedby="order-transaction-hint" autocomplete="off"
+                      autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="Enter TrxID" disabled />
+                    <small id="order-transaction-hint">Enter the transaction ID from your payment confirmation.</small>
                   </div>
                 </section>
               </form>
@@ -187,28 +201,10 @@
               </div>
               <div class="order-summary-actions">
                 <p id="order-message" class="order-message" role="alert" hidden></p>
-                <button class="button button-primary order-submit" type="submit" form="order-form">Place order</button>
+                <button class="button button-primary order-submit" type="submit" form="order-form" disabled>Pay</button>
               </div>
             </aside>
           </div>
-        </div>
-      </section>
-      <section id="arisepay" class="order-page" hidden aria-labelledby="arisepay-title">
-        <div class="order-shell arisepay-shell">
-          <a class="back-to-products" href="#order-draft"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><use href="/assets/icons.svg#arrow-left"></use></svg> Back to checkout</a>
-          <header class="order-heading">
-            <h1 id="arisepay-title" tabindex="-1">ArisePay</h1>
-            <p>Pay with bKash and submit your transaction ID for verification.</p>
-          </header>
-          <form id="arisepay-form" class="order-details" hidden novalidate>
-            <div class="order-subtotal"><span class="arisepay-amount-label">Amount to pay</span><strong class="arisepay-amount"></strong></div>
-            <p>Pay with bKash to <strong class="arisepay-number"></strong>, then enter your transaction ID.</p>
-            <label for="arisepay-transaction">bKash transaction ID</label>
-            <input id="arisepay-transaction" name="transactionId" autocomplete="off" autocapitalize="characters" maxlength="20" placeholder="Enter TrxID" aria-describedby="arisepay-error" required />
-            <p id="arisepay-error" class="order-message" role="alert" hidden></p>
-            <button class="button button-primary" type="submit">Submit payment for verification</button>
-          </form>
-          <p class="order-unavailable arisepay-unavailable" hidden>Return to checkout and select Pay to start a payment.</p>
         </div>
       </section>
       <section class="store-hero section-pad" aria-labelledby="intro-title">
