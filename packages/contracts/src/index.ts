@@ -509,8 +509,12 @@ export const CodAdvanceSchema = z.number().int().min(0).max(10_000);
 export const defaultCodAdvanceTaka = 100;
 export const defaultCodAdvanceInsideDhaka = true;
 export const bkashNumber = "01760320810";
-export const PaymentMethodSchema = z.enum(["COD", "BKASH"]);
-export const BkashTransactionIdSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{8,20}$/);
+export const rocketNumber = "01305087389";
+export const PaymentMethodSchema = z.enum(["COD", "BKASH", "ROCKET"]);
+export const TransactionIdSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{8,20}$/);
+export const BkashTransactionIdSchema = TransactionIdSchema;
+export const PaymentSenderNumberSchema = z.string().trim().regex(/^01\d{9,10}$/);
+export const paymentMethodLabels = { COD: "Cash on delivery", BKASH: "bKash", ROCKET: "Rocket" } as const;
 
 export function paymentDueNow(
   totalMinor: number,
@@ -518,7 +522,7 @@ export function paymentDueNow(
   codAdvanceTaka: number,
   options?: { zone?: ShippingZone | null; codAdvanceInsideDhaka?: boolean }
 ) {
-  if (method === "BKASH") return totalMinor;
+  if (method !== "COD") return totalMinor;
   if (options?.zone === "insideDhaka" && options?.codAdvanceInsideDhaka === false) {
     return 0;
   }
@@ -597,7 +601,8 @@ export const PlaceOrderSchema = z.object({
   payment: z.object({
     method: PaymentMethodSchema,
     amountMinor: z.number().int().nonnegative().max(495_001_000_000),
-    transactionId: BkashTransactionIdSchema.optional(),
+    transactionId: TransactionIdSchema.optional(),
+    senderNumber: PaymentSenderNumberSchema.optional(),
   }).optional(),
   items: z.array(OrderLineSchema).min(1).max(50).refine(
     items => new Set(items.map(item => `${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : ""}`)).size === items.length,
@@ -651,6 +656,7 @@ export type OrderReceipt = OrderTracking & {
 
 };
 export type StoreOrder = OrderReceipt & Pick<PlaceOrderInput, "customer" | "deliveryAddress"> & { items: OrderLine[]; transactionId?: string | null;
+  paymentSenderNumber?: string | null;
   codCollectedMinor?: number | null; codSettledMinor?: number | null;
   profileId?: string | null; assignedCards?: { id: string; publicSlug: string; canonicalUrl: string; qcStatus: string;
     lineIndex?: number; unitIndex?: number; printConfirmedAt?: string | null; nfcStatus?: string; inventoryStatus?: string }[] };

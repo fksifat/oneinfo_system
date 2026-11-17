@@ -1515,11 +1515,12 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     } finally { await client.db.update(schema.products).set({ variants: catalog!.variants }).where(eq(schema.products.id, productId)); }
   });
 
-  it("reserves stock before payment, freezes the total, and releases stock once on cancellation", async () => {
+  it.each([["BKASH", undefined], ["ROCKET", "01900000001"]] as const)(
+    "%s reserves stock, freezes the total, and releases stock once on cancellation", async (method, senderNumber) => {
     const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
     try {
       await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 1 })) }).where(eq(schema.products.id, productId));
-      const payload = { ...orderPayload(), payment: { method: "BKASH", amountMinor: 56000 } };
+      const payload = { ...orderPayload(), payment: { method, amountMinor: 56000 } };
       const reserved = await request("/api/v1/orders/reserve", payload);
       expect(reserved.status).toBe("AWAITING_PAYMENT");
       expect(reserved.invoicePath).toBeUndefined();
@@ -1532,9 +1533,19 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       expect(await client.db.select().from(schema.orderEmails)).toHaveLength(0);
       const [remaining] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
       await client.db.update(schema.products).set({ variants: remaining!.variants.map(variant => ({ ...variant, priceMinor: 60000 })) }).where(eq(schema.products.id, productId));
-      const submit = { ...payload, payment: { ...payload.payment, transactionId: "AUDITPAY01" } };
+      const legacyPayment = { ...payload.payment, transactionId: "AUDITPAY01" };
+      if (method === "ROCKET") {
+        expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload: { ...payload, payment: legacyPayment } })).statusCode).toBe(409);
+      }
+      const submit = { ...payload, payment: { ...legacyPayment, senderNumber } };
       const paid = await request("/api/v1/orders", submit);
-      expect(paid).toMatchObject({ id: reserved.id, status: "RECEIVED", totalMinor: 56000 });
+      expect(paid).toMatchObject({ id: reserved.id, status: "RECEIVED", totalMinor: 56000, paymentMethod: method, paymentStatus: "PENDING_VERIFICATION" });
+      expect(paid).not.toHaveProperty("paymentSenderNumber");
+      const admin = await request("/api/v1/orders/admin");
+      expect(admin.items.find((order: { id: string }) => order.id === paid.id)).toMatchObject({
+        paymentSenderNumber: senderNumber ?? null, transactionId: "AUDITPAY01",
+      });
+      expect((await request(`/api/v1/orders/admin/${paid.id}/verify-payment`, {})).paymentStatus).toBe("VERIFIED");
       expect(paid.invoiceNumber).toMatch(/^\d{8}-[A-Z0-9]{6}$/);
       expect(paid.invoicePath).toBe(`/#invoice/${token}`);
       expect((await request("/api/v1/orders", submit)).invoiceNumber).toBe(paid.invoiceNumber);
@@ -1546,6 +1557,7 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
         items: [{ name: "Test card", variantName: "Standard", quantity: 1, unitPriceMinor: 50000 }] });
       expect(document.body).not.toContain("buyer@example.com");
       expect(document.body).not.toContain("AUDITPAY01");
+      expect(document.json()).not.toHaveProperty("paymentSenderNumber");
       const cancelUrl = `/api/v1/orders/admin/${paid.id}/cancel`;
       expect((await app.inject({ method: "POST", url: cancelUrl, headers, payload: { reason: "Customer cancelled" } })).statusCode).toBe(409);
       await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
