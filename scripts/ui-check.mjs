@@ -214,16 +214,19 @@ try {
         await click('Settings');await until(`!!document.querySelector('.store-settings-dialog[open]')`);await inspect('admin-order-settings-'+width);
         if(width===1440){await click('Save payment settings');await until(`document.body.innerText.includes('COD advance saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.store-settings-dialog[open]')`);
-        await until(`!!document.getElementById('order-actions-${uiOrder.id}')`);
-        await evaluate(`document.querySelectorAll('.store-order').forEach(order=>{order.open=!!order.querySelector('#order-actions-${uiOrder.id}')})`);
+        await until(`!!document.querySelector('.store-order[data-order-id="${uiOrder.id}"]')`);
+        assert.equal(await evaluate(`!!document.getElementById('order-actions-${uiOrder.id}')`), false);
+        await evaluate(`document.querySelector('.store-order[data-order-id="${uiOrder.id}"]').click()`);
+        await until(`!!document.querySelector('.store-order-dialog[open] #order-actions-${uiOrder.id}')`);
+        assert.equal(await evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Close order');
         const selectStage = async label => {
-          const selector = `.store-order[open] button.pipeline-card[aria-label="${label} actions"]`;
+          const selector = `.store-order-dialog[open] button.pipeline-card[aria-label="${label} actions"]`;
           await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
           await until(`document.querySelector(${JSON.stringify(selector)})?.getAttribute('aria-pressed')==='true' && document.activeElement?.classList.contains('order-stage-actions')`);
         };
         if(width===1440){
           await selectStage('Shipped');
-          assert.equal(await evaluate(`!!document.querySelector('.store-order[open] .order-stage-actions input[name=trackingId]')`),false);
+          assert.equal(await evaluate(`!!document.querySelector('.store-order-dialog[open] .order-stage-actions input[name=trackingId]')`),false);
           await click('Open packing checklist');
         }else await selectStage('Cards packed');
         await click(await evaluate(`document.querySelector('.order-packing code') ? 'Refresh secret codes' : 'Show secret codes'`));
@@ -245,23 +248,29 @@ try {
           assert.equal((await connection.db.select().from(schema.orderCardAllocations)).length,0);
           console.log('Order temporary profile/secret slips/manual package confirmation without QR assignment PASS');
           await selectStage('Received');
-          assert.match(await evaluate(`document.querySelector('.store-order[open] .order-stage-actions').textContent`),/Order received/);
+          assert.match(await evaluate(`document.querySelector('.store-order-dialog[open] .order-stage-actions').textContent`),/Order received/);
           await selectStage('NFC & QC');
-          assert.equal(await evaluate(`document.querySelector('.store-order[open] .order-stage-actions a[href="#production"]').textContent`),'Open NFC & QR operations');
+          assert.equal(await evaluate(`document.querySelector('.store-order-dialog[open] .order-stage-actions a[href="#production"]').textContent`),'Open NFC & QR operations');
           await selectStage('Processing');await click('▶ Start processing');
-          await until(`document.querySelector('.store-order[open] .order-stage-actions').textContent.includes('Processing started.')`);
+          await until(`document.querySelector('.store-order-dialog[open] .order-stage-actions').textContent.includes('Processing started.')`);
           await selectStage('Shipped');
           const [beforeShipping]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,uiOrder.id));
           assert.equal(beforeShipping.shippedAt,null);
-          await set('.store-order[open] input[name=trackingId]','UI-STAGE-TRACKING');await click('Mark shipped');
-          await until(`document.querySelector('.store-order[open] .button-action-ship')?.textContent.includes('Update tracking ID')`);
+          await set('.store-order-dialog[open] input[name=trackingId]','UI-STAGE-TRACKING');await click('Mark shipped');
+          await until(`document.querySelector('.store-order-dialog[open] .button-action-ship')?.textContent.includes('Update tracking ID')`);
           await selectStage('Delivered');await click('★ Mark delivered & invite review');
-          await until(`document.querySelector('.store-order[open] .button-action-delivered')?.textContent.includes('Review invitation sent')`);
+          await until(`document.querySelector('.store-order-dialog[open] .button-action-delivered')?.textContent.includes('Review invitation sent')`);
           const [delivered]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,uiOrder.id));
           assert.ok(delivered.shippedAt && delivered.deliveredAt);
           assert.equal(delivered.courierTrackingId,'UI-STAGE-TRACKING');
+          await set('.store-order-dialog[open] input[name=collected]', '1');
+          await set('.store-order-dialog[open] input[name=settled]', '2');
+          await click('Save COD amounts');
+          await until(`document.querySelector('.store-order-dialog[open] .order-stage-actions [role=alert]')?.textContent.includes('Settlement cannot exceed collection')`);
           console.log('Order stages open their actions and save shipping and delivery only on confirmation PASS');
         }
+        await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+        await until(`!document.querySelector('.store-order-dialog[open]') && document.activeElement?.dataset.orderId === '${uiOrder.id}'`);
 
       }
     }

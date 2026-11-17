@@ -436,7 +436,7 @@ export function App() {
             <span className="workspace-breadcrumb">{currentGroupLabel} <i aria-hidden="true">/</i> {nav.find((item) => item.id === view)?.label}</span>
             <h1>{nav.find((item) => item.id === view)?.label}</h1>
           </div>
-          <div className="header-tools">{view === "orders" && <button className="quiet" onClick={() => setOrdersSettingsOpen(true)}>Settings</button>}<button className="quiet" onClick={() => void refresh()}>Refresh</button><div className="user-chip" title="Operator: FA">FA</div></div>
+          <div className="header-tools">{view === "orders" && <button className="quiet" onClick={() => setOrdersSettingsOpen(true)}>Settings</button>}{view !== "orders" && view !== "custom-orders" && <button className="quiet" onClick={() => void refresh()}>Refresh</button>}<div className="user-chip" title="Operator: FA">FA</div></div>
         </header>
         {syncError && <div className="workspace-error" role="alert"><span>Live updates paused: {syncError}</span><button className="quiet" onClick={() => void refresh()}>Retry connection</button></div>}
         {!lastSynced && !syncError && <p role="status">Loading your workspace…</p>}
