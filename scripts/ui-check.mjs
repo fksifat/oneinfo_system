@@ -215,12 +215,15 @@ try {
         if(width===1440){await click('Save payment settings');await until(`document.body.innerText.includes('COD advance saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.store-settings-dialog[open]')`);
         await until(`!!document.querySelector('.store-order[data-order-id="${uiOrder.id}"]')`);
+        assert.deepEqual(await evaluate(`[...document.querySelectorAll('.orders-table th')].map(cell=>cell.textContent)`), ['Customer','Invoice','Placed','Status','Total']);
+        assert.equal(await evaluate(`document.querySelector('.orders-table').scrollWidth <= document.querySelector('.orders-table-wrap').clientWidth`),true);
         assert.equal(await evaluate(`!!document.getElementById('order-actions-${uiOrder.id}')`), false);
         await evaluate(`document.querySelector('.store-order[data-order-id="${uiOrder.id}"]').click()`);
         await until(`!!document.querySelector('.store-order-dialog[open] #order-actions-${uiOrder.id}')`);
         assert.equal(await evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Close order');
         assert.deepEqual(await evaluate(`[...document.querySelectorAll('.order-stage-nav button')].map(b=>b.textContent)`), ['Received','Processing','Shipped','Delivered']);
         assert.deepEqual(await evaluate(`[...document.querySelectorAll('.order-info-card h3')].map(h=>h.textContent)`), ['Delivery details','Payment summary']);
+        assert.equal(await evaluate(`document.querySelector('.store-order-dialog .order-tools').open`),false);
         const selectStage = async label => {
           const button = `[...document.querySelectorAll('.store-order-dialog[open] .order-stage-nav button')].find(b=>b.textContent===${JSON.stringify(label)})`;
           await evaluate(`${button}.click()`);
@@ -259,7 +262,7 @@ try {
           await set('.store-order-dialog[open] input[name=trackingId]','UI-STAGE-TRACKING');await click('Mark shipped');
           await until(`document.querySelector('.store-order-dialog[open] .button-action-ship')?.textContent.includes('Update tracking ID')`);
           await selectStage('Delivered');await click('★ Mark delivered & invite review');
-          await until(`document.querySelector('.store-order-dialog[open] .button-action-delivered')?.textContent.includes('Review invitation sent')`);
+          await until(`document.querySelector('.store-order-dialog[open] .order-stage-actions [role=status]')?.textContent.includes('review email sent') && !document.querySelector('.button-action-delivered')`);
           const [delivered]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,uiOrder.id));
           assert.ok(delivered.shippedAt && delivered.deliveredAt);
           assert.equal(delivered.courierTrackingId,'UI-STAGE-TRACKING');

@@ -10,7 +10,7 @@ const zones: ShippingZone[] = ["insideDhaka", "subDhaka", "outsideDhaka"];
 const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol" });
 const bdt = (minor: number) => money.format(minor / 100);
 const path = "/api/v1/orders";
-const searchFields = ["payment", "delivery", "qr"] as const;
+const searchFields = ["payment", "delivery"] as const;
 const needsPacking = (order: StoreOrder) => order.activationMethod === "ORDER_SECRET" ? !order.packedAt : Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 const orderStages = [
@@ -84,7 +84,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
 
   function readOrders(filters: AdminOrderSearch, beforeId?: string) {
     type Page = { items: StoreOrder[]; hasMore: boolean; supportsSearch?: boolean };
-    if (filters.query || filters.payment || filters.delivery || filters.qr) {
+    if (filters.query || filters.payment || filters.delivery) {
       return api<Page>(`${path}/admin`, token, { method: "POST", body: JSON.stringify({ ...filters, beforeId }) });
     }
     return api<Page>(`${path}/admin${beforeId ? `?beforeId=${encodeURIComponent(beforeId)}` : ""}`, token);
@@ -328,7 +328,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
       const updated = await api<OrderReceipt & { shippingEmail?: string }>(`${path}/admin/${order.id}/fulfillment`, token,
         { method: "POST", body: JSON.stringify({ status, trackingId }) });
       updateOrder(order.id, item => ({ ...item, ...updated }));
-      setActionNotice({ orderId: order.id, stage, text: updated.shippingEmail === "failed" ? "Shipping saved. The email could not be sent." : "Order status updated." });
+      setActionNotice({ orderId: order.id, stage, text: status === "PROCESSING" ? "Processing started."
+        : updated.shippingEmail === "failed" ? "Shipping saved. The email could not be sent." : "Shipping saved." });
     } catch (error) { setActionNotice({ orderId: order.id, stage, text: error instanceof Error ? error.message : "Could not update order status.", error: true }); }
     finally { setDelivering(undefined); }
   }
@@ -352,7 +353,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   }
 
   const displayedItems = showCustomOnly ? items.filter(order => order.items.some(item => Boolean(item.customization))) : items;
-  const filtered = Boolean(filters.query || filters.payment || filters.delivery || filters.qr);
+  const filtered = Boolean(filters.query || filters.payment || filters.delivery);
 
   return <div className="store-orders">
     <section className="panel store-orders-list" aria-label="Order list">
@@ -388,15 +389,6 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className="filter-field">
-              <span className="filter-label">QR allocation</span>
-              <select name="qr" defaultValue={filters.qr ?? ""}>
-                <option value="">Any</option>
-                <option value="AWAITING_QR">No QR linked</option>
-                <option value="PARTIAL">Partially assigned</option>
-                <option value="ASSIGNED">Assigned</option>
-              </select>
-            </label>
             <div className="filter-submit-wrap">
               <button type="submit" className="button-filter-submit">Search</button>
               {filtered && <button type="button" className="quiet" onClick={() => applyFilters({})}>Clear</button>}
@@ -410,39 +402,49 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
         <p className="empty" role="status">{loading ? "Loading orders…" : filtered ? "No orders match these filters." : showCustomOnly ? "No custom orders on this page." : "No orders received yet."}</p>
       )}
 
-      <div className="store-orders-stack">
-        {displayedItems.map(order => (
-          <button
-            type="button"
-            className="store-order"
-            data-order-id={order.id}
-            key={order.id}
-            aria-haspopup="dialog"
-            onClick={event => {
-              event.currentTarget.focus();
-              setDetailError(undefined);
-              setCancelError(undefined);
-              setActionNotice(undefined);
-              setSelectedOrder(order);
-            }}
-          >
-            <span className="store-order-customer">
-              <strong>{order.customer.name}</strong>
-              <span className="store-order-meta">
-                {order.invoiceNumber && <span>{order.invoiceNumber}</span>}
-                <time dateTime={order.createdAt}>{orderDate.format(new Date(order.createdAt))}</time>
-              </span>
-            </span>
-            <span className="store-order-total">
-              <strong className="order-price-val">{bdt(order.totalMinor)}</strong>
-              <span className="store-order-status" data-status={order.status}>{statusLabels[order.status]}</span>
-              {order.paymentStatus === "PENDING_VERIFICATION" && order.status !== "CANCELLED" &&
-                <span className="order-payment-note">Verify payment</span>}
-            </span>
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6" /></svg>
-          </button>
-        ))}
-      </div>
+      {displayedItems.length > 0 && (
+        <div className="orders-table-wrap">
+          <table className="orders-table" aria-label="Orders">
+            <thead><tr>
+              <th scope="col">Customer</th>
+              <th scope="col" className="orders-table-reference">Invoice</th>
+              <th scope="col" className="orders-table-reference">Placed</th>
+              <th scope="col">Status</th>
+              <th scope="col" className="orders-table-total">Total</th>
+            </tr></thead>
+            <tbody>
+              {displayedItems.map(order => {
+                const placed = orderDate.format(new Date(order.createdAt));
+                const needsVerification = order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" &&
+                  !["AWAITING_PAYMENT", "CANCELLED"].includes(order.status);
+                return <tr key={order.id}>
+                  <td>
+                    <button type="button" className="store-order" data-order-id={order.id} aria-haspopup="dialog"
+                      aria-label={`View order for ${order.customer.name}, ${order.invoiceNumber ?? placed}`}
+                      onClick={event => {
+                        event.currentTarget.focus();
+                        setDetailError(undefined);
+                        setCancelError(undefined);
+                        setActionNotice(undefined);
+                        setSelectedOrder(order);
+                      }}>{order.customer.name}</button>
+                    <span className="orders-table-mobile-reference">
+                      {order.invoiceNumber && <span>{order.invoiceNumber}</span>}
+                      <time dateTime={order.createdAt}>{placed}</time>
+                    </span>
+                  </td>
+                  <td className="orders-table-reference">{order.invoiceNumber ?? "—"}</td>
+                  <td className="orders-table-reference"><time dateTime={order.createdAt}>{placed}</time></td>
+                  <td><span className="store-order-status" data-status={order.status}>{statusLabels[order.status]}</span>
+                    {needsVerification && <small className="order-payment-note">Verify payment</small>}
+                  </td>
+                  <td className="orders-table-total">{bdt(order.totalMinor)}</td>
+                </tr>;
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {hasMore && <div className="store-order-pagination"><button className="quiet" type="button" disabled={loading} onClick={() => void loadOrders(items.at(-1)?.id)}>{loading ? "Loading…" : "Load older orders"}</button></div>}
     </section>
@@ -457,9 +459,9 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
         const order = selectedOrder;
           const deepLink = requestedOrder === order.id ? requestedTask : null;
           const packingLink = deepLink === "print" || deepLink === "packing";
-          const stage = selectedStages[order.id] ?? (packingLink ? "processing" : deepLink === "payment" ? "payment" : nextOrderStage(order));
-          const actionId = `order-actions-${order.id}`;
           const closed = order.status === "CANCELLED" || order.status === "AWAITING_PAYMENT";
+          const stage = closed ? "payment" : selectedStages[order.id] ?? (packingLink ? "processing" : deepLink === "payment" ? "payment" : nextOrderStage(order));
+          const actionId = `order-actions-${order.id}`;
           const paid = order.paymentStatus !== "PENDING_VERIFICATION";
           const notice = actionNotice?.orderId === order.id && actionNotice.stage === stage ? actionNotice : undefined;
           const chooseStage = (value: OrderStage) => {
@@ -468,6 +470,9 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
           };
           const quantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
           const busy = Boolean(delivering || verifyingPayment || refreshingOrder);
+          const mayCancel = !["SHIPPED", "DELIVERED", "CANCELLED"].includes(order.status);
+          const needsRecovery = Boolean(order.assignedCards?.length || order.packedAt);
+          const storefront = import.meta.env.VITE_STOREFRONT_URL || "http://127.0.0.1:5175";
           return <>
             <header className="store-order-dialog-header">
               <div>
@@ -477,28 +482,26 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
               <button type="button" className="quiet" aria-label="Close order" onClick={closeOrder}>×</button>
             </header>
             <div className="store-order-content">
-              <div className="store-order-dialog-tools">
-                {order.invoicePath && <a className="quiet" href={new URL(order.invoicePath, import.meta.env.VITE_STOREFRONT_URL || "http://127.0.0.1:5175").href} target="_blank" rel="noreferrer">View invoice</a>}
-                <button type="button" className="quiet" disabled={busy} onClick={() => void refreshOrder(order.id)}>{refreshingOrder ? "Refreshing…" : "Refresh order"}</button>
-              </div>
               {detailError?.id === order.id && <p className="store-order-notice is-error" role="alert">{detailError.text}</p>}
-              <div className="order-stage-nav" role="group" aria-label="Order stages">
+              {!closed && <div className="order-stage-nav" role="group" aria-label="Order stages">
                 {orderStages.map(({ id, label }) => <button key={id} type="button" aria-controls={actionId}
                   aria-pressed={stage === id} onClick={() => chooseStage(id)}>{label}</button>)}
-              </div>
+              </div>}
 
               <section className="store-order-actions-bar order-stage-actions" id={actionId} tabIndex={-1} aria-labelledby={`${actionId}-title`}>
-                <h3 id={`${actionId}-title`}>{orderStages.find(item => item.id === stage)?.title}</h3>
+                <h3 id={`${actionId}-title`}>{closed ? (order.status === "CANCELLED" ? "Cancellation" : "Payment") : orderStages.find(item => item.id === stage)?.title}</h3>
                 {notice && <p className={`store-order-notice${notice.error ? " is-error" : ""}`} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
-                {closed && <p>{order.status === "CANCELLED" ? "This order was cancelled." : "Waiting for the customer to submit payment details."}</p>}
-                {stage === "payment" && !closed && (paid ? <p>{order.paymentStatus === "VERIFIED" ? `${paymentWallet(order)} payment is verified.` : "Order received. No advance payment is required."}</p>
+                {order.status === "AWAITING_PAYMENT" && <p>Waiting for the customer to submit payment details.</p>}
+                {order.cancellationReason && <p>{order.cancellationReason}</p>}
+                {stage === "payment" && !closed && !notice && (paid ? <p>{order.paymentStatus === "VERIFIED" ? `${paymentWallet(order)} payment verified.` : "No advance payment required."}</p>
                   : <p>Check the {paymentWallet(order)} transaction before verifying payment.</p>)}
-                {stage === "processing" && !closed && order.status !== "RECEIVED" && <p>{order.status === "SHIPPED" || order.status === "DELIVERED" ? "The order has left packing." : "Processing started."}</p>}
+                {stage === "processing" && !closed && !notice && order.status !== "RECEIVED" && <p>{order.status === "SHIPPED" || order.status === "DELIVERED" ? "The order has left packing." : "Processing started."}</p>}
                 {(stage === "shipping" || stage === "delivery") && !closed && order.status !== "DELIVERED" && (!paid || needsPacking(order)) && (
                   <p>{!paid ? "Verify payment before continuing." : "Confirm packing before continuing."} <button type="button" className="button-action button-action-primary"
                     onClick={() => chooseStage(paid ? "processing" : "payment")}>{paid ? "Open packing checklist" : "Open payment verification"}</button></p>
                 )}
-                {stage === "shipping" && order.status === "DELIVERED" && <p>{order.courierTrackingId ? `Courier tracking ID ${order.courierTrackingId}` : "This order was delivered."}</p>}
+                {stage === "shipping" && order.status === "DELIVERED" && <p>This order was delivered.</p>}
+                {stage === "delivery" && order.reviewInviteSentAt && !notice && <p>Review invitation sent.</p>}
                 <div className="store-order-actions">
                   {stage === "processing" && order.trackingPath && order.status === "RECEIVED" && (
                     <button className="button-action button-action-primary" type="button" disabled={busy} onClick={() => void updateFulfillment(order, "PROCESSING")}>
@@ -510,9 +513,9 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                       <span aria-hidden="true">✓</span> {verifyingPayment === order.id ? "Verifying…" : `Verify ${paymentWallet(order)} payment`}
                     </button>
                   )}
-                  {stage === "delivery" && !closed && (order.status === "DELIVERED" || paid && !needsPacking(order)) && (
-                    <button className="button-action button-action-delivered" type="button" disabled={busy || Boolean(order.reviewInviteSentAt)} onClick={() => void markDelivered(order)}>
-                      <span aria-hidden="true">★</span> {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
+                  {stage === "delivery" && !closed && !order.reviewInviteSentAt && (order.status === "DELIVERED" || paid && !needsPacking(order)) && (
+                    <button className="button-action button-action-delivered" type="button" disabled={busy} onClick={() => void markDelivered(order)}>
+                      <span aria-hidden="true">★</span> {delivering === order.id ? "Saving…" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
                     </button>
                   )}
                 </div>
@@ -563,7 +566,6 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                     {order.customer.note && <div><dt>Customer note</dt><dd className="order-note-bubble">{order.customer.note}</dd></div>}
                     {order.courierTrackingId && <div><dt>Courier tracking ID</dt><dd className="mono-code">{order.courierTrackingId}</dd></div>}
                   </dl>
-                  {order.trackingPath && <a href={new URL(order.trackingPath, import.meta.env.VITE_STOREFRONT_URL || location.origin).href} target="_blank" rel="noreferrer" className="order-external-link">Open order tracking ↗</a>}
                 </div>
 
                 <div className="order-info-card">
@@ -573,12 +575,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                   <dl>
                     <div><dt>Payment method</dt><dd><strong>{paymentMethodLabels[order.paymentMethod]}</strong></dd></div>
                     {order.transactionId && <div><dt>{paymentWallet(order)} transaction</dt><dd>{bdt(order.paymentAmountMinor ?? 0)} · <code className="mono-code">{order.transactionId}</code><br />
-                      <span className={`order-status-badge ${order.paymentStatus === "VERIFIED" ? "is-verified" : "is-pending"}`}>{order.paymentStatus === "VERIFIED" ? "✓ Verified" : "⏳ Pending verification"}</span></dd></div>}
+                      <span className={`order-status-badge ${order.paymentStatus === "VERIFIED" ? "is-verified" : "is-pending"}`}>{order.paymentStatus === "VERIFIED" ? "Verified" : "Pending verification"}</span></dd></div>}
                     {order.paymentSenderNumber && <div><dt>Number used to pay</dt><dd>{order.paymentSenderNumber}</dd></div>}
                     {order.transactionId && order.paymentMethod === "COD" && <div><dt>Due on delivery</dt>
                       <dd><strong>{bdt(codBalance(order))}</strong></dd></div>}
                     {order.couponCode && <div><dt>Coupon discount</dt><dd className="coupon-tag">{order.couponCode} (−{bdt(order.discountMinor)})</dd></div>}
-                    <div><dt>Total order value</dt><dd><strong className="order-final-price">{bdt(order.totalMinor)}</strong></dd></div>
                   </dl>
                 </div>
               </div>
@@ -596,8 +597,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                         <strong className="order-item-title">{item.name}</strong>
                         <span className="order-item-variant">{item.variantName}</span>
                         {item.customization && (
-                          <div className="order-item-custom-card-panel" style={{ marginTop: "10px", padding: "12px 14px", background: "rgba(201, 147, 62, 0.05)", border: "1px solid rgba(201, 147, 62, 0.28)", borderRadius: "10px" }}>
-                            {/* Visual Card Preview matching customer storefront personalization */}
+                          <details className="order-item-customization-details">
+                            <summary>Customization</summary>
                             <AdminCardPreview custom={item.customization} customerName={order.customer.name} />
 
                             <span className="order-item-customization" style={{ display: "block", fontSize: "0.82rem", color: "var(--accent, #c9933e)", lineHeight: 1.45, marginTop: "8px" }}>
@@ -739,7 +740,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                                 <span>Both (Front + Back)</span>
                               </button>
                             </div>
-                          </div>
+                          </details>
                         )}
                       </div>
                       <span className="order-item-amount">{bdt(item.unitPriceMinor * item.quantity)}</span>
@@ -748,39 +749,43 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 </ul>
               </div>
 
-              {order.cancellationReason && <p className="order-cancellation-notice">Cancellation: {order.cancellationReason}</p>
-              }
-
-              {!["SHIPPED", "DELIVERED", "CANCELLED"].includes(order.status) && (
-                <details className="order-cancel-fold">
-                  <summary>Cancel order and release stock</summary>
-                  <form className="order-cancel-form" onSubmit={event => {
-                    event.preventDefault(); if (busy) return;
-                    const data = new FormData(event.currentTarget);
-                    setDelivering(order.id); setCancelError(undefined);
-                    void api<OrderReceipt>(`${path}/admin/${order.id}/cancel`, token, { method: "POST", body: JSON.stringify({ reason: data.get("reason"), refundConfirmed: data.has("refundConfirmed"), cardsRecovered: data.has("cardsRecovered") }) })
-                      .then(updated => updateOrder(order.id, item => ({ ...item, ...updated, assignedCards: [] })))
-                      .catch(error => setCancelError({ id: order.id, text: error instanceof Error ? error.message : "Could not cancel the order." })).finally(() => setDelivering(undefined));
-                  }}>
-                    <label className="cancel-field-full">
-                      <span>Cancellation reason</span>
-                      <input name="reason" minLength={5} maxLength={500} required placeholder="Provide reason for customer and audit logs…" />
-                    </label>
-                    <label className="order-check-label">
-                      <input type="checkbox" name="refundConfirmed" required={Boolean(order.transactionId)} />
-                      <span>Payment checked and any refund resolved</span>
-                    </label>
-                    <label className="order-check-label">
-                      <input type="checkbox" name="cardsRecovered" required={Boolean(order.invoiceNumber && order.assignedCards?.length)} />
-                      <span>{order.invoiceNumber ? "All packed cards have been returned to stock" : "Any issued physical cards and secret codes have been recovered; invalidate those codes"}</span>
-                    </label>
-                    {cancelError?.id === order.id && <p className="store-order-notice is-error" role="alert">{cancelError.text}</p>}
-                    <button type="submit" className="button-cancel-order" disabled={busy}>Cancel order</button>
-                  </form>
-                </details>
-              )}
-
-              {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} onChange={() => void refreshOrder(order.id)} />}
+              <details className="order-tools">
+                <summary>Order tools</summary>
+                <div className="store-order-dialog-tools">
+                  {order.invoicePath && <a className="quiet" href={new URL(order.invoicePath, storefront).href} target="_blank" rel="noreferrer">View invoice</a>}
+                  {order.trackingPath && <a className="quiet" href={new URL(order.trackingPath, storefront).href} target="_blank" rel="noreferrer">Track order</a>}
+                  <button type="button" className="quiet" disabled={busy} onClick={() => void refreshOrder(order.id)}>{refreshingOrder ? "Refreshing…" : "Refresh order"}</button>
+                </div>
+                {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} onChange={() => void refreshOrder(order.id)} />}
+                {mayCancel && (
+                  <details className="order-cancel-fold">
+                    <summary>Cancel order and release stock</summary>
+                    <form className="order-cancel-form" onSubmit={event => {
+                      event.preventDefault(); if (busy) return;
+                      const data = new FormData(event.currentTarget);
+                      setDelivering(order.id); setCancelError(undefined);
+                      void api<OrderReceipt>(`${path}/admin/${order.id}/cancel`, token, { method: "POST", body: JSON.stringify({ reason: data.get("reason"), refundConfirmed: data.has("refundConfirmed"), cardsRecovered: data.has("cardsRecovered") }) })
+                        .then(updated => updateOrder(order.id, item => ({ ...item, ...updated, assignedCards: [] })))
+                        .catch(error => setCancelError({ id: order.id, text: error instanceof Error ? error.message : "Could not cancel the order." })).finally(() => setDelivering(undefined));
+                    }}>
+                      <label className="cancel-field-full">
+                        <span>Cancellation reason</span>
+                        <input name="reason" minLength={5} maxLength={500} required placeholder="Provide reason for customer and audit logs…" />
+                      </label>
+                      {order.transactionId && <label className="order-check-label">
+                        <input type="checkbox" name="refundConfirmed" required />
+                        <span>Payment checked and any refund resolved</span>
+                      </label>}
+                      {needsRecovery && <label className="order-check-label">
+                        <input type="checkbox" name="cardsRecovered" required={Boolean(order.invoiceNumber && order.assignedCards?.length)} />
+                        <span>{order.invoiceNumber ? "All packed cards have been returned to stock" : "Any issued physical cards and secret codes have been recovered; invalidate those codes"}</span>
+                      </label>}
+                      {cancelError?.id === order.id && <p className="store-order-notice is-error" role="alert">{cancelError.text}</p>}
+                      <button type="submit" className="button-cancel-order" disabled={busy}>Cancel order</button>
+                    </form>
+                  </details>
+                )}
+              </details>
             </div>
           </>;
       })()}
