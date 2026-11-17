@@ -5,6 +5,7 @@ import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
 import ariseLogoUrl from "./assets/arise-studio-logo.png";
 import { invoiceMarkup } from "./invoice.ts";
+import { initializeStorefrontPixel, trackPurchase, trackStorefront } from "./meta-pixel.js";
 import "./invoice.css";
 
 (function () {
@@ -34,6 +35,7 @@ import "./invoice.css";
     return cover?.type === "image" ? cover.url : cover?.poster;
   }
   let products = [];
+  let lastTrackedProduct;
   const selectedVariants = new Map();
   const selectedMedia = new Map();
   const selectedModels = new Map();
@@ -1244,12 +1246,16 @@ import "./invoice.css";
       return;
     }
     if (!route) {
+      lastTrackedProduct = undefined;
       document.title = "Oneinfo Smart Business Cards";
       if (focus && location.hash === "#top") window.scrollTo({ top: 0, behavior: "instant" });
       else if (focus) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior:"instant" });
       return;
     }
     const product = products.find(p => p.slug === route.slug);
+    if (product && lastTrackedProduct !== product.id && trackStorefront("ViewContent", { content_ids: [product.id], content_type: "product" })) {
+      lastTrackedProduct = product.id;
+    }
     const host = $("#product-detail");
     if (route.variantId && product?.variants.some(v => v.id === route.variantId)) selectedVariants.set(product.id, route.variantId);
     const focused = document.activeElement;
@@ -2522,6 +2528,7 @@ import "./invoice.css";
 
       const nextCart = addCartVariant(cart, product, variant, quantity, customization);
       save(storageKey, nextCart); cart = nextCart; renderCart();
+      trackStorefront("AddToCart", { content_ids: [product.id], content_type: "product", num_items: quantity });
       toast(`${quantity} x ${product.name} · ${variant.name}${customization ? ` (${customization.name})` : ""} added to cart`);
     } catch (error) { toast(error instanceof RangeError ? error.message : "Could not save the cart. Please try again."); }
     finally { addingToCart = false; renderRoute(); }
@@ -3550,6 +3557,7 @@ import "./invoice.css";
       $(".order-coupon").reset();
       $(".order-coupon-status").textContent = "";
       lastReceipt = result;
+      trackPurchase(result);
       showNewReceipt = true;
       showReceiptDetails();
       renderCart();
@@ -3885,6 +3893,7 @@ import "./invoice.css";
 
   $("#year").textContent = String(new Date().getFullYear());
   $(".checkout-trigger").disabled = true;
+  initializeStorefrontPixel(() => renderRoute());
   renderRoute();
   void loadProducts();
 })();

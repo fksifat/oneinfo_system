@@ -3230,3 +3230,18 @@
 .studio-tab-pane[hidden] {
   display: none !important;
 }
+#marketing-choice {
+  position: fixed;
+  z-index: 40;
+  inset: auto 16px 16px auto;
+  width: min(370px, calc(100% - 32px));
+  padding: 16px;
+  border: 1px solid #c8d6d2;
+  border-radius: 12px;
+  background: #fff;
+  color: #112b2b;
+  box-shadow: 0 8px 24px #112b2b20;
+}
+#marketing-choice h2 { margin: 0; font-size: 1rem; letter-spacing: normal; }
+#marketing-choice p { margin: 8px 0 12px; font-size: .875rem; }
+#marketing-choice > div { display: flex; gap: 8px; flex-wrap: wrap; }
