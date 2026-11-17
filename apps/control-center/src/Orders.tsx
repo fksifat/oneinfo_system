@@ -384,6 +384,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
           <table className="orders-table" aria-label="Orders">
             <thead><tr>
               <th scope="col">Customer</th>
+              <th scope="col">Card type</th>
               <th scope="col" className="orders-table-reference">Invoice</th>
               <th scope="col" className="orders-table-reference">Placed</th>
               <th scope="col">Status</th>
@@ -392,6 +393,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
             <tbody>
               {displayedItems.map(order => {
                 const placed = orderDate.format(new Date(order.createdAt));
+                const cardTypes = new Map<string, { name: string; custom: boolean }>();
+                for (const item of order.items) {
+                  const type = cardTypes.get(item.productId);
+                  if (type) type.custom ||= Boolean(item.customization);
+                  else cardTypes.set(item.productId, {
+                    name: item.name.replace(/^Oneinfo\s+/i, ""),
+                    custom: Boolean(item.customization),
+                  });
+                }
                 const needsVerification = order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" &&
                   !["AWAITING_PAYMENT", "CANCELLED"].includes(order.status);
                 return <tr key={order.id}>
@@ -409,6 +419,14 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                       {order.invoiceNumber && <span>{order.invoiceNumber}</span>}
                       <time dateTime={order.createdAt}>{placed}</time>
                     </span>
+                  </td>
+                  <td>
+                    <ul className="orders-table-card-types">
+                      {[...cardTypes].map(([id, type]) => <li key={id}>
+                        <span>{type.name}</span>
+                        {type.custom && <span className="orders-table-custom-badge">Custom</span>}
+                      </li>)}
+                    </ul>
                   </td>
                   <td className="orders-table-reference">{order.invoiceNumber ?? "—"}</td>
                   <td className="orders-table-reference"><time dateTime={order.createdAt}>{placed}</time></td>
@@ -443,6 +461,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
           const canFulfill = paid && !closed && !needsPacking(order);
           const startProcessing = order.status === "RECEIVED" && paid && !showPacking && order.trackingPath;
           const ship = order.status === "PROCESSING" && canFulfill && order.trackingPath;
+          const editTracking = order.status === "SHIPPED" && canFulfill && order.trackingPath;
           const verify = !closed && !paid && order.transactionId && order.paymentAmountMinor;
           const deliver = !order.reviewInviteSentAt && (order.status === "DELIVERED" || order.status === "SHIPPED" && canFulfill);
           const notice = actionNotice?.orderId === order.id ? actionNotice : undefined;
@@ -507,7 +526,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                     <div><dt>Delivery address</dt><dd>{order.deliveryAddress.addressLine}<br />{order.deliveryAddress.district}{order.deliveryAddress.postalCode && ` ${order.deliveryAddress.postalCode}`}</dd></div>
                     <div><dt>Delivery zone</dt><dd>{shippingZoneLabels[order.shippingZone]} · {bdt(order.shippingMinor)}</dd></div>
                     {order.customer.note && <div><dt>Customer note</dt><dd className="order-note-bubble">{order.customer.note}</dd></div>}
-                    {order.courierTrackingId && <div><dt>Courier tracking ID</dt><dd className="mono-code">{order.courierTrackingId}</dd></div>}
+                    {order.courierTrackingId && !editTracking && <div><dt>Courier tracking ID</dt><dd className="mono-code">{order.courierTrackingId}</dd></div>}
                   </dl>
                 </div>
 
@@ -692,20 +711,20 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 </ul>
               </div>
 
-              <details className="order-tools" open={packingLink && !showPacking && packing ? true : undefined}>
-                <summary>Order tools</summary>
+              <section className="order-tools" aria-labelledby="order-tools-title">
+                <h3 id="order-tools-title">Order tools</h3>
                 <div className="store-order-dialog-tools">
                   {order.invoicePath && <a className="quiet" href={new URL(order.invoicePath, storefront).href} target="_blank" rel="noreferrer">View invoice</a>}
                   {order.trackingPath && <a className="quiet" href={new URL(order.trackingPath, storefront).href} target="_blank" rel="noreferrer">Track order</a>}
                   <button type="button" className="quiet" disabled={busy} onClick={() => void refreshOrder(order.id)}>{refreshingOrder ? "Refreshing…" : "Refresh order"}</button>
                 </div>
                 {!showPacking && packing}
-                {order.status === "SHIPPED" && order.trackingPath && canFulfill && <details className="order-extra-action">
-                  <summary>Edit courier tracking ID</summary>
+                {editTracking && <div className="order-tool-block">
                   {trackingForm(true)}
-                </details>}
-                {order.status === "DELIVERED" && order.trackingPath && order.paymentMethod === "COD" && <details className="order-extra-action order-cod-settlement">
-                  <summary>COD settlement</summary>
+                  {notice?.inTools && feedback}
+                </div>}
+                {order.status === "DELIVERED" && order.trackingPath && order.paymentMethod === "COD" && <div className="order-tool-block order-cod-settlement">
+                  <h4>COD settlement</h4>
                   <form className="order-inline-action-form" onSubmit={event => void saveCod(event, order)}>
                     <label className="order-inline-field">
                       <span>Courier collected (৳)</span>
@@ -717,8 +736,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                     </label>
                     <button type="submit" className="button-action button-action-primary" disabled={busy}>Save COD amounts</button>
                   </form>
-                </details>}
-                {notice?.inTools && feedback}
+                  {notice?.inTools && feedback}
+                </div>}
                 {order.trackingPath && <OrderEmailHistory orderId={order.id} token={token} onChange={() => void refreshOrder(order.id)} />}
                 {mayCancel && (
                   <details className="order-cancel-fold">
@@ -748,7 +767,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                     </form>
                   </details>
                 )}
-              </details>
+              </section>
             </div>
           </>;
       })()}

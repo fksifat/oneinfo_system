@@ -215,7 +215,8 @@ try {
         if(width===1440){await click('Save payment settings');await until(`document.body.innerText.includes('COD advance saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.store-settings-dialog[open]')`);
         await until(`!!document.querySelector('.store-order[data-order-id="${uiOrder.id}"]')`);
-        assert.deepEqual(await evaluate(`[...document.querySelectorAll('.orders-table th')].map(cell=>cell.textContent)`), ['Customer','Invoice','Placed','Status','Total']);
+        assert.deepEqual(await evaluate(`[...document.querySelectorAll('.orders-table th')].map(cell=>cell.textContent)`), ['Customer','Card type','Invoice','Placed','Status','Total']);
+        assert.equal(await evaluate(`document.querySelector('.store-order[data-order-id="${uiOrder.id}"]').closest('tr').querySelector('.orders-table-card-types').innerText`), product.name.replace(/^Oneinfo\s+/i,''));
         assert.equal(await evaluate(`document.querySelector('.orders-table').scrollWidth <= document.querySelector('.orders-table-wrap').clientWidth`),true);
         assert.equal(await evaluate(`!!document.querySelector('.store-order-dialog[open]')`), false);
         await evaluate(`document.querySelector('.store-order[data-order-id="${uiOrder.id}"]').click()`);
@@ -223,16 +224,18 @@ try {
         assert.equal(await evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Close order');
         assert.equal(await evaluate(`!!document.querySelector('.order-stage-nav')`), false);
         assert.deepEqual(await evaluate(`[...document.querySelectorAll('.order-info-card h3')].map(h=>h.textContent)`), ['Delivery details','Payment summary']);
-        assert.equal(await evaluate(`document.querySelector('.store-order-dialog .order-tools').open`),false);
+        assert.equal(await evaluate(`document.querySelector('.order-tools .store-order-dialog-tools button').getClientRects().length > 0`),true);
         assert.equal(await evaluate(`!!document.querySelector('.store-order-dialog input[name=trackingId]')`), false);
         await inspect('admin-order-popup-'+width);
         if(width===1440){
-          assert.equal(await evaluate(`!!document.querySelector('.store-order-content > .order-work-panels .order-packing[open]')`),true);
+          assert.equal(await evaluate(`!!document.querySelector('.store-order-content > .order-work-panels .order-packing')`),true);
         }else{
           assert.equal(await evaluate(`!!document.querySelector('.store-order-content > .order-work-panels')`),false);
-          await evaluate(`document.querySelector('.order-tools > summary').click();document.querySelector('.order-packing > summary').click()`);
+          assert.equal(await evaluate(`document.querySelector('.order-tools .order-packing-actions button').getClientRects().length > 0`),true);
+          assert.equal(await evaluate(`document.querySelector('.order-cod-settlement input').getClientRects().length > 0`),true);
         }
-        await click(await evaluate(`document.querySelector('.order-packing code') ? 'Refresh secret codes' : 'Show secret codes'`));
+        assert.equal(await evaluate(`!!document.querySelector('.order-packing code')`),false);
+        await click('Show secret codes');
         await until(`document.querySelector('.order-packing code')?.textContent.includes('-')`);
         await inspect('admin-order-secret-codes-'+width);
         if(width===1440){
@@ -256,13 +259,14 @@ try {
           assert.equal(beforeShipping.shippedAt,null);
           await set('.store-order-dialog[open] input[name=trackingId]','UI-STAGE-TRACKING');await click('Mark shipped');
           await until(`document.querySelector('.order-next-action button')?.textContent.includes('Mark delivered')`);
-          assert.equal(await evaluate(`document.querySelector('.order-extra-action').open`), false);
+          assert.equal(await evaluate(`document.querySelector('.order-tools input[name=trackingId]').value`), 'UI-STAGE-TRACKING');
           await click('Mark delivered & invite review');
           await until(`document.querySelector('.store-order-content > [role=status]')?.textContent.includes('review email sent') && !document.querySelector('.order-next-action')`);
           const [delivered]=await connection.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id,uiOrder.id));
           assert.ok(delivered.shippedAt && delivered.deliveredAt);
           assert.equal(delivered.courierTrackingId,'UI-STAGE-TRACKING');
-          await evaluate(`document.querySelector('.order-tools > summary').click();document.querySelector('.order-cod-settlement > summary').click()`);
+          assert.equal(await evaluate(`document.querySelector('.order-cod-settlement input').getClientRects().length > 0`),true);
+          await inspect('admin-order-popup-delivered-'+width);
           await set('.store-order-dialog[open] input[name=collected]', '1');
           await set('.store-order-dialog[open] input[name=settled]', '2');
           await click('Save COD amounts');
