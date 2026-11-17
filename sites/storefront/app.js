@@ -3391,32 +3391,62 @@ import "./invoice.css";
     const method = orderForm.elements.paymentMethod.value;
     const checkout = typeof fee === "number" && !applyingCoupon ? readCheckoutRequest() : null;
     const dueNow = checkout?.payment.amountMinor ?? null;
-    const needsPayment = dueNow > 0;
-    const walletNumber = method === "ROCKET" ? rocketNumber : paymentSettings?.bkashNumber;
+    const defaultCodAdvanceMinor = (paymentSettings?.codAdvanceTaka ?? 100) * 100;
+    const needsPayment = dueNow === null ? (method === "COD" ? defaultCodAdvanceMinor > 0 : true) : dueNow > 0;
+    const walletNumber = method === "ROCKET" ? (rocketNumber || "01305087389") : (paymentSettings?.bkashNumber || "01760320810");
     const prepared = Boolean(checkout && walletNumber && matchesReservation(checkout) && reservation?.reserved);
     const canSubmit = !placingOrder && !pendingOrder && Boolean(walletNumber && checkout);
+    const displayAmount = dueNow !== null ? dueNow : method === "COD" ? defaultCodAdvanceMinor : total;
+
+    const guideBadge = $(".order-payment-guide-title");
+    const guideDue = $(".order-payment-guide-due-val");
+    const walletBox = $(".order-payment-wallet-number");
+    const stepsEl = $(".order-payment-steps");
+    if (guideBadge) {
+      guideBadge.textContent = method === "BKASH" ? "bKash Payment" : method === "ROCKET" ? "Rocket Payment" : "Cash on Delivery (Advance)";
+    }
+    if (guideDue) {
+      guideDue.textContent = method === "COD" ? `${money.format(displayAmount / 100)} Advance` : money.format(displayAmount / 100);
+    }
+    if (walletBox) {
+      walletBox.textContent = walletNumber;
+    }
+    if (stepsEl) {
+      if (method === "BKASH") {
+        stepsEl.innerHTML = `1. Send <strong>${money.format(displayAmount / 100)}</strong> via bKash (Send Money) to <strong>${walletNumber}</strong>.<br>2. Enter your bKash mobile number and Transaction ID (TrxID) below to verify.`;
+      } else if (method === "ROCKET") {
+        stepsEl.innerHTML = `1. Send <strong>${money.format(displayAmount / 100)}</strong> via Rocket (Send Money) to <strong>${walletNumber}</strong>.<br>2. Enter your Rocket mobile number and Transaction ID (TrxID) below to verify.`;
+      } else {
+        const remainingNote = typeof fee === "number"
+          ? ` The remaining <strong>${money.format(Math.max(0, total - displayAmount) / 100)}</strong> will be paid in cash upon delivery.`
+          : ` The remaining balance will be collected in cash upon delivery.`;
+        stepsEl.innerHTML = `1. Pay <strong>${money.format(displayAmount / 100)} advance</strong> via bKash to <strong>${paymentSettings?.bkashNumber || "01760320810"}</strong>${rocketNumber ? ` or Rocket to <strong>${rocketNumber}</strong>` : ""} to confirm your order.<br>2. Enter your payment number and Transaction ID (TrxID) below.${remainingNote}`;
+      }
+    }
+
     $(".order-rocket-status").textContent = rocketNumber ? "" : paymentSettings || shippingFailed ? "Currently unavailable" : "Checking availability…";
-    $(".order-cod-status").textContent = method !== "COD" || dueNow === null ? ""
-      : needsPayment ? `${money.format(dueNow / 100)} advance required` : "No advance required";
+    $(".order-cod-status").textContent = dueNow === 0 ? "No advance required" : `${money.format((dueNow ?? defaultCodAdvanceMinor) / 100)} advance required`;
     $(".order-payment-details").hidden = dueNow === 0;
     preparePayment.hidden = prepared;
     preparePayment.disabled = !canSubmit || !needsPayment || prepared;
     preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
     paymentInstructions.hidden = !prepared;
     paymentInstructions.textContent = prepared
-      ? `Pay ${money.format(dueNow / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.` : "";
-    senderField.disabled = transactionField.disabled = !prepared || !canSubmit;
-    senderField.required = transactionField.required = prepared;
-    orderSubmit.disabled = !canSubmit || (needsPayment && (!prepared || !PaymentSenderNumberSchema.safeParse(senderField.value).success || !TransactionIdSchema.safeParse(transactionField.value).success));
-    orderSubmit.textContent = placingOrder && pendingOrder ? "Submitting…" : dueNow === 0 ? "Place order" : "Pay";
+      ? `Pay ${money.format(displayAmount / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.` : "";
+    senderField.disabled = transactionField.disabled = placingOrder;
+    senderField.required = transactionField.required = needsPayment;
+    const hasValidSender = PaymentSenderNumberSchema.safeParse(senderField.value).success;
+    const hasValidTrx = TransactionIdSchema.safeParse(transactionField.value).success;
+    orderSubmit.disabled = !canSubmit || (needsPayment && (!hasValidSender || !hasValidTrx));
+    orderSubmit.textContent = placingOrder && pendingOrder ? "Submitting…" : placingOrder ? "Checking stock…" : dueNow === 0 ? "Place order" : "Pay";
     $(".order-payable span").textContent = typeof fee !== "number" ? "Total before shipping"
       : dueNow === 0 && method === "COD" ? "Total due on delivery" : "Order total";
     $(".order-payable strong").textContent = money.format(total / 100);
     $(".order-due-now").hidden = !needsPayment;
-    $(".order-due-now span").textContent = "Pay now";
-    $(".order-due-now strong").textContent = money.format(dueNow / 100);
+    $(".order-due-now span").textContent = method === "COD" ? "Advance due now" : "Pay now";
+    $(".order-due-now strong").textContent = money.format(displayAmount / 100);
     $(".order-due-delivery").hidden = !needsPayment || method !== "COD" || dueNow === total;
-    $(".order-due-delivery strong").textContent = money.format((total - dueNow) / 100);
+    $(".order-due-delivery strong").textContent = money.format(Math.max(0, total - (dueNow ?? defaultCodAdvanceMinor)) / 100);
   }
 
   function refreshShippingRates() {
@@ -3659,9 +3689,28 @@ import "./invoice.css";
 
   orderForm.addEventListener("input", event => {
     setOrderMessage("");
+    if (event.target === transactionField) {
+      transactionField.value = transactionField.value.toUpperCase();
+    }
     if (event.target.name === "paymentMethod") senderField.value = transactionField.value = "";
     renderDelivery();
   });
+  const copyBtn = $(".order-payment-copy-btn");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", () => {
+      const num = $(".order-payment-wallet-number")?.textContent?.trim();
+      if (!num) return;
+      navigator.clipboard?.writeText(num).then(() => {
+        copyBtn.classList.add("copied");
+        const text = $(".order-copy-text", copyBtn);
+        if (text) text.textContent = "Copied!";
+        setTimeout(() => {
+          copyBtn.classList.remove("copied");
+          if (text) text.textContent = "Copy";
+        }, 2000);
+      }).catch(() => {});
+    });
+  }
   transactionField.addEventListener("keydown", event => {
     if (event.key !== "Enter" || event.isComposing) return;
     event.preventDefault();
@@ -3726,9 +3775,38 @@ import "./invoice.css";
     if (checkout.payment.amountMinor > 0) {
       const transaction = TransactionIdSchema.safeParse(transactionField.value);
       const sender = PaymentSenderNumberSchema.safeParse(senderField.value);
-      if (!matches || !reservation?.reserved || !transaction.success || !sender.success) {
+      if (!sender.success) return setOrderMessage("Enter a valid mobile number used to pay.", senderField);
+      if (!transaction.success) return setOrderMessage("Enter your valid Transaction ID (TrxID).", transactionField);
+
+      if (!matches || !reservation?.reserved) {
+        const draft = { request, coupon: appliedCoupon, reserved: false };
+        try {
+          sessionStorage.setItem(reservationKey, JSON.stringify(draft));
+        } catch {
+          return setOrderMessage("Allow browser storage and try again.");
+        }
+        reservation = draft;
+        placingOrder = true;
+        setOrderMessage("");
         renderDelivery();
-        return;
+        try {
+          const response = await fetch(`${apiUrl}/api/v1/orders/reserve`, {
+            method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(12000),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            if (response.status === 409) await refreshShippingRates();
+            throw new Error(result.message || "Could not reserve your order.");
+          }
+          if (!result.id || result.status !== "AWAITING_PAYMENT") throw new Error("Could not confirm the reservation. Contact Oneinfo before paying.");
+          const reserved = { ...draft, reserved: true };
+          sessionStorage.setItem(reservationKey, JSON.stringify(reserved));
+          reservation = reserved;
+        } catch (error) {
+          placingOrder = false;
+          renderDelivery();
+          return setOrderMessage(error instanceof Error ? error.message : "Could not reserve your order.");
+        }
       }
       request.payment.transactionId = transaction.data;
       request.payment.senderNumber = sender.data;
