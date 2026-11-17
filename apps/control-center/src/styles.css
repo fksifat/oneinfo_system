@@ -1520,7 +1520,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .orders-table .store-order:focus-visible { outline-offset: 3px; }
 .order-payment-note { display: block; margin-top: 2px; color: #92400e; font-size: .72rem; font-weight: 650; }
 
-@container orders (max-width: 680px) {
+@container orders (max-width: 780px) {
   .orders-table .orders-table-reference { display: none; }
   .orders-table :is(th, td) { padding: 8px; }
   .orders-table-card-types { min-inline-size: 4rem; font-size: .75rem; }
