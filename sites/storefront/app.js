@@ -3292,7 +3292,6 @@ import "./invoice.css";
   const senderField = orderForm.elements.paymentSenderNumber;
   const transactionField = orderForm.elements.transactionId;
   const rocketOption = $('[name="paymentMethod"][value="ROCKET"]', orderForm);
-  const legacyCod = $(".order-legacy-cod");
   const reservationKey = "oneinfo.storefront.arisepay";
   const pendingOrderKey = "oneinfo.storefront.pendingOrder";
   const receiptKey = "oneinfo.storefront.lastReceipt";
@@ -3317,10 +3316,7 @@ import "./invoice.css";
   }
 
   if (savedDraft.payment) {
-    const resumeCod = reservation?.request?.payment?.method === "COD";
-    legacyCod.hidden = !resumeCod;
-    $("input", legacyCod).disabled = !resumeCod;
-    if (savedDraft.payment.method !== "COD" || resumeCod) orderForm.elements.paymentMethod.value = savedDraft.payment.method;
+    orderForm.elements.paymentMethod.value = savedDraft.payment.method;
   }
   if (appliedCoupon) {
     $(".order-coupon-toggle").hidden = true;
@@ -3334,7 +3330,6 @@ import "./invoice.css";
     sessionStorage.removeItem(reservationKey);
     senderField.value = "";
     transactionField.value = "";
-    legacyCod.hidden = $("input", legacyCod).disabled = true;
     orderForm.elements.paymentMethod.value = "BKASH";
   }
 
@@ -3401,6 +3396,8 @@ import "./invoice.css";
     const prepared = Boolean(checkout && walletNumber && matchesReservation(checkout) && reservation?.reserved);
     const canSubmit = !placingOrder && !pendingOrder && Boolean(walletNumber && checkout);
     $(".order-rocket-status").textContent = rocketNumber ? "" : paymentSettings || shippingFailed ? "Currently unavailable" : "Checking availability…";
+    $(".order-cod-status").textContent = method !== "COD" || dueNow === null ? ""
+      : needsPayment ? `${money.format(dueNow / 100)} advance required` : "No advance required";
     $(".order-payment-details").hidden = dueNow === 0;
     preparePayment.hidden = prepared;
     preparePayment.disabled = !canSubmit || !needsPayment || prepared;
@@ -3566,11 +3563,12 @@ import "./invoice.css";
     help.addEventListener("pointerleave", () => help.classList.remove("is-dismissed"));
     button.addEventListener("blur", () => help.classList.remove("is-open", "is-dismissed"));
   }
-  const retryShipping = () => {
-    if (location.hash === "#order-draft" && !shippingRates) void refreshShippingRates();
+  const refreshCheckoutSettings = () => {
+    if (location.hash === "#order-draft" && !document.hidden) void refreshShippingRates();
   };
-  window.addEventListener("online", retryShipping);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) retryShipping(); });
+  window.addEventListener("online", refreshCheckoutSettings);
+  window.addEventListener("focus", refreshCheckoutSettings);
+  document.addEventListener("visibilitychange", refreshCheckoutSettings);
   $(".order-coupon-toggle").addEventListener("click", event => {
     event.currentTarget.hidden = true;
     $("#order-coupon-form").hidden = false;
@@ -3633,24 +3631,30 @@ import "./invoice.css";
     const shippingMinor = shippingRates[zone];
     const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
     const discount = appliedCoupon ? couponDiscount(subtotal, appliedCoupon.percent) : 0;
-    return {
+    const checkout = {
       customer, deliveryAddress: { addressLine, district, postalCode: postal.data },
       shippingMinor, items: checkoutItems(cart),
       ...(appliedCoupon ? { coupon: { code: appliedCoupon.code, discountMinor: discount } } : {}),
       payment: { method: method.data, amountMinor: paymentDueNow(subtotal + shippingMinor - discount,
         method.data, paymentSettings.codAdvanceTaka, { zone, codAdvanceInsideDhaka: paymentSettings.codAdvanceInsideDhaka }) },
     };
+    // The server locks the amount once payment instructions have been issued.
+    if (reservation?.reserved && matchesReservation(checkout)) {
+      checkout.payment.amountMinor = reservation.request.payment.amountMinor;
+    }
+    return checkout;
   }
 
   function matchesReservation(checkout) {
     if (!reservation?.request) return false;
-    const { requestId, ...previous } = reservation.request;
+    const previous = reservation.request;
     return JSON.stringify(previous.customer) === JSON.stringify(checkout.customer) &&
       JSON.stringify(previous.deliveryAddress) === JSON.stringify(checkout.deliveryAddress) &&
       previous.shippingMinor === checkout.shippingMinor &&
       JSON.stringify(previous.items) === JSON.stringify(checkout.items) &&
       JSON.stringify(previous.coupon) === JSON.stringify(checkout.coupon) &&
-      JSON.stringify(previous.payment) === JSON.stringify(checkout.payment);
+      previous.payment?.method === checkout.payment.method &&
+      (reservation.reserved || previous.payment.amountMinor === checkout.payment.amountMinor);
   }
 
   orderForm.addEventListener("input", event => {
@@ -3701,7 +3705,10 @@ import "./invoice.css";
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(request), signal: AbortSignal.timeout(12000),
         });
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message || "Could not reserve your order.");
+        if (!response.ok) {
+          if (response.status === 409) await refreshShippingRates();
+          throw new Error(result.message || "Could not reserve your order.");
+        }
         if (!result.id || result.status !== "AWAITING_PAYMENT") throw new Error("Could not confirm the reservation. Contact Oneinfo before paying.");
         const reserved = { ...draft, reserved: true };
         sessionStorage.setItem(reservationKey, JSON.stringify(reserved));

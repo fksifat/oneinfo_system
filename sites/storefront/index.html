@@ -151,29 +151,32 @@
                     <label class="order-payment-option">
                       <input type="radio" name="paymentMethod" value="BKASH" checked />
                       <strong>bKash</strong>
-                      <span class="order-payment-brands">
-                        <img src="/assets/payment/bkash.png" alt="" width="24" height="24" />
-                      </span>
+                      <img class="order-payment-mark" src="/assets/payment/bkash.png" alt="" width="24" height="24" />
                     </label>
                     <label class="order-payment-option">
                       <input type="radio" name="paymentMethod" value="ROCKET" disabled />
-                      <strong>Rocket</strong><small class="order-rocket-status">Checking availability…</small>
+                      <span><strong>Rocket</strong><small class="order-rocket-status">Checking availability…</small></span>
+                      <img class="order-payment-mark" src="/assets/payment/rocket.png" alt="" width="24" height="24" />
                     </label>
-                    <label class="order-payment-option order-legacy-cod" hidden>
-                      <input type="radio" name="paymentMethod" value="COD" disabled />
-                      <strong>Cash on Delivery (COD)</strong>
+                    <label class="order-payment-option order-cod-option">
+                      <input type="radio" name="paymentMethod" value="COD" />
+                      <span><strong>Cash on Delivery (COD)</strong><small class="order-cod-status"></small></span>
                     </label>
                   </div>
                   <div class="order-payment-details">
                     <button class="button button-secondary order-prepare-payment" type="submit" disabled>Show payment details</button>
                     <p class="order-payment-instructions" role="status" hidden></p>
-                    <label for="order-payment-number">Number used to pay</label>
-                    <input id="order-payment-number" name="paymentSenderNumber" type="tel" inputmode="numeric" autocomplete="off"
-                      maxlength="12" placeholder="Enter your payment number" disabled />
-                    <label for="order-transaction">Transaction ID</label>
-                    <input id="order-transaction" name="transactionId" aria-describedby="order-transaction-hint" autocomplete="off"
-                      autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="Enter TrxID" disabled />
-                    <small id="order-transaction-hint">Enter the transaction ID from your payment confirmation.</small>
+                    <div class="order-payment-field">
+                      <label for="order-payment-number">Number used to pay</label>
+                      <input id="order-payment-number" name="paymentSenderNumber" type="tel" inputmode="numeric" autocomplete="off"
+                        maxlength="12" placeholder="Wallet number" disabled />
+                    </div>
+                    <div class="order-payment-field">
+                      <label for="order-transaction">Transaction ID</label>
+                      <input id="order-transaction" name="transactionId" aria-describedby="order-transaction-hint" autocomplete="off"
+                        autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="TrxID" disabled />
+                      <small id="order-transaction-hint">From your payment confirmation.</small>
+                    </div>
                   </div>
                 </section>
               </form>
