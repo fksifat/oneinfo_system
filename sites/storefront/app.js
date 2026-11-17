@@ -3427,9 +3427,11 @@ import "./invoice.css";
     $(".order-rocket-status").textContent = rocketNumber ? "" : paymentSettings || shippingFailed ? "Currently unavailable" : "Checking availability…";
     $(".order-cod-status").textContent = dueNow === 0 ? "No advance required" : `${money.format((dueNow ?? defaultCodAdvanceMinor) / 100)} advance required`;
     $(".order-payment-details").hidden = dueNow === 0;
-    preparePayment.hidden = prepared;
-    preparePayment.disabled = !canSubmit || !needsPayment || prepared;
-    preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
+    if (preparePayment) {
+      preparePayment.hidden = prepared;
+      preparePayment.disabled = !canSubmit || !needsPayment || prepared;
+      preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
+    }
     paymentInstructions.hidden = !prepared;
     paymentInstructions.textContent = prepared
       ? `Pay ${money.format(displayAmount / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.` : "";
@@ -3719,8 +3721,8 @@ import "./invoice.css";
 
   orderForm.addEventListener("submit", async event => {
     event.preventDefault();
-    const preparing = event.submitter === preparePayment;
-    if (placingOrder || pendingOrder || !cart.length || (preparing ? preparePayment.disabled : orderSubmit.disabled)) return;
+    const preparing = Boolean(preparePayment && event.submitter === preparePayment);
+    if (placingOrder || pendingOrder || !cart.length || (preparing ? preparePayment?.disabled : orderSubmit.disabled)) return;
     const fields = readCheckoutFields();
     const { addressLine, district, postal, customer } = fields;
     if (!customer.name) return setOrderMessage("Enter your full name.", orderForm.elements.name);
