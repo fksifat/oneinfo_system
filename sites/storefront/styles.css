@@ -592,8 +592,8 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   .order-payment-options { grid-template-columns: 1fr; gap: 8px; }
 }
 #order-form .order-payment-option {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  min-height: 54px; padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 50px; padding: 8px 12px; min-width: 0;
   border: 1.5px solid #dce4df; border-radius: 12px; background: #fff;
   cursor: pointer; transition: all .2s ease; position: relative;
 }
@@ -614,7 +614,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 }
 .order-payment-cod-mark {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 6px; background: #edf4ef; color: #173a34;
+  width: 26px; height: 26px; border-radius: 6px; background: #edf4ef; color: #173a34; flex-shrink: 0;
 }
 #order-form .order-payment-option:hover {
   border-color: #173a34; background: #fbfdfc; box-shadow: 0 2px 8px rgba(0,0,0,0.03);
@@ -633,15 +633,18 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 #order-form :is(.order-rocket-status, .order-cod-status):empty { display: none; }
 
 .order-payment-details {
-  display: grid; gap: 14px; margin-top: 14px;
+  display: grid; gap: 14px; margin-top: 14px; min-width: 0;
 }
 .order-payment-guide {
-  display: grid; gap: 12px; padding: 16px;
+  display: grid; gap: 12px; padding: 14px; min-width: 0;
   border: 1.5px solid #dce6e1; border-radius: 12px;
   background: linear-gradient(180deg, #f9fbf9 0%, #f3f7f5 100%);
 }
+@media (max-width: 480px) {
+  .order-payment-guide { padding: 11px; gap: 10px; }
+}
 .order-payment-guide-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0;
 }
 .order-payment-guide-badge {
   display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
@@ -649,10 +652,10 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   font-size: 0.78rem; font-weight: 700;
 }
 .order-payment-badge-dot {
-  width: 7px; height: 7px; border-radius: 50%; background: #173a34;
+  width: 7px; height: 7px; border-radius: 50%; background: #173a34; flex-shrink: 0;
 }
 .order-payment-guide-due {
-  display: flex; align-items: baseline; gap: 6px;
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
 }
 .order-payment-guide-due-label {
   font-size: 0.8rem; color: #51635b;
@@ -661,21 +664,25 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   font-size: 1.05rem; font-weight: 800; color: #173a34;
 }
 .order-payment-wallet-box {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 10px 14px; background: #fff; border: 1.5px solid #d4dfd9; border-radius: 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; background: #fff; border: 1.5px solid #d4dfd9; border-radius: 10px; min-width: 0;
+}
+@media (max-width: 480px) {
+  .order-payment-wallet-box { flex-direction: column; align-items: stretch; gap: 10px; }
+  .order-payment-copy-btn { width: 100%; justify-content: center; }
 }
 .order-payment-wallet-info {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
 }
 .order-payment-wallet-label {
   font-size: 0.72rem; color: #6a7c73; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
 }
 .order-payment-wallet-number {
-  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1.12rem; font-weight: 800;
-  color: #172620; letter-spacing: 0.06em;
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1.08rem; font-weight: 800;
+  color: #172620; letter-spacing: 0.05em; word-break: break-all;
 }
 .order-payment-copy-btn {
-  display: inline-flex; align-items: center; gap: 5px; padding: 7px 14px;
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px;
   border: 1.5px solid #cad6d0; border-radius: 8px; background: #f7faf8; color: #173a34;
   font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all .15s ease; flex-shrink: 0;
 }
@@ -686,23 +693,26 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   background: #0f5132; color: #fff; border-color: #0f5132;
 }
 .order-payment-steps {
-  margin: 0; font-size: 0.83rem; line-height: 1.5; color: #374a42;
+  margin: 0; font-size: 0.83rem; line-height: 1.5; color: #374a42; overflow-wrap: anywhere; word-break: break-word;
 }
 .order-payment-steps strong {
   color: #172620; font-weight: 700;
 }
 .order-payment-inputs-grid {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0;
 }
 @media (max-width: 640px) {
   .order-payment-inputs-grid { grid-template-columns: 1fr; gap: 10px; }
 }
+.order-payment-field {
+  display: grid; gap: 5px; min-width: 0;
+}
 .order-payment-field label {
-  font-size: 0.85rem; font-weight: 600; color: #172620; display: block; margin-bottom: 5px;
+  font-size: 0.85rem; font-weight: 600; color: #172620; display: block; margin-bottom: 2px;
 }
 .order-field-required { color: #dc2626; margin-left: 2px; }
 #order-form .order-payment-field input {
-  width: 100%; min-height: 46px; padding: 10px 13px;
+  width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px;
   border: 1.5px solid #d4dfd9; border-radius: 9px;
   font-size: 0.95rem; font-family: inherit;
   transition: border-color .15s ease, box-shadow .15s ease; background: #fff;
@@ -716,7 +726,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .order-prepare-payment { justify-self: start; min-height: 44px; padding: 8px 12px; }
 .order-payment-instructions {
   margin: 0; padding: 8px 10px; background: #edf4ef;
-  border-radius: 8px; color: var(--ink-2); font-size: .85rem;
+  border-radius: 8px; color: var(--ink-2); font-size: .85rem; overflow-wrap: anywhere; word-break: break-word;
 }
 #order-transaction-hint { color: var(--muted); font-size: .75rem; line-height: 1.4; }
 .order-submit:disabled, .order-prepare-payment:disabled { opacity: .52; cursor: not-allowed; }
