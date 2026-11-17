@@ -3432,9 +3432,8 @@ import "./invoice.css";
       preparePayment.disabled = !canSubmit || !needsPayment || prepared;
       preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
     }
-    paymentInstructions.hidden = !prepared;
-    paymentInstructions.textContent = prepared
-      ? `Pay ${money.format(displayAmount / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.` : "";
+    paymentInstructions.hidden = false;
+    paymentInstructions.textContent = `Pay ${money.format(displayAmount / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.`;
     senderField.disabled = transactionField.disabled = placingOrder;
     senderField.required = transactionField.required = needsPayment;
     const hasValidSender = PaymentSenderNumberSchema.safeParse(senderField.value).success;
