@@ -7,6 +7,7 @@ import {
   bkashNumber, rocketNumber, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
   ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
   type AdminOrderSearch, type OrderLine, type OrderReceipt,
+  orderDesignProductSlug,
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
@@ -16,6 +17,7 @@ import { registerOrderPrint } from "./order-print.js";
 import { nextInvoiceNumber } from "../domain/order-invoice.js";
 import { assertInvoicePacked, packInvoiceOrder, packedCards } from "../domain/order-packing.js";
 import { qrUrl } from "../domain/card-urls.js";
+import { orderDesignExists } from "../domain/order-design.js";
 import { allocatePendingOrders, allocationSummary, lockPrintedStock } from "../domain/printed-stock.js";
 
 import { confirmationEmailEnabled, sendOrderConfirmation, sendPaymentVerifiedEmail, sendShippingEmail } from "../domain/order-confirmation.js";
@@ -440,16 +442,20 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         const key = `${line.productId}:${line.variantId}`;
         requestedQuantities.set(key, (requestedQuantities.get(key) ?? 0) + line.quantity);
       }
-      const items = input.items.map(line => {
+      const items = await Promise.all(input.items.map(async line => {
         const product = catalog.find(item => item.id === line.productId);
         const variant = product?.variants.find(item => item.id === line.variantId);
         if (!product || !variant?.available) conflict("An item in your cart is no longer available.");
         if (variant.stockQuantity !== undefined && requestedQuantities.get(`${line.productId}:${line.variantId}`)! > variant.stockQuantity) conflict("There are not enough units of an item in your cart.");
-        const hasLogo = line.customization?.hasOneinfoLogo !== false && line.customization?.brandingMode !== "without-logo";
+        if (line.designFile && (product.slug !== orderDesignProductSlug || !product.customizable || !await orderDesignExists(line.designFile.id))) {
+          conflict("This design file is unavailable for the selected card. Return to the card page to attach your design again.");
+        }
+        const hasLogo = line.designFile ? line.designFile.brandingMode === "with-logo"
+          : line.customization?.hasOneinfoLogo !== false && line.customization?.brandingMode !== "without-logo";
         const unitPriceMinor = variantPriceForBranding(variant, hasLogo);
         if (unitPriceMinor !== line.unitPriceMinor) conflict("An item price changed. Review your updated cart and try again.");
         return { ...line, unitPriceMinor, name: product.name, variantName: variant.name, warranty: productWarranty(product) };
-      });
+      }));
       const subtotalMinor = items.reduce((total, item) => total + item.unitPriceMinor * item.quantity, 0);
       let discountMinor = 0;
       if (input.coupon) {

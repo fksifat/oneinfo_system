@@ -2234,6 +2234,71 @@
   color: var(--ink, #121316);
   margin: 0;
 }
+.signature-design-upload {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--line, #e5ded2);
+  border-radius: 10px;
+  background: #faf8f3;
+}
+.signature-design-upload label,
+.signature-design-upload strong { font-size: .86rem; font-weight: 750; }
+.signature-design-upload p {
+  margin: 3px 0 0;
+  color: var(--muted, #656054);
+  font-size: .76rem;
+  overflow-wrap: anywhere;
+}
+.signature-design-upload [role="alert"] { color: #a12222; }
+.signature-design-upload input { width: 100%; min-width: 0; font: inherit; font-size: .78rem; }
+.signature-design-upload input::file-selector-button,
+.signature-design-upload button {
+  min-height: 44px;
+  margin-inline-end: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--line, #e5ded2);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.signature-design-upload button { justify-self: start; }
+.signature-design-support {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 0 0;
+  border-top: 1px solid var(--line, #e5ded2);
+  color: #12654b;
+  font-size: .8rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.signature-design-support:hover { text-decoration: underline; text-underline-offset: 3px; }
+.signature-design-support .ui-icon { width: 16px; height: 16px; flex: 0 0 16px; }
+.signature-design-support .ui-icon:last-child { margin-inline-start: auto; }
+.artwork-preview {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 18px;
+  font-size: .85rem;
+  font-weight: 650;
+  text-align: center;
+  min-width: 0;
+  border: 1px solid var(--line, #e5ded2);
+  border-radius: 12px;
+  background: #f3efe7;
+}
+.artwork-preview img { display: block; max-width: 100%; max-height: 340px; object-fit: contain; border-radius: 6px; }
+.design-file-name { overflow-wrap: anywhere; }
 .customizer-badge-free {
   font-size: 0.72rem;
   font-weight: 600;

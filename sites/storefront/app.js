@@ -1,5 +1,5 @@
-import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow } from "@oneinfo/contracts";
-import { addCartVariant, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
+import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow, orderDesignExtensions, orderDesignMaxBytes, orderDesignProductSlug } from "@oneinfo/contracts";
+import { addCartVariant, cartDesignKey, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
@@ -19,6 +19,7 @@ import "./invoice.css";
   const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const storageKey = "oneinfo.storefront.cart";
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
+  const signatureSupportUrl = `https://wa.me/8801315774162?text=${encodeURIComponent("Hi, I have a question about the Oneinfo Signature card.")}`;
   function driveVideoPreview(url) {
     const match = /^https:\/\/drive\.google\.com\/file\/d\/([\w-]+)(?:\/(?:view|preview))?\/?(?:[?#]|$)/.exec(url);
     if (!match) return null;
@@ -40,6 +41,7 @@ import "./invoice.css";
   const selectedMedia = new Map();
   const selectedModels = new Map();
   const productCustomizations = new Map();
+  const orderDesigns = new Map();
   let activeStudioTab = "details";
   let selectedElementId = "name";
   const quantities = new Map();
@@ -142,7 +144,7 @@ import "./invoice.css";
         const id = itemElement?.dataset.id;
         const variantId = itemElement?.dataset.variantId;
         const customKey = itemElement?.dataset.customKey || "";
-        cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && (item.customization ? JSON.stringify(item.customization) : "") === customKey));
+        cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && cartDesignKey(item) === customKey));
         save(storageKey, cart);
         renderCart();
         if (productRoute(location.hash)) renderRoute();
@@ -155,7 +157,7 @@ import "./invoice.css";
     items.innerHTML = cart.map(item => {
       const variant = products.find(p => p.id === item.id)?.variants.find(v => v.id === item.variantId);
       const cover = variant && variantCover(variant);
-      const customKey = item.customization ? JSON.stringify(item.customization) : "";
+      const customKey = cartDesignKey(item);
       return `
           <div class="cart-item" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}" data-custom-key="${escapeHtml(customKey)}">
             <div class="cart-item-art" aria-hidden="true">
@@ -165,6 +167,7 @@ import "./invoice.css";
             <div class="cart-item-info">
               <strong>${escapeHtml(item.name)}</strong>
               <span>${escapeHtml(item.variantName)}</span>
+              ${item.designFile ? `<span class="cart-custom-badge design-file-name">Design file · ${escapeHtml(item.designFile.name)}</span>` : ""}
               ${item.customization ? `<span class="cart-custom-badge">Custom: <strong>${escapeHtml(item.customization.name)}</strong>${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""}${item.customization.extraLines && item.customization.extraLines.length ? ` · ${item.customization.extraLines.map(l => escapeHtml(l)).join(" · ")}` : ""}${item.customization.textSize && item.customization.textSize !== 14 ? ` (${item.customization.textSize}pt)` : ""}${item.customization.logoUrl ? ` · <span class="cart-custom-logo-tag">Logo attached</span>` : ""}<small style="display:block; opacity:0.85; margin-top:2px; font-weight:500;">${escapeHtml(String(item.customization.layout || item.customization.position || "left").replace("-", " "))} · ${escapeHtml(item.customization.surfaceMotif || "facets")} · ${escapeHtml(item.customization.font || "sans")}${item.customization.companyName ? ` · ${escapeHtml(item.customization.companyName)}` : ""}<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.surfaceColor || '#0a0b0d')}; vertical-align:middle; margin:0 2px 0 4px; border:1px solid #777;"></span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.accentColor || '#d8b26e')}; vertical-align:middle; border:1px solid #777;"></span></small></span>` : ""}
               <span>Qty ${item.quantity}</span>
             </div>
@@ -509,6 +512,8 @@ import "./invoice.css";
       const quantityHint = !quantityLimit ? "Quantity limit reached for this colour." : `Up to ${quantityLimit} available to add.`;
       const custom = productCustomizations.get(p.id) ?? defaultCustomization("01");
       const isCustomizable = detail && p.customizable;
+      const acceptsArtwork = isCustomizable && p.slug === orderDesignProductSlug;
+      const design = acceptsArtwork ? orderDesigns.get(p.id) : undefined;
       const hasLogo = !p.customizable || (custom.hasOneinfoLogo !== false && custom.brandingMode !== "without-logo");
       const activePrice = p.customizable ? variantPriceForBranding(v, hasLogo) : variantPrice(v);
       const activeRegular = p.customizable ? variantRegularPriceForBranding(v, hasLogo) : v.priceMinor;
@@ -709,7 +714,11 @@ import "./invoice.css";
 
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""} ${!v.available ? "is-out-of-stock" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}
-        ${isCustomizable ? `
+        ${design?.file ? `
+          <div class="product-art artwork-preview">
+            ${design.preview ? `<img src="${escapeHtml(design.preview)}" alt="Uploaded card design" />` : `<span>Artwork file · ${escapeHtml(design.file.id.split(".").at(-1).toUpperCase())}</span>`}
+          </div>
+        ` : isCustomizable ? `
           <div class="product-art custom-stage-unified ${p.featured ? 'has-badge' : ''}">
             <div class="product-badges">
               ${!v.available ? `<span class="out-of-stock-badge">Out of stock</span>` : ""}
@@ -812,6 +821,22 @@ import "./invoice.css";
             </button>
           </div>
 
+          ${acceptsArtwork ? `<div class="signature-design-upload">
+            <div>
+              ${design?.file ? '<strong>Design attached</strong>' : '<label for="signature-design-file">Upload your design</label>'}
+              <p id="signature-design-formats">${design?.file ? escapeHtml(design.file.name) : "PNG, JPG, PDF, EPS or AI · Up to 10 MB"}</p>
+            </div>
+            ${design?.file
+              ? `<button type="button" data-remove-design>Use manual editor</button>`
+              : `<input type="file" id="signature-design-file" data-design-file
+                  aria-describedby="signature-design-formats" accept=".png,.jpg,.jpeg,.pdf,.eps,.ai" ${design?.uploading || addingToCart ? "disabled" : ""} />`}
+            ${design?.uploading ? '<p role="status">Uploading design…</p>' : ""}
+            ${design?.error ? `<p role="alert">${escapeHtml(design.error)}</p>` : ""}
+            <a class="signature-design-support" href="${escapeHtml(signatureSupportUrl)}" target="_blank" rel="noopener noreferrer">
+              ${icon("whatsapp")} Contact on WhatsApp ${icon("arrow-up-right")}
+            </a>
+          </div>` : ""}
+          ${!design?.file ? `
           <!-- 2. Studio Tabs Navigation -->
           <div class="studio-tabs-nav" role="tablist" aria-label="Studio Configuration Tabs">
             <button type="button" class="studio-tab-btn ${activeStudioTab === 'details' ? 'is-active' : ''}" data-studio-tab="details" role="tab" aria-selected="${activeStudioTab === 'details'}">
@@ -1059,8 +1084,9 @@ import "./invoice.css";
               </div>
             </div>
           </div>
+          ` : ""}
         </section>` : ""}
-        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity <= 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity >= quantityLimit ? 'disabled' : ''}>${icon("plus")}</button></div></div>${v.available && (v.orderQuantityLimit !== undefined || !quantityLimit) ? `<p class="purchase-stock-limit" role="status">${quantityHint}</p>` : ""}<div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !quantityLimit || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : !v.available ? 'Out of stock' : quantityLimit ? 'Add to cart' : 'Limit reached'}</button></div>
+        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity <= 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity >= quantityLimit ? 'disabled' : ''}>${icon("plus")}</button></div></div>${v.available && (v.orderQuantityLimit !== undefined || !quantityLimit) ? `<p class="purchase-stock-limit" role="status">${quantityHint}</p>` : ""}<div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !quantityLimit || addingToCart || design?.uploading ? "disabled" : ""}>${addingToCart ? 'Adding…' : !v.available ? 'Out of stock' : quantityLimit ? 'Add to cart' : 'Limit reached'}</button></div>
         <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge and payment options at checkout.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
@@ -1885,6 +1911,16 @@ import "./invoice.css";
       selectedMedia.set(variantId, Number(mediaButton.dataset.media));
       renderRoute(); return;
     }
+    const removeDesign = event.target.closest("[data-remove-design]");
+    if (removeDesign) {
+      const productId = removeDesign.closest(".product").dataset.id;
+      const preview = orderDesigns.get(productId)?.preview;
+      if (preview) URL.revokeObjectURL(preview);
+      orderDesigns.delete(productId);
+      renderRoute();
+      $("[data-design-file]")?.focus({ preventScroll: true });
+      return;
+    }
     const brandingBtn = event.target.closest("[data-custom-branding]");
     if (brandingBtn) {
       const studio = brandingBtn.closest(".card-customizer-studio");
@@ -2487,8 +2523,10 @@ import "./invoice.css";
       const expectedVariant = product.customizable ? variantPriceForBranding(variant, hasLogo) : variantPrice(variant);
       if (!before || expectedBefore !== expectedVariant) { toast("The price changed. Please review it before adding to cart."); return; }
 
+      const design = product.customizable && product.slug === orderDesignProductSlug ? orderDesigns.get(productId)?.file : undefined;
+      const designFile = design ? { ...design, brandingMode: hasLogo ? "with-logo" : "without-logo" } : null;
       let customization = null;
-      if (product.customizable) {
+      if (product.customizable && !designFile) {
         if (!draft.name || !draft.name.trim()) {
           toast("Please enter your cardholder name to personalize your card.");
           $(`#custom-name-${productId}`)?.focus();
@@ -2530,7 +2568,7 @@ import "./invoice.css";
         };
       }
 
-      const nextCart = addCartVariant(cart, product, variant, quantity, customization);
+      const nextCart = addCartVariant(cart, product, variant, quantity, customization, designFile);
       const added = nextCart.find((item, index) => item !== cart[index]);
       save(storageKey, nextCart); cart = nextCart; renderCart();
       if (added) trackStorefront("AddToCart", catalogEventDetails([{ productId: product.id, variantId: variant.id, quantity, unitPriceMinor: added.priceMinor }]));
@@ -2814,7 +2852,49 @@ import "./invoice.css";
     reader.readAsDataURL(file);
   }
 
+  async function uploadSignatureDesign(file, productId) {
+    if (addingToCart || orderDesigns.get(productId)?.uploading) return;
+    const selectedExtension = file.name.split(".").at(-1).toLowerCase();
+    const extension = selectedExtension === "jpeg" ? "jpg" : selectedExtension;
+    const state = { uploading: false };
+    orderDesigns.set(productId, state);
+    if (!file.name.includes(".") || !orderDesignExtensions.includes(extension)) state.error = "Choose a PNG, JPG, PDF, EPS or AI file.";
+    else if (!file.size || file.size > orderDesignMaxBytes) state.error = "Choose a design file up to 10 MB.";
+    if (state.error) {
+      renderRoute();
+      $("[data-design-file]")?.focus({ preventScroll: true });
+      return;
+    }
+    state.uploading = true;
+    renderRoute();
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/product-media/design/${extension}`, {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: file,
+        signal: AbortSignal.timeout(60_000),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.id) throw new Error(result.message ?? "Upload failed. Please choose the file again.");
+      state.file = { id: result.id, name: file.name.replace(/[/\\\x00-\x1f\x7f]/g, "_").trim().slice(-255) };
+      if (extension === "jpg" || extension === "png") state.preview = URL.createObjectURL(new Blob([file], { type: extension === "jpg" ? "image/jpeg" : "image/png" }));
+    } catch (error) {
+      state.error = error.message || "Upload failed. Please choose the file again.";
+    } finally {
+      state.uploading = false;
+      if (productRoute(location.hash)?.slug === orderDesignProductSlug) {
+        renderRoute();
+        $(state.file ? "[data-remove-design]" : "[data-design-file]")?.focus({ preventScroll: true });
+      }
+    }
+  }
+
   $("#product-detail").addEventListener("change", event => {
+    const designInput = event.target.closest("[data-design-file]");
+    if (designInput?.files?.[0]) {
+      void uploadSignatureDesign(designInput.files[0], designInput.closest(".product").dataset.id);
+      return;
+    }
     const fileInput = event.target.closest("[data-custom-file='logo']");
     if (fileInput && fileInput.files && fileInput.files[0]) {
       const studio = fileInput.closest(".card-customizer-studio");
@@ -3510,7 +3590,7 @@ import "./invoice.css";
   function checkoutItems(items) {
     return items.map(item => ({
       productId: item.id, variantId: item.variantId, quantity: item.quantity, unitPriceMinor: item.priceMinor,
-      ...(item.customization ? { customization: item.customization } : {}),
+      ...(item.designFile ? { designFile: item.designFile } : item.customization ? { customization: item.customization } : {}),
     }));
   }
 
