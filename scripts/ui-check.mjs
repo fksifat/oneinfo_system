@@ -399,6 +399,18 @@ try {
     if(width===1440){
       await set('#order-form input[name=name]','UI Checkout Buyer');await set('#order-phone','01712345678');await set('#order-email','checkout-ui@example.com');await set('#order-form [name=addressLine]','UI test address, Dhaka');await set('#order-form [name=district]','Dhaka');
       await evaluate(`document.querySelector('.order-coupon-toggle').click()`);await set('#order-coupon-form [name=code]','UICHECK');await evaluate(`document.querySelector('#order-coupon-form').requestSubmit()`);await until(`document.querySelector('.order-coupon-status').textContent.includes('15')`);
+      const saveCodAdvance = async codAdvanceInsideDhaka => {
+        const response = await app.inject({ method:'PUT', url:'/api/v1/orders/admin/payment', headers,
+          payload:{codAdvanceTaka:100,codAdvanceInsideDhaka} });
+        assert.equal(response.statusCode,200,response.body);
+        await evaluate(`window.dispatchEvent(new Event('focus'))`);
+      };
+      await saveCodAdvance(false);
+      await evaluate(`document.querySelector('[name=paymentMethod][value=COD]').click()`);
+      await until(`document.querySelector('.order-payment-details').hidden && document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').textContent==='Place order' && !document.querySelector('.order-submit').disabled`);
+      await saveCodAdvance(true);
+      await until(`document.querySelector('.order-cod-status').textContent.includes('100') && !document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').disabled && !document.querySelector('.order-prepare-payment').disabled`);
+      console.log('Inside Dhaka COD follows saved Admin advance switch on checkout focus PASS');
       await until(`!document.querySelector('[name=paymentMethod][value=ROCKET]').disabled`);
       await evaluate(`document.querySelector('[name=paymentMethod][value=ROCKET]').click()`);
       assert.equal(await evaluate(`document.querySelector('.order-submit').disabled`),true);
