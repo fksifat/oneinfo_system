@@ -63,27 +63,25 @@ function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
       <button type="button">Print codes</button></html>`);
     tab.document.close(); tab.document.querySelector("button")?.addEventListener("click", () => tab.print());
   }
-  return <details className="operation-panel order-packing" open={initiallyOpen || undefined}>
-    <summary>Pack cards & activation codes</summary>
-    <p>{quantity} temporary profile{quantity === 1 ? "" : "s"} · One private code per card. Physical cards are linked only when clients activate them.</p>
-    <ol>{order.items.map((item, i) => <li key={i}>{item.quantity} × {item.name} · {item.variantName}{item.customization ? ` [Custom: ${item.customization.name}${item.customization.surfaceMotif ? ` · ${item.customization.surfaceMotif}` : ""}]` : ""}</li>)}</ol>
-    <button type="button" disabled={busy || !paid} onClick={() => void run(async () => {
-      setCodes((await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" })).items);
-    })}>{busy ? "Loading…" : codes ? "Refresh secret codes" : "Show secret codes"}</button>
-    {order.invoiceNumber && <button type="button" disabled={busy || !paid} onClick={printInvoice}>Print invoice with activation codes</button>}
-    {!paid && <p>Verify payment before accessing codes or confirming packing.</p>}
+  return <details className="operation-panel order-packing order-secret-packing" open={initiallyOpen || undefined}>
+    <summary>{order.packedAt ? "Activation codes" : "Pack cards & activation codes"}</summary>
+    <div className="order-packing-actions">
+      <button className="quiet" type="button" disabled={busy || !paid} onClick={() => void run(async () => {
+        setCodes((await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" })).items);
+      })}>{busy ? "Loading…" : codes ? "Refresh secret codes" : "Show secret codes"}</button>
+      {order.invoiceNumber && <button className="quiet" type="button" disabled={busy || !paid} onClick={printInvoice}>Print invoice with activation codes</button>}
+    </div>
     {codes && <><ul>{codes.map(slot => <li key={slot.id}>
-      <span>Profile {slot.lineIndex + 1}.{slot.unitIndex + 1}</span> · {slot.redeemedAt ? "Activated" : <code>{slot.secretCode}</code>}
-    </li>)}</ul><button type="button" disabled={!codes.some(slot => slot.secretCode)} onClick={printCodes}>Print activation slips</button></>}
+      <span>Item {slot.lineIndex + 1}, card {slot.unitIndex + 1}</span> · {slot.redeemedAt ? "Activated" : <code>{slot.secretCode}</code>}
+    </li>)}</ul><button className="quiet" type="button" disabled={!codes.some(slot => slot.secretCode)} onClick={printCodes}>Print activation slips</button></>}
     {!order.packedAt && paid && <form onSubmit={event => { event.preventDefault(); void run(async () => {
       await api(`/api/v1/orders/admin/${order.id}/packing-check`, token, { method: "POST", body: JSON.stringify({ confirmed: true }) });
       await onChange();
     }); }}>
-      <label className="share-consent"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
-        <span>I checked the quantity and finish of QC-passed cards and included a different secret code with each card.</span></label>
-      <button disabled={busy || !confirmed || !codes || codes.length !== quantity}>Confirm package</button>
+      <label className="order-packing-confirmation"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+        <span>I checked the count and finish of QC-passed cards and packed a unique code with each card.</span></label>
+      <button className="button-action button-action-primary" disabled={busy || !confirmed || !codes || codes.length !== quantity}>Confirm package</button>
     </form>}
-    {order.packedAt && <p role="status">Package confirmed. Any supplied unused card can be activated with an unused code from this order.</p>}
     {error && <p role="alert" className="store-order-notice is-error">{error}</p>}
   </details>;
 }
