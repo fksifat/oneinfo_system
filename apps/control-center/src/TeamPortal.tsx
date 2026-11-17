@@ -16,7 +16,25 @@ const companyApi = <T,>(path: string, method = "GET", body?: unknown, token?: st
 const accountKey = "oneinfo.customer.token";
 const values = (form: HTMLFormElement) => Object.fromEntries(new FormData(form));
 const messageFor = (error: unknown) => error instanceof Error ? error.message : "Request could not be completed.";
-const themeOptions = <><option value="MIDNIGHT">Midnight</option><option value="IVORY">Ivory</option><option value="MINT">Mint</option><option value="SAPPHIRE">Royal Sapphire</option><option value="TITANIUM">Titanium Noir</option></>;
+const themeOptions = (
+  <>
+    <option value="MIDNIGHT">Midnight</option>
+    <option value="IVORY">Ivory</option>
+    <option value="MINT">Mint</option>
+    <option value="SAPPHIRE">Royal Sapphire</option>
+    <option value="TITANIUM">Titanium Noir</option>
+    <option value="ROSE_GOLD">Rose Gold Luxe</option>
+    <option value="BURGUNDY">Imperial Burgundy</option>
+    <option value="AMBER">Warm Amber</option>
+    <option value="AMETHYST">Royal Amethyst</option>
+    <option value="FROST">Nordic Frost</option>
+    <option value="ALPINE">Alpine Forest</option>
+    <option value="TERRACOTTA">Sunset Terracotta</option>
+    <option value="OCEANIC">Oceanic Cyan</option>
+    <option value="LAVENDER">Lavender Mist</option>
+    <option value="CARBON">Carbon Matrix</option>
+  </>
+);
 const welcomeEmailLabels = { pending: "Welcome email queued", sending: "Sending welcome email", accepted: "Welcome email sent", failed: "Welcome email failed" };
 
 function TeamPage({ title, children }: { title: string; children: ReactNode }) {
