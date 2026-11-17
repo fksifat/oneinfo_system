@@ -993,3 +993,30 @@ test("shared contacts and profile analytics have luxury UI, contact cards, quick
   assert.match(stylesCss, /\.analytics-select-box\s*\{/);
   assert.match(stylesCss, /\.analytics-stat-source-badge\s*\{/);
 });
+
+test("storefront checkout payment section directly displays payment instructions, copyable wallet number, COD advance, and responsive luxury UI", () => {
+  const indexHtml = readFileSync("sites/storefront/index.html", "utf8");
+  const appJs = readFileSync("sites/storefront/app.js", "utf8");
+  const stylesCss = readFileSync("sites/storefront/styles.css", "utf8");
+
+  // Payment options structure & badges
+  assert.match(indexHtml, /class="order-payment-options"/);
+  assert.match(indexHtml, /class="order-payment-guide"/);
+  assert.match(indexHtml, /class="order-payment-wallet-box"/);
+  assert.match(indexHtml, /class="order-payment-copy-btn"/);
+  assert.match(indexHtml, /class="order-payment-inputs-grid"/);
+  assert.match(indexHtml, /order-payment-cod-mark/);
+
+  // app.js handles direct payment guide, COD advance requirement, copy button, and seamless reservation on submit
+  assert.match(appJs, /order-payment-guide-title/);
+  assert.match(appJs, /order-payment-wallet-number/);
+  assert.match(appJs, /order-payment-copy-btn/);
+  assert.match(appJs, /advance required/);
+  assert.match(appJs, /transactionField\.value\.toUpperCase\(\)/);
+
+  // Responsive styling
+  assert.match(stylesCss, /\.order-payment-options\s*\{[^}]*grid-template-columns:\s*repeat\(3/);
+  assert.match(stylesCss, /@media\s*\(max-width:\s*640px\)\s*\{[^}]*\.order-payment-options/);
+  assert.match(stylesCss, /\.order-payment-guide\s*\{/);
+  assert.match(stylesCss, /\.order-payment-copy-btn\s*\{/);
+});

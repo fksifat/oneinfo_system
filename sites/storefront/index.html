@@ -150,32 +150,75 @@
                   <div class="order-payment-options" role="radiogroup" aria-labelledby="order-payment-title">
                     <label class="order-payment-option">
                       <input type="radio" name="paymentMethod" value="BKASH" checked />
-                      <strong>bKash</strong>
+                      <div class="order-payment-option-text">
+                        <strong>bKash</strong>
+                        <small class="order-bkash-status">Instant wallet</small>
+                      </div>
                       <img class="order-payment-mark" src="/assets/payment/bkash.png" alt="" width="24" height="24" />
                     </label>
                     <label class="order-payment-option">
                       <input type="radio" name="paymentMethod" value="ROCKET" disabled />
-                      <span><strong>Rocket</strong><small class="order-rocket-status">Checking availability…</small></span>
+                      <div class="order-payment-option-text">
+                        <strong>Rocket</strong>
+                        <small class="order-rocket-status">Checking availability…</small>
+                      </div>
                       <img class="order-payment-mark" src="/assets/payment/rocket.png" alt="" width="24" height="24" />
                     </label>
                     <label class="order-payment-option order-cod-option">
                       <input type="radio" name="paymentMethod" value="COD" />
-                      <span><strong>Cash on Delivery (COD)</strong><small class="order-cod-status"></small></span>
+                      <div class="order-payment-option-text">
+                        <strong>Cash on Delivery (COD)</strong>
+                        <small class="order-cod-status">৳100 advance</small>
+                      </div>
+                      <span class="order-payment-mark order-payment-cod-mark" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                          <circle cx="12" cy="12" r="2.5"></circle>
+                          <path d="M6 12h.01M18 12h.01"></path>
+                        </svg>
+                      </span>
                     </label>
                   </div>
                   <div class="order-payment-details">
-                    <button class="button button-secondary order-prepare-payment" type="submit" disabled>Show payment details</button>
-                    <p class="order-payment-instructions" role="status" hidden></p>
-                    <div class="order-payment-field">
-                      <label for="order-payment-number">Number used to pay</label>
-                      <input id="order-payment-number" name="paymentSenderNumber" type="tel" inputmode="numeric" autocomplete="off"
-                        maxlength="12" placeholder="Wallet number" disabled />
+                    <div class="order-payment-guide" role="region" aria-label="Payment instructions">
+                      <div class="order-payment-guide-header">
+                        <div class="order-payment-guide-badge">
+                          <span class="order-payment-badge-dot"></span>
+                          <span class="order-payment-guide-title">bKash Payment</span>
+                        </div>
+                        <div class="order-payment-guide-due">
+                          <span class="order-payment-guide-due-label">Payable:</span>
+                          <strong class="order-payment-guide-due-val"></strong>
+                        </div>
+                      </div>
+                      <div class="order-payment-wallet-box">
+                        <div class="order-payment-wallet-info">
+                          <span class="order-payment-wallet-label">Send payment to:</span>
+                          <strong class="order-payment-wallet-number">01760320810</strong>
+                        </div>
+                        <button type="button" class="order-payment-copy-btn" aria-label="Copy wallet number">
+                          <svg class="order-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15" aria-hidden="true">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                          </svg>
+                          <span class="order-copy-text">Copy</span>
+                        </button>
+                      </div>
+                      <p class="order-payment-steps">1. Send payment via bKash (Send Money) to <strong>01760320810</strong>.<br>2. Enter your mobile number & Transaction ID below to verify.</p>
                     </div>
-                    <div class="order-payment-field">
-                      <label for="order-transaction">Transaction ID</label>
-                      <input id="order-transaction" name="transactionId" aria-describedby="order-transaction-hint" autocomplete="off"
-                        autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="TrxID" disabled />
-                      <small id="order-transaction-hint">From your payment confirmation.</small>
+                    <p class="order-payment-instructions" role="status" hidden></p>
+                    <div class="order-payment-inputs-grid">
+                      <div class="order-payment-field">
+                        <label for="order-payment-number">Number used to pay <span class="order-field-required">*</span></label>
+                        <input id="order-payment-number" name="paymentSenderNumber" type="tel" inputmode="numeric" autocomplete="off"
+                          maxlength="12" placeholder="01XXXXXXXXX" />
+                      </div>
+                      <div class="order-payment-field">
+                        <label for="order-transaction">Transaction ID <span class="order-field-required">*</span></label>
+                        <input id="order-transaction" name="transactionId" aria-describedby="order-transaction-hint" autocomplete="off"
+                          autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="e.g. BL9A2K9Z" />
+                        <small id="order-transaction-hint">From your payment confirmation SMS / app.</small>
+                      </div>
                     </div>
                   </div>
                 </section>

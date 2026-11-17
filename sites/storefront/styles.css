@@ -586,37 +586,149 @@ button:disabled { opacity: .55; cursor: not-allowed; }
   font-weight: 400;
 }
 .order-payment-options {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px;
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 12px;
+}
+@media (max-width: 640px) {
+  .order-payment-options { grid-template-columns: 1fr; gap: 8px; }
 }
 #order-form .order-payment-option {
-  display: grid; grid-column: auto; grid-template-columns: 16px minmax(0, 1fr) auto;
-  align-items: center; gap: 6px; min-height: 44px; padding: 6px 8px;
-  border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 50px; padding: 8px 12px; min-width: 0;
+  border: 1.5px solid #dce4df; border-radius: 12px; background: #fff;
+  cursor: pointer; transition: all .2s ease; position: relative;
 }
-#order-form .order-cod-option { grid-column: 1 / -1; }
-.order-payment-option input { width: 16px; height: 16px; margin: 0; padding: 0; accent-color: var(--ink-2); }
+#order-form .order-payment-option-text {
+  display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0;
+}
+#order-form .order-payment-option strong {
+  font-size: 0.92rem; font-weight: 700; color: #172620; line-height: 1.25;
+}
+#order-form .order-payment-option small {
+  font-size: 0.73rem; color: #51635b; line-height: 1.2;
+}
+.order-payment-option input { width: 18px; height: 18px; margin: 0; padding: 0; accent-color: #173a34; flex-shrink: 0; }
 .order-payment-option input:focus { box-shadow: none; }
-.order-payment-option input:focus-visible { outline: 2px solid var(--ink-2); outline-offset: 3px; }
+.order-payment-option input:focus-visible { outline: 2px solid #173a34; outline-offset: 3px; }
 .order-payment-mark {
-  width: 24px; height: 24px; object-fit: contain; border-radius: 5px;
+  width: 26px; height: 26px; object-fit: contain; border-radius: 6px; flex-shrink: 0;
 }
-#order-form .order-payment-option:has(input:checked) { background: #edf4ef; border-color: #a5bdb1; }
-#order-form .order-payment-option:has(input:disabled) { color: var(--muted); cursor: default; }
-#order-form :is(.order-rocket-status, .order-cod-status) { display: block; margin: 2px 0 0; font-size: .72rem; line-height: 1.25; overflow-wrap: anywhere; }
+.order-payment-cod-mark {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 6px; background: #edf4ef; color: #173a34; flex-shrink: 0;
+}
+#order-form .order-payment-option:hover {
+  border-color: #173a34; background: #fbfdfc; box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+#order-form .order-payment-option:has(input:checked) {
+  background: #f2f7f4; border-color: #173a34;
+  box-shadow: 0 0 0 1px #173a34, 0 3px 12px rgba(23, 58, 52, 0.08);
+}
+#order-form .order-payment-option:has(input:checked) strong { color: #173a34; }
+#order-form .order-payment-option:has(input:disabled) {
+  color: var(--muted); cursor: default; opacity: 0.6; background: #fafafa; border-color: #e5e5e5;
+}
+#order-form :is(.order-rocket-status, .order-cod-status, .order-bkash-status) {
+  display: block; margin: 2px 0 0; font-size: .72rem; line-height: 1.25; overflow-wrap: anywhere;
+}
 #order-form :is(.order-rocket-status, .order-cod-status):empty { display: none; }
+
 .order-payment-details {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.25rem), 1fr));
-  align-items: start; gap: 8px 10px; margin-top: 10px;
+  display: grid; gap: 14px; margin-top: 14px; min-width: 0;
+}
+.order-payment-guide {
+  display: grid; gap: 12px; padding: 14px; min-width: 0;
+  border: 1.5px solid #dce6e1; border-radius: 12px;
+  background: linear-gradient(180deg, #f9fbf9 0%, #f3f7f5 100%);
+}
+@media (max-width: 480px) {
+  .order-payment-guide { padding: 11px; gap: 10px; }
+}
+.order-payment-guide-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; min-width: 0;
+}
+.order-payment-guide-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  background: #e3ede7; color: #173a34; border-radius: 100px;
+  font-size: 0.78rem; font-weight: 700;
+}
+.order-payment-badge-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: #173a34; flex-shrink: 0;
+}
+.order-payment-guide-due {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+}
+.order-payment-guide-due-label {
+  font-size: 0.8rem; color: #51635b;
+}
+.order-payment-guide-due-val {
+  font-size: 1.05rem; font-weight: 800; color: #173a34;
+}
+.order-payment-wallet-box {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; background: #fff; border: 1.5px solid #d4dfd9; border-radius: 10px; min-width: 0;
+}
+@media (max-width: 480px) {
+  .order-payment-wallet-box { flex-direction: column; align-items: stretch; gap: 10px; }
+  .order-payment-copy-btn { width: 100%; justify-content: center; }
+}
+.order-payment-wallet-info {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0;
+}
+.order-payment-wallet-label {
+  font-size: 0.72rem; color: #6a7c73; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+}
+.order-payment-wallet-number {
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 1.08rem; font-weight: 800;
+  color: #172620; letter-spacing: 0.05em; word-break: break-all;
+}
+.order-payment-copy-btn {
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px;
+  border: 1.5px solid #cad6d0; border-radius: 8px; background: #f7faf8; color: #173a34;
+  font-size: 0.82rem; font-weight: 700; cursor: pointer; transition: all .15s ease; flex-shrink: 0;
+}
+.order-payment-copy-btn:hover {
+  background: #173a34; color: #fff; border-color: #173a34;
+}
+.order-payment-copy-btn.copied {
+  background: #0f5132; color: #fff; border-color: #0f5132;
+}
+.order-payment-steps {
+  margin: 0; font-size: 0.83rem; line-height: 1.5; color: #374a42; overflow-wrap: anywhere; word-break: break-word;
+}
+.order-payment-steps strong {
+  color: #172620; font-weight: 700;
+}
+.order-payment-inputs-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0;
+}
+@media (max-width: 640px) {
+  .order-payment-inputs-grid { grid-template-columns: 1fr; gap: 10px; }
+}
+.order-payment-field {
+  display: grid; gap: 5px; min-width: 0;
+}
+.order-payment-field label {
+  font-size: 0.85rem; font-weight: 600; color: #172620; display: block; margin-bottom: 2px;
+}
+.order-field-required { color: #dc2626; margin-left: 2px; }
+#order-form .order-payment-field input {
+  width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px;
+  border: 1.5px solid #d4dfd9; border-radius: 9px;
+  font-size: 0.95rem; font-family: inherit;
+  transition: border-color .15s ease, box-shadow .15s ease; background: #fff;
+}
+#order-form .order-payment-field input:focus {
+  border-color: #173a34; outline: none; box-shadow: 0 0 0 3px rgba(23, 58, 52, 0.12);
+}
+#order-form .order-payment-field input:disabled {
+  background: #f4f6f3; opacity: 0.7; cursor: not-allowed;
 }
 .order-prepare-payment { justify-self: start; min-height: 44px; padding: 8px 12px; }
 .order-payment-instructions {
-  grid-column: 1 / -1; margin: 0; padding: 8px 10px; background: #edf4ef;
-  border-radius: 8px; color: var(--ink-2); font-size: .85rem;
+  margin: 0; padding: 8px 10px; background: #edf4ef;
+  border-radius: 8px; color: var(--ink-2); font-size: .85rem; overflow-wrap: anywhere; word-break: break-word;
 }
-.order-payment-field { display: grid; gap: 5px; min-width: 0; }
-#order-form .order-payment-field input { min-width: 0; min-height: 44px; padding: 8px 10px; }
 #order-transaction-hint { color: var(--muted); font-size: .75rem; line-height: 1.4; }
-#order-form .order-payment-details input:disabled { background: #f4f6f3; }
 .order-submit:disabled, .order-prepare-payment:disabled { opacity: .52; cursor: not-allowed; }
 .order-payable { border-top: 1px solid var(--line); padding-top: 10px; }
 .order-recovery, .order-saved { max-width: 620px; }
