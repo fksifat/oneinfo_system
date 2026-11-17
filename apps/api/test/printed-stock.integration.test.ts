@@ -1522,7 +1522,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
     "%s reserves stock, freezes the total, and releases stock once on cancellation", async (method, senderNumber) => {
     const [catalog] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
     try {
-      await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 1 })) }).where(eq(schema.products.id, productId));
+      await client.db.update(schema.products).set({ variants: catalog!.variants.map(variant => ({ ...variant, stockQuantity: 1 })),
+        warranty: "90 days", warrantyIsDemo: false }).where(eq(schema.products.id, productId));
       const payload = { ...orderPayload(), payment: { method, amountMinor: 56000 } };
       const reserved = await request("/api/v1/orders/reserve", payload);
       expect(reserved.status).toBe("AWAITING_PAYMENT");
@@ -1535,7 +1536,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       expect(await client.db.select().from(schema.orderCardAllocations)).toHaveLength(0);
       expect(await client.db.select().from(schema.orderEmails)).toHaveLength(0);
       const [remaining] = await client.db.select().from(schema.products).where(eq(schema.products.id, productId));
-      await client.db.update(schema.products).set({ variants: remaining!.variants.map(variant => ({ ...variant, priceMinor: 60000 })) }).where(eq(schema.products.id, productId));
+      await client.db.update(schema.products).set({ variants: remaining!.variants.map(variant => ({ ...variant, priceMinor: 60000 })),
+        warranty: "30 days" }).where(eq(schema.products.id, productId));
       const legacyPayment = { ...payload.payment, transactionId: "AUDITPAY01" };
       if (method === "ROCKET") {
         expect((await app.inject({ method: "POST", url: "/api/v1/orders", payload: { ...payload, payment: legacyPayment } })).statusCode).toBe(409);
@@ -1557,10 +1559,13 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       expect(document.statusCode, document.body).toBe(200);
       expect(document.headers["cache-control"]).toBe("no-store");
       expect(document.json()).toMatchObject({ invoiceNumber: paid.invoiceNumber, subtotalMinor: 50000, shippingMinor: 6000, totalMinor: 56000,
-        items: [{ name: "Test card", variantName: "Standard", quantity: 1, unitPriceMinor: 50000 }] });
+        items: [{ name: "Test card", variantName: "Standard", quantity: 1, unitPriceMinor: 50000, warranty: "90 days" }] });
       expect(document.body).not.toContain("buyer@example.com");
       expect(document.body).not.toContain("AUDITPAY01");
       expect(document.json()).not.toHaveProperty("paymentSenderNumber");
+      const [stored] = await client.db.select().from(schema.storeOrders).where(eq(schema.storeOrders.id, paid.id));
+      await client.db.update(schema.storeOrders).set({ items: stored!.items.map(item => ({ ...item, warranty: undefined })) }).where(eq(schema.storeOrders.id, paid.id));
+      expect((await invoice(token)).json().items[0].warranty).toBe("30 days");
       const cancelUrl = `/api/v1/orders/admin/${paid.id}/cancel`;
       expect((await app.inject({ method: "POST", url: cancelUrl, headers, payload: { reason: "Customer cancelled" } })).statusCode).toBe(409);
       await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
@@ -1568,7 +1573,8 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       await request(cancelUrl, { reason: "Customer cancelled", refundConfirmed: true });
       expect((await client.db.select().from(schema.products).where(eq(schema.products.id, productId)))[0]!.variants[0]!.stockQuantity).toBe(1);
       expect((await app.inject({ method: "POST", url: `/api/v1/orders/admin/${paid.id}/fulfillment`, headers, payload: { status: "PROCESSING" } })).statusCode).toBe(409);
-    } finally { await client.db.update(schema.products).set({ variants: catalog!.variants }).where(eq(schema.products.id, productId)); }
+    } finally { await client.db.update(schema.products).set({ variants: catalog!.variants, warranty: catalog!.warranty,
+      warrantyIsDemo: catalog!.warrantyIsDemo }).where(eq(schema.products.id, productId)); }
   });
 
   it("never allocates a card after issuing its private activation code", async () => {

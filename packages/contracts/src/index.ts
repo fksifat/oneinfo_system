@@ -609,7 +609,7 @@ export const PlaceOrderSchema = z.object({
   ),
 });
 export type PlaceOrderInput = z.infer<typeof PlaceOrderSchema>;
-export type OrderLine = z.infer<typeof OrderLineSchema> & { name: string; variantName: string };
+export type OrderLine = z.infer<typeof OrderLineSchema> & { name: string; variantName: string; warranty?: string | null };
 export const orderStatuses = ["AWAITING_PAYMENT", "RECEIVED", "PROCESSING", "SHIPPED", "DELIVERED", "CANCELLED"] as const;
 export const OrderFulfillmentSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("PROCESSING") }),

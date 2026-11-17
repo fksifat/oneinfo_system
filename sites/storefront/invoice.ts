@@ -1,9 +1,10 @@
 import { paymentMethodLabels, type OrderLine, type OrderReceipt } from "@oneinfo/contracts";
 import logo from "./assets/oneinfo-logo.svg";
+import activationGuideQr from "./assets/activation-guide-qr.png";
 
 type InvoiceOrder = Pick<OrderReceipt, "id" | "invoiceNumber" | "status" | "createdAt" | "paymentMethod" |
   "paymentAmountMinor" | "paymentStatus" | "subtotalMinor" | "shippingMinor" | "discountMinor" | "totalMinor"> & {
-  items: Pick<OrderLine, "name" | "variantName" | "quantity" | "unitPriceMinor">[];
+  items: Pick<OrderLine, "name" | "variantName" | "quantity" | "unitPriceMinor" | "warranty">[];
 };
 
 type InvoiceCode = { secretCode: string | null };
@@ -11,6 +12,7 @@ type InvoiceCode = { secretCode: string | null };
 const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 const money = (minor: number) => `BDT ${(minor / 100).toFixed(2)}`;
 const invoiceDate = new Intl.DateTimeFormat("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium" });
+const activationGuideUrl = "https://www.oneinfo.online/activation-guide.html";
 
 export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[] = []) {
   const payment = order.paymentAmountMinor ?? 0;
@@ -18,6 +20,8 @@ export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[]
   const balance = order.totalMinor - payment;
   const cancelled = order.status === "CANCELLED";
   const unused = cancelled ? [] : codes.flatMap(({ secretCode }, index) => secretCode ? [{ secretCode, cardNumber: index + 1 }] : []);
+  const warrantyItems = new Map(order.items.flatMap(item => item.warranty
+    ? [[JSON.stringify([item.name, item.variantName, item.warranty]), item] as const] : []));
   return `<header class="invoice-header">
       <img class="invoice-logo" src="${escape(new URL(logo, location.href).href)}" alt="Oneinfo" width="142" height="43">
       <div><h1 id="invoice-title" tabindex="-1">Invoice</h1>
@@ -40,10 +44,21 @@ export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[]
       ${!cancelled && payment > 0 ? `<div><dt>${verified ? "Paid" : "Payment to verify"}</dt><dd>${money(payment)}</dd></div>
       ${balance > 0 ? `<div><dt>${verified ? "Due on delivery" : "Due after payment check"}</dt><dd>${money(balance)}</dd></div>` : ""}` : ""}
     </dl>
+    ${cancelled ? "" : `<a class="invoice-guide" href="${activationGuideUrl}" target="_blank" rel="noopener noreferrer">
+      <img src="${escape(new URL(activationGuideQr, location.href).href)}" alt="" width="76" height="76">
+      <span><strong>How to activate your card</strong><span lang="bn">বাংলা নির্দেশিকা · স্ক্যান করুন বা লিংকটি খুলুন</span></span>
+    </a>`}
     ${unused.length ? `<section class="invoice-activation" aria-labelledby="invoice-activation-title">
       <header><h2 id="invoice-activation-title">${unused.length === 1 ? "Activation code" : "Activation codes"}</h2>
       <p>Tap or scan your card, then enter the code. Keep it private.</p></header>
       ${unused.map(({ secretCode, cardNumber }) => `<div class="invoice-code">${codes.length > 1 ? `<span>Card ${cardNumber}</span>` : ""}
         <code>${escape(secretCode)}</code></div>`).join("")}
+    </section>` : ""}
+    ${warrantyItems.size ? `<section class="invoice-warranties" aria-labelledby="invoice-warranty-title">
+      <h2 id="invoice-warranty-title">Warranty</h2>
+      ${[...warrantyItems.values()].map(item => `<div class="invoice-warranty">
+        <h3>${escape(item.name)} · ${escape(item.variantName)}</h3>
+        <p>${escape(item.warranty ?? "")}</p>
+      </div>`).join("")}
     </section>` : ""}`;
 }

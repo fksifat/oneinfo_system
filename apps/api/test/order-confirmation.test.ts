@@ -7,7 +7,7 @@ vi.mock("../src/config.js", () => ({
 }));
 afterEach(() => vi.unstubAllGlobals());
 
-it("sends the order breakdown with a stable email key and skips old replays", async () => {
+it("sends a brief tracking confirmation with a stable email key and skips old replays", async () => {
   const send = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
   vi.stubGlobal("fetch", send);
   const order: StoreOrder = {
@@ -22,8 +22,9 @@ it("sends the order breakdown with a stable email key and skips old replays", as
   const [url, request] = send.mock.calls[0]!;
   expect(url).toBe("https://api.resend.com/emails");
   expect(request.headers["Idempotency-Key"]).toBe("oneinfo-order/test-order");
-  expect(JSON.parse(request.body)).toMatchObject({ to: ["buyer@example.com"], text: expect.stringContaining("Total due on delivery: BDT 549.10") });
-  expect(JSON.parse(request.body).text).toContain("View invoice: https://oneinfo.example/#invoice/test-order.");
+  const message = JSON.parse(request.body);
+  expect(message).toMatchObject({ to: ["buyer@example.com"], text: expect.stringContaining("Track your order: https://oneinfo.example/#track/test-order.") });
+  expect(message.text + message.html).not.toMatch(/Order ID|Invoice|20261113-ABC123|Order summary/i);
   expect(await sendOrderConfirmation({ ...order, createdAt: "2025-01-01T00:00:00.000Z" }, false)).toBeUndefined();
   expect(send).toHaveBeenCalledTimes(1);
 });

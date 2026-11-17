@@ -6,7 +6,7 @@ import { z } from "zod";
 import {
   bkashNumber, rocketNumber, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
   ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
-  type AdminOrderSearch, type OrderReceipt,
+  type AdminOrderSearch, type OrderLine, type OrderReceipt,
 } from "@oneinfo/contracts";
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
@@ -48,6 +48,22 @@ function receipt(order: typeof storeOrders.$inferSelect): OrderReceipt {
 
 function conflict(message: string): never {
   throw Object.assign(new Error(message), { statusCode: 409 });
+}
+
+function productWarranty(product: Pick<typeof products.$inferSelect, "warranty" | "warrantyIsDemo">) {
+  return product.warrantyIsDemo ? null : product.warranty.trim() || null;
+}
+
+async function legacyProductWarranties(items: OrderLine[]) {
+  const ids = [...new Set(items.filter(item => item.warranty === undefined).map(item => item.productId))];
+  if (!ids.length) return new Map<string, string | null>();
+  const catalog = await db.select({ id: products.id, warranty: products.warranty, warrantyIsDemo: products.warrantyIsDemo })
+    .from(products).where(inArray(products.id, ids));
+  return new Map(catalog.map(product => [product.id, productWarranty(product)]));
+}
+
+function orderLineWarranty(item: OrderLine, legacy: Map<string, string | null>) {
+  return item.warranty === undefined ? legacy.get(item.productId) ?? null : item.warranty;
 }
 
 export const orderRoutes: FastifyPluginAsync = async app => {
@@ -263,9 +279,11 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       const [order] = await db.select().from(storeOrders).where(eq(storeOrders.id, id));
       if (order?.invoiceNumber && !order.awaitingPayment) {
         const { invoiceNumber, status, createdAt, subtotalMinor, shippingMinor, discountMinor, totalMinor, paymentMethod, paymentAmountMinor, paymentStatus } = receipt(order);
+        const warranties = await legacyProductWarranties(order.items);
         return { id, invoiceNumber, status, createdAt, subtotalMinor, shippingMinor, discountMinor, totalMinor, paymentMethod,
           paymentAmountMinor, paymentStatus,
-          items: order.items.map(({ name, variantName, quantity, unitPriceMinor }) => ({ name, variantName, quantity, unitPriceMinor })) };
+          items: order.items.map(item => ({ name: item.name, variantName: item.variantName, quantity: item.quantity,
+            unitPriceMinor: item.unitPriceMinor, warranty: orderLineWarranty(item, warranties) })) };
       }
     }
     return reply.code(404).send({ message: "This invoice is unavailable." });
@@ -360,11 +378,13 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       .innerJoin(cardBatches, eq(cardBatches.id, cards.batchId))
       .where(inArray(orderCardAllocations.orderId, page.map(row => row.id))) : [];
     const invites = page.length ? await db.select().from(storeReviewInvites).where(inArray(storeReviewInvites.orderId, page.map(row => row.id))) : [];
+    const warranties = await legacyProductWarranties(page.flatMap(row => row.items));
     return { items: page.map(row => {
       const assignedCards = allocations.filter(item => item.orderId === row.id).map(({ orderId: _, ...card }) => card);
       return { ...receipt(row), reviewInviteSentAt: invites.find(invite => invite.orderId === row.id)?.sentAt?.toISOString() ?? null, customer: row.customer, profileId: row.profileId, assignedCards,
         qrAllocation: allocationSummary(row.items.reduce((sum, item) => sum + item.quantity, 0), assignedCards.length),
-        deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId, paymentSenderNumber: row.paymentSenderNumber,
+        deliveryAddress: row.deliveryAddress, items: row.items.map(item => ({ ...item, warranty: orderLineWarranty(item, warranties) })),
+        transactionId: row.transactionId, paymentSenderNumber: row.paymentSenderNumber,
         codCollectedMinor: row.codCollectedMinor, codSettledMinor: row.codSettledMinor };
     }), hasMore: rows.length > 50, supportsSearch: true };
 
@@ -428,7 +448,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         const hasLogo = line.customization?.hasOneinfoLogo !== false && line.customization?.brandingMode !== "without-logo";
         const unitPriceMinor = variantPriceForBranding(variant, hasLogo);
         if (unitPriceMinor !== line.unitPriceMinor) conflict("An item price changed. Review your updated cart and try again.");
-        return { ...line, unitPriceMinor, name: product.name, variantName: variant.name };
+        return { ...line, unitPriceMinor, name: product.name, variantName: variant.name, warranty: productWarranty(product) };
       });
       const subtotalMinor = items.reduce((total, item) => total + item.unitPriceMinor * item.quantity, 0);
       let discountMinor = 0;
