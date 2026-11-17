@@ -219,16 +219,18 @@ try {
         await evaluate(`document.querySelector('.store-order[data-order-id="${uiOrder.id}"]').click()`);
         await until(`!!document.querySelector('.store-order-dialog[open] #order-actions-${uiOrder.id}')`);
         assert.equal(await evaluate(`document.activeElement?.getAttribute('aria-label')`), 'Close order');
+        assert.deepEqual(await evaluate(`[...document.querySelectorAll('.order-stage-nav button')].map(b=>b.textContent)`), ['Received','Processing','Shipped','Delivered']);
+        assert.deepEqual(await evaluate(`[...document.querySelectorAll('.order-info-card h3')].map(h=>h.textContent)`), ['Delivery details','Payment summary']);
         const selectStage = async label => {
-          const selector = `.store-order-dialog[open] button.pipeline-card[aria-label="${label} actions"]`;
-          await evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
-          await until(`document.querySelector(${JSON.stringify(selector)})?.getAttribute('aria-pressed')==='true' && document.activeElement?.classList.contains('order-stage-actions')`);
+          const button = `[...document.querySelectorAll('.store-order-dialog[open] .order-stage-nav button')].find(b=>b.textContent===${JSON.stringify(label)})`;
+          await evaluate(`${button}.click()`);
+          await until(`${button}?.getAttribute('aria-pressed')==='true' && document.activeElement?.classList.contains('order-stage-actions')`);
         };
         if(width===1440){
           await selectStage('Shipped');
           assert.equal(await evaluate(`!!document.querySelector('.store-order-dialog[open] .order-stage-actions input[name=trackingId]')`),false);
           await click('Open packing checklist');
-        }else await selectStage('Cards packed');
+        }else await selectStage('Processing');
         await click(await evaluate(`document.querySelector('.order-packing code') ? 'Refresh secret codes' : 'Show secret codes'`));
         await until(`document.querySelector('.order-packing code')?.textContent.includes('-')`);
         await inspect('admin-order-secret-codes-'+width);
@@ -249,8 +251,6 @@ try {
           console.log('Order temporary profile/secret slips/manual package confirmation without QR assignment PASS');
           await selectStage('Received');
           assert.match(await evaluate(`document.querySelector('.store-order-dialog[open] .order-stage-actions').textContent`),/Order received/);
-          await selectStage('NFC & QC');
-          assert.equal(await evaluate(`document.querySelector('.store-order-dialog[open] .order-stage-actions a[href="#production"]').textContent`),'Open NFC & QR operations');
           await selectStage('Processing');await click('▶ Start processing');
           await until(`document.querySelector('.store-order-dialog[open] .order-stage-actions').textContent.includes('Processing started.')`);
           await selectStage('Shipped');
