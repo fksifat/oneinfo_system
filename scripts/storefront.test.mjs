@@ -5,7 +5,7 @@ import test from "node:test";
 import { initializeNfcDeck } from "../sites/storefront/nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "../sites/storefront/hero-3d.mjs";
 import {
-  addCartVariant, reconcileCartItems,
+  addCartVariant, reconcileCartItems, remainingVariantStock,
   PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS,
   isColorLight, defaultCustomization, renderSurfaceMotifSvg,
   renderBackMotifSvg, renderQrSvg,
@@ -181,6 +181,22 @@ test("customized card variations are stored, differentiated, and reconciled in c
   assert.equal(reconciled.length, 2);
   assert.deepEqual(reconciled[0].customization, custom1);
   assert.deepEqual(reconciled[1].customization, custom2);
+});
+
+test("tracked stock limits the whole colour across personalised cart lines", () => {
+  const product = { id: "p1", name: "Test card" };
+  const variant = { id: "v1", name: "Glacier", available: true, priceMinor: 50000, orderQuantityLimit: 3 };
+  const another = { ...variant, id: "v2", name: "Midnight" };
+  const cart = addCartVariant([], product, variant, 2, { name: "Buyer 1" });
+  assert.equal(remainingVariantStock(cart, product.id, variant), 1);
+  assert.equal(remainingVariantStock(cart, product.id, another), 3);
+  assert.throws(() => addCartVariant(cart, product, variant, 2, { name: "Buyer 2" }), /Only 1 more/);
+  const full = addCartVariant(cart, product, variant, 1, { name: "Buyer 2" });
+  assert.equal(remainingVariantStock(full, product.id, variant), 0);
+  assert.throws(() => addCartVariant(full, product, variant, 1), /already in your cart/);
+
+  const reduced = reconcileCartItems(full, [{ ...product, variants: [{ ...variant, orderQuantityLimit: 1 }] }]);
+  assert.deepEqual(reduced.map(item => item.quantity), [1]);
 });
 
 test("customizer presets and vector surface motifs cover all 10 premium designs", () => {

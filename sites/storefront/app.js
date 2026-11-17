@@ -1,5 +1,5 @@
 import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow } from "@oneinfo/contracts";
-import { addCartVariant, reconcileCartItems, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
+import { addCartVariant, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
@@ -143,6 +143,7 @@ import "./invoice.css";
         cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && (item.customization ? JSON.stringify(item.customization) : "") === customKey));
         save(storageKey, cart);
         renderCart();
+        if (productRoute(location.hash)) renderRoute();
         toast("Removed from cart");
       });
     });
@@ -188,6 +189,12 @@ import "./invoice.css";
   }
 
   function reconcileCart() {
+    // An active checkout already reserved these exact items on the server.
+    if (location.hash === "#order-draft" && reservation?.reserved &&
+        JSON.stringify(checkoutItems(cart)) === JSON.stringify(reservation.request.items)) {
+      renderCart();
+      return;
+    }
     const before = JSON.stringify(cart);
     cart = reconcileCartItems(cart, products);
     save(storageKey, cart);
@@ -472,6 +479,11 @@ import "./invoice.css";
     return "";
   }
 
+  function purchaseQuantityLimit(product, variant) {
+    const inSameLine = product.customizable ? 0 : cart.find(item => item.id === product.id && item.variantId === variant.id && !item.customization)?.quantity ?? 0;
+    return Math.min(99 - inSameLine, remainingVariantStock(cart, product.id, variant));
+  }
+
   function productMarkup(p, detail = false) {
       const v = p.variants.find(v => v.id === selectedVariants.get(p.id)) ?? p.variants.find(v => v.available) ?? p.variants[0];
       selectedVariants.set(p.id, v.id);
@@ -490,7 +502,9 @@ import "./invoice.css";
       const imageUrl = !detail ? "" : item?.type === "image" ? item.url : "";
       const drivePreview = detail && item?.type === "video" ? driveVideoPreview(item.url) : null;
       const hasMedia = imageUrl || (detail && item?.type === "video");
-      const quantity = quantities.get(p.id) ?? 1;
+      const quantityLimit = detail ? purchaseQuantityLimit(p, v) : 99;
+      const quantity = Math.min(quantityLimit, quantities.get(p.id) ?? 1);
+      const quantityHint = !quantityLimit ? "Quantity limit reached for this colour." : `Up to ${quantityLimit} available to add.`;
       const custom = productCustomizations.get(p.id) ?? defaultCustomization("01");
       const isCustomizable = detail && p.customizable;
       const hasLogo = !p.customizable || (custom.hasOneinfoLogo !== false && custom.brandingMode !== "without-logo");
@@ -1044,8 +1058,8 @@ import "./invoice.css";
             </div>
           </div>
         </section>` : ""}
-        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${!v.available || quantity === 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${!v.available || quantity === 99 ? 'disabled' : ''}>${icon("plus")}</button></div></div><div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !v.available || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : v.available ? 'Add to cart' : 'Out of stock'}</button></div>
-        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge at checkout. Pay by cash when your order arrives.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
+        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity <= 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity >= quantityLimit ? 'disabled' : ''}>${icon("plus")}</button></div></div>${v.available && (v.orderQuantityLimit !== undefined || !quantityLimit) ? `<p class="purchase-stock-limit" role="status">${quantityHint}</p>` : ""}<div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !quantityLimit || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : !v.available ? 'Out of stock' : quantityLimit ? 'Add to cart' : 'Limit reached'}</button></div>
+        <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge and payment options at checkout.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
   function reviewsMarkup(product) {
@@ -1285,11 +1299,11 @@ import "./invoice.css";
       products = data.items;
       catalogReady = true;
       catalogFailed = false;
-      if (changed) renderProducts();
       $("#catalog-status").textContent = products.length ? "" : "New cards are coming soon.";
       $("#catalog-retry").hidden = true;
       catalogReady = true;
       reconcileCart();
+      if (changed) renderProducts();
       $(".checkout-trigger").disabled = cart.length === 0;
       return true;
     } catch {
@@ -1823,7 +1837,12 @@ import "./invoice.css";
     const quantityButton = event.target.closest("[data-quantity-step]");
     if (quantityButton && !quantityButton.disabled) {
       const id = quantityButton.closest(".product").dataset.id;
-      quantities.set(id, Math.min(99, Math.max(1, (quantities.get(id) ?? 1) + Number(quantityButton.dataset.quantityStep))));
+      const product = products.find(item => item.id === id);
+      const variant = product?.variants.find(item => item.id === selectedVariants.get(id));
+      if (!variant) return;
+      const limit = purchaseQuantityLimit(product, variant);
+      const displayed = Math.min(limit, quantities.get(id) ?? 1);
+      quantities.set(id, Math.min(limit, Math.max(1, displayed + Number(quantityButton.dataset.quantityStep))));
       renderRoute(); return;
     }
     const mediaButton = event.target.closest("button[data-media-variant]");
@@ -2443,7 +2462,7 @@ import "./invoice.css";
     const productId = button.closest(".product").dataset.id;
     const variantId = selectedVariants.get(productId);
     const before = products.find(p => p.id === productId)?.variants.find(v => v.id === variantId);
-    const quantity = quantities.get(productId) ?? 1;
+    const quantity = Number($(".purchase-quantity", button.closest(".product"))?.textContent ?? 1);
     addingToCart = true;
     button.disabled = true;
     button.setAttribute("aria-busy", "true"); button.textContent = "Adding…";

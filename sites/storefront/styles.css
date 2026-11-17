@@ -488,6 +488,7 @@ button:disabled { opacity: .55; cursor: not-allowed; }
 .quantity-control button:hover:not(:disabled) { background:var(--purchase-ground); }
 .quantity-control button:disabled { color:#aeaeb2; cursor:default; }
 .quantity-control output { min-width:28px; text-align:center; font-size:.85rem; }
+.purchase-stock-limit { margin:5px 0 0; color:var(--purchase-muted); font-size:.8rem; }
 .purchase-total { margin:20px 0 14px; }
 .purchase-total > span { color:var(--purchase-muted); }
 .purchase-total strong { font-variant-numeric:tabular-nums; font-size:1.1rem; font-weight:600; letter-spacing:-.02em; }

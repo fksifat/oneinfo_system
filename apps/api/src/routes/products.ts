@@ -20,6 +20,8 @@ export const productRoutes: FastifyPluginAsync = async app => {
       .orderBy(asc(products.sortOrder), asc(products.name), asc(products.id));
     return { items: items.map(item => ({ ...item, variants: item.variants.map(({ stockQuantity, ...variant }) => ({
       ...variant, available: variant.available && stockQuantity !== 0,
+      // Checkout accepts at most 50 lines of 99 cards each.
+      ...(stockQuantity === undefined ? {} : { orderQuantityLimit: Math.min(stockQuantity, 50 * 99) }),
     })) })) };
   });
   app.get("/", async request => {

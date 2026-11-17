@@ -1,10 +1,20 @@
 import { variantPrice, variantPriceForBranding } from '@oneinfo/contracts';
 
+export function remainingVariantStock(cart, productId, variant) {
+  if (!variant.available) return 0;
+  if (variant.orderQuantityLimit === undefined) return Infinity;
+  const inCart = cart.reduce((count, item) => item.id === productId && item.variantId === variant.id ? count + item.quantity : count, 0);
+  return Math.max(0, variant.orderQuantityLimit - inCart);
+}
+
 export function addCartVariant(cart, product, variant, quantity, customization = null) {
   if (!variant.available)
     throw new RangeError('This card is currently out of stock.');
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99)
     throw new RangeError('Choose a quantity from 1 to 99.');
+  const remaining = remainingVariantStock(cart, product.id, variant);
+  if (quantity > remaining)
+    throw new RangeError(remaining ? `Only ${remaining} more available for this colour.` : 'All available stock for this colour is already in your cart.');
   const customKey = customization ? JSON.stringify(customization) : '';
   const existing = cart.find(item => item.id === product.id && item.variantId === variant.id && (item.customization ? JSON.stringify(item.customization) : '') === customKey);
   if ((existing?.quantity ?? 0) + quantity > 99) throw new RangeError('You can add up to 99 cards of each colour.');
@@ -24,6 +34,7 @@ export function addCartVariant(cart, product, variant, quantity, customization =
 
 export function reconcileCartItems(cart, products) {
   const merged = new Map();
+  const usedStock = new Map();
   for (const item of cart) {
     if (!item || !Number.isInteger(item.quantity) || item.quantity < 1) continue;
     const product = products.find(p => p.id === item.id || (!item.id && p.name === item.name));
@@ -32,8 +43,14 @@ export function reconcileCartItems(cart, products) {
     const variant = item.variantId ? product.variants.find(v => v.id === item.variantId) : product.variants[0];
     if (!variant?.available) continue;
     const customKey = item.customization ? JSON.stringify(item.customization) : '';
-    const key = `${product.id}:${variant.id}:${customKey}`;
-    const quantity = Math.min(99, (merged.get(key)?.quantity ?? 0) + item.quantity);
+    const variantKey = `${product.id}:${variant.id}`;
+    const key = `${variantKey}:${customKey}`;
+    const previousQuantity = merged.get(key)?.quantity ?? 0;
+    const alreadyUsed = usedStock.get(variantKey) ?? 0;
+    const added = Math.min(99 - previousQuantity, (variant.orderQuantityLimit ?? Infinity) - alreadyUsed, item.quantity);
+    if (added <= 0) continue;
+    const quantity = previousQuantity + added;
+    usedStock.set(variantKey, alreadyUsed + added);
     const hasLogo = item.customization ? (item.customization.hasOneinfoLogo !== false && item.customization.brandingMode !== "without-logo") : true;
     merged.set(key, {
       id: product.id,
