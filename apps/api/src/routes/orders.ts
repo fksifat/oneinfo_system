@@ -4,7 +4,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
-  bkashNumber, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
+  bkashNumber, rocketNumber, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
   ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
   type AdminOrderSearch, type OrderReceipt,
 } from "@oneinfo/contracts";
@@ -136,7 +136,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   app.get("/shipping", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
-    return { ...await readCheckoutSettings(), bkashNumber, confirmationEmailEnabled };
+    return { ...await readCheckoutSettings(), bkashNumber, rocketNumber, confirmationEmailEnabled };
   });
 
   app.put("/shipping", async request => {
@@ -171,7 +171,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const { id } = parseBody(z.object({ id: z.uuid() }), request.params);
     const { order, newlyVerified } = await db.transaction(async tx => {
       const [order] = await tx.select().from(storeOrders).where(eq(storeOrders.id, id)).for("update");
-      if (order?.cancelledAt || !order?.transactionId || order.paymentAmountMinor <= 0) conflict("This order has no bKash payment to verify.");
+      if (order?.cancelledAt || !order?.transactionId || order.paymentAmountMinor <= 0) conflict("This order has no payment to verify.");
       if (order.paymentVerifiedAt) return { order, newlyVerified: false };
       const [verified] = await tx.update(storeOrders).set({ paymentVerifiedAt: new Date() })
         .where(eq(storeOrders.id, id)).returning();
@@ -281,7 +281,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (input.status === "PROCESSING" ? existing.processingAt || existing.shippedAt : existing.shippedAt && existing.courierTrackingId === input.trackingId) {
         return { order: existing, shipped: false };
       }
-      if (input.status === "SHIPPED" && existing.paymentAmountMinor > 0 && !existing.paymentVerifiedAt) conflict("Verify the bKash payment before shipping.");
+      if (input.status === "SHIPPED" && existing.paymentAmountMinor > 0 && !existing.paymentVerifiedAt) conflict("Verify the payment before shipping.");
       if (input.status === "SHIPPED") await assertInvoicePacked(tx, existing);
       const now = new Date();
       const [updated] = await tx.update(storeOrders).set(input.status === "PROCESSING" ? { processingAt: now }
@@ -364,7 +364,7 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       const assignedCards = allocations.filter(item => item.orderId === row.id).map(({ orderId: _, ...card }) => card);
       return { ...receipt(row), reviewInviteSentAt: invites.find(invite => invite.orderId === row.id)?.sentAt?.toISOString() ?? null, customer: row.customer, profileId: row.profileId, assignedCards,
         qrAllocation: allocationSummary(row.items.reduce((sum, item) => sum + item.quantity, 0), assignedCards.length),
-        deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId,
+        deliveryAddress: row.deliveryAddress, items: row.items, transactionId: row.transactionId, paymentSenderNumber: row.paymentSenderNumber,
         codCollectedMinor: row.codCollectedMinor, codSettledMinor: row.codSettledMinor };
     }), hasMore: rows.length > 50, supportsSearch: true };
 
@@ -374,6 +374,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     reply.header("Cache-Control", "no-store");
     const reserving = route === "/reserve";
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
+    const senderNumber = input.payment?.senderNumber;
+    if (senderNumber && !input.payment?.transactionId) conflict("Enter your transaction ID with the payment number.");
+    if (!reserving && input.payment?.method === "ROCKET" && input.payment.amountMinor > 0 && !senderNumber) conflict("Enter the Rocket number used to pay.");
     const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
     const [replay] = await db.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.requestId, requestId)).limit(1);
     if (!replay && !await allowAuthAttempt(`checkout:${request.ip}`, 20, 15 * 60_000)) {
@@ -388,10 +391,10 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       if (previous?.awaitingPayment && !reserving) {
         const reservedInput = { ...input, payment: input.payment ? { method: input.payment.method, amountMinor: input.payment.amountMinor } : undefined };
         if (previous.requestHash !== createHash("sha256").update(JSON.stringify(reservedInput)).digest("hex")) conflict("Use the original reserved order and payment amount.");
-        if (!input.payment?.transactionId) conflict("Enter your bKash transaction ID.");
+        if (!input.payment?.transactionId) conflict("Enter your transaction ID.");
         const [duplicate] = await tx.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.transactionId, input.payment.transactionId));
-        if (duplicate) conflict("This bKash transaction ID is already linked to an order.");
-        const [completed] = await tx.update(storeOrders).set({ transactionId: input.payment.transactionId, requestHash, awaitingPayment: false,
+        if (duplicate) conflict("This transaction ID is already linked to an order.");
+        const [completed] = await tx.update(storeOrders).set({ transactionId: input.payment.transactionId, paymentSenderNumber: senderNumber, requestHash, awaitingPayment: false,
           invoiceNumber: await nextInvoiceNumber(tx) }).where(eq(storeOrders.id, previous.id)).returning();
         await createOrderProfiles(tx, completed!);
         await queueOrderEmail(tx, previous.id, "confirmation");
@@ -437,20 +440,20 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       }
       const paymentMethod = input.payment?.method ?? "COD";
       const paymentAmountMinor = paymentDueNow(subtotalMinor + shippingMinor - discountMinor, paymentMethod, codAdvanceTaka, { zone, codAdvanceInsideDhaka });
-      if ((input.payment?.amountMinor ?? 0) !== paymentAmountMinor) conflict("Payment amount changed. Review the updated amount before paying. If you already paid, contact Oneinfo with your bKash transaction ID.");
+      if ((input.payment?.amountMinor ?? 0) !== paymentAmountMinor) conflict("Payment amount changed. Review the updated amount before paying. If you already paid, contact Oneinfo with your transaction ID.");
       const transactionId = input.payment?.transactionId ?? null;
-      if (!reserving && paymentAmountMinor > 0 && !transactionId) conflict("Enter your bKash transaction ID.");
-      if (paymentAmountMinor === 0 && transactionId) conflict("No bKash payment is required for this order.");
+      if (!reserving && paymentAmountMinor > 0 && !transactionId) conflict("Enter your transaction ID.");
+      if (paymentAmountMinor === 0 && transactionId) conflict("No advance payment is required for this order.");
       const awaitingPayment = reserving && paymentAmountMinor > 0;
       const [order] = await tx.insert(storeOrders).values({
         activationMethod: "ORDER_SECRET", requestId, requestHash, customer: input.customer, deliveryAddress: input.deliveryAddress,
         stockReservations: catalog.flatMap(product => product.variants.filter(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`))
           .map(variant => ({ productId: product.id, variantId: variant.id, quantity: requestedQuantities.get(`${product.id}:${variant.id}`)! }))),
         items, shippingZone: zone, subtotalMinor, shippingMinor, couponCode: input.coupon?.code, discountMinor,
-        paymentMethod, paymentAmountMinor, transactionId, awaitingPayment,
+        paymentMethod, paymentAmountMinor, transactionId, paymentSenderNumber: senderNumber, awaitingPayment,
         invoiceNumber: awaitingPayment ? null : await nextInvoiceNumber(tx),
       }).onConflictDoNothing({ target: storeOrders.transactionId }).returning();
-      if (!order) conflict("This bKash transaction ID is already linked to an order.");
+      if (!order) conflict("This transaction ID is already linked to an order.");
       for (const product of catalog) {
         if (!product.variants.some(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`))) continue;
         const variants = product.variants.map(variant => variant.stockQuantity !== undefined && requestedQuantities.has(`${product.id}:${variant.id}`)

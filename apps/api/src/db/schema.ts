@@ -458,6 +458,7 @@ export const storeOrders = pgTable("store_orders", {
   paymentMethod: text("payment_method").$type<NonNullable<PlaceOrderInput["payment"]>["method"]>().notNull().default("COD"),
   paymentAmountMinor: bigint("payment_amount_minor", { mode: "number" }).notNull().default(0),
   transactionId: varchar("transaction_id", { length: 20 }),
+  paymentSenderNumber: varchar("payment_sender_number", { length: 12 }),
   paymentVerifiedAt: timestamp("payment_verified_at", { withTimezone: true }),
   processingAt: timestamp("processing_at", { withTimezone: true }),
   shippedAt: timestamp("shipped_at", { withTimezone: true }),

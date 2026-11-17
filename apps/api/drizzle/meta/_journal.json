@@ -176,6 +176,13 @@
       "when": 1794770000000,
       "tag": "0024_profile_theme_sapphire_titanium",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1794771000000,
+      "tag": "0025_order_payment_sender",
+      "breakpoints": true
     }
   ]
 }

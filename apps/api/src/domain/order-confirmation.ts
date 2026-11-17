@@ -1,4 +1,4 @@
-import type { StoreOrder } from "@oneinfo/contracts";
+import { paymentMethodLabels, type StoreOrder } from "@oneinfo/contracts";
 import { escapeEmailHtml as escapeHtml, renderOneinfoEmail, sendTransactionalEmail, transactionalEmailEnabled, usesBrevoSmtp } from "./transactional-email.js";
 import { invoicePath, trackingUrl } from "./order-tracking.js";
 
@@ -22,11 +22,12 @@ export async function sendOrderConfirmation(order: StoreOrder, created: boolean,
     [payment > 0 ? "Order total" : "Total due on delivery", money(order.totalMinor)],
   ];
   const verified = order.paymentStatus === "VERIFIED" || Boolean(order.paymentVerifiedAt);
+  const wallet = order.paymentMethod === "COD" ? "bKash" : paymentMethodLabels[order.paymentMethod];
   const paymentNotes = payment > 0 ? [
-    `${verified ? "Verified bKash payment" : "bKash payment pending verification"}: ${money(payment)}`,
+    `${verified ? `Verified ${wallet} payment` : `${wallet} payment pending verification`}: ${money(payment)}`,
     ...(order.totalMinor > payment ? [`${verified ? "Remaining on delivery" : "Remaining on delivery after verification"}: ${money(order.totalMinor - payment)}`] : []),
   ] : [];
-  const paymentMethod = order.paymentMethod === "BKASH" ? "bKash" : "Cash on delivery";
+  const paymentMethod = paymentMethodLabels[order.paymentMethod];
   const link = trackingUrl(order.id);
   const invoice = link && order.invoiceNumber ? new URL(invoicePath(order.id), link).href : undefined;
   const text = [
@@ -64,16 +65,17 @@ export async function sendShippingEmail(order: Pick<StoreOrder, "id" | "customer
     idempotencyKey: `oneinfo-order-shipped/${order.id}` });
 }
 
-export async function sendPaymentVerifiedEmail(order: Pick<StoreOrder, "id" | "customer" | "paymentAmountMinor" | "totalMinor">) {
+export async function sendPaymentVerifiedEmail(order: Pick<StoreOrder, "id" | "customer" | "paymentMethod" | "paymentAmountMinor" | "totalMinor">) {
   const paid = order.paymentAmountMinor ?? 0;
   const remaining = Math.max(0, order.totalMinor - paid);
-  const intro = "we’ve verified your bKash payment for your Oneinfo order.";
+  const wallet = order.paymentMethod === "COD" ? "bKash" : paymentMethodLabels[order.paymentMethod];
+  const intro = `we’ve verified your ${wallet} payment for your Oneinfo order.`;
   const details = [`Verified payment: ${money(paid)}`, `Order total: ${money(order.totalMinor)}`, remaining > 0
     ? `Remaining on delivery: ${money(remaining)}`
     : "Your order is paid in full."];
   return sendTransactionalEmail({
     to: order.customer.email,
-    subject: "Your Oneinfo bKash payment is verified",
+    subject: `Your Oneinfo ${wallet} payment is verified`,
     text: [`Hi ${order.customer.name}, ${intro}`, `Order ID: ${order.id}`, ...details].join("\n"),
     html: renderOneinfoEmail(order, "PAYMENT VERIFIED", "Payment verified.", intro,
       `<div style="padding:14px;background:#f7f1e1;color:#121316;border-radius:10px">${details.map(escapeHtml).join("<br>")}</div>`),
