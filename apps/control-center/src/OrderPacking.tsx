@@ -7,13 +7,13 @@ import invoiceStyles from "../../../sites/storefront/invoice.css?inline";
 
 export function OrderPacking({ order, token, initiallyOpen, onChange }: { order: StoreOrder; token: string; initiallyOpen: boolean; onChange: () => Promise<void> }) {
   return order.activationMethod === "ORDER_SECRET"
-    ? <SecretOrderPacking order={order} token={token} initiallyOpen={initiallyOpen} onChange={onChange} />
+    ? <SecretOrderPacking order={order} token={token} onChange={onChange} />
     : <LegacyOrderPacking order={order} token={token} initiallyOpen={initiallyOpen} onChange={onChange} />;
 }
 
 type SecretSlot = { id: string; profileId: string; lineIndex: number; unitIndex: number; cardId: string | null; redeemedAt: string | null; secretCode: string | null };
 
-function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameters<typeof OrderPacking>[0]) {
+function SecretOrderPacking({ order, token, onChange }: Omit<Parameters<typeof OrderPacking>[0], "initiallyOpen">) {
   const [codes, setCodes] = useState<SecretSlot[]>();
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,8 +63,8 @@ function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
       <button type="button">Print codes</button></html>`);
     tab.document.close(); tab.document.querySelector("button")?.addEventListener("click", () => tab.print());
   }
-  return <details className="operation-panel order-packing order-secret-packing" open={initiallyOpen || undefined}>
-    <summary>{order.packedAt ? "Activation codes" : "Pack cards & activation codes"}</summary>
+  return <section className="order-packing order-secret-packing">
+    {order.packedAt ? <h4>Activation codes</h4> : <h3>Pack cards &amp; activation codes</h3>}
     <div className="order-packing-actions">
       <button className="quiet" type="button" disabled={busy || !paid} onClick={() => void run(async () => {
         setCodes((await api<{ items: SecretSlot[] }>(`/api/v1/orders/admin/${order.id}/activation-codes`, token, { method: "POST" })).items);
@@ -83,7 +83,7 @@ function SecretOrderPacking({ order, token, initiallyOpen, onChange }: Parameter
       <button className="button-action button-action-primary" disabled={busy || !confirmed || !codes || codes.length !== quantity}>Confirm package</button>
     </form>}
     {error && <p role="alert" className="store-order-notice is-error">{error}</p>}
-  </details>;
+  </section>;
 }
 
 function LegacyOrderPacking({ order, token, initiallyOpen, onChange }: Parameters<typeof OrderPacking>[0]) {

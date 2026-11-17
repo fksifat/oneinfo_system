@@ -1479,6 +1479,31 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .orders-table .orders-table-reference { color: var(--text-muted); white-space: nowrap; }
 .orders-table .orders-table-total { text-align: end; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .orders-table td.orders-table-total { font-weight: 750; }
+.orders-table-card-types {
+  display: grid;
+  gap: 4px;
+  min-inline-size: 4.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.orders-table-card-types li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px 6px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.orders-table-custom-badge {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #f0eafa;
+  color: #56347a;
+  font-size: .68rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
 .orders-table-mobile-reference { display: none; }
 .orders-table .store-order {
   border: 0;
@@ -1495,13 +1520,18 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 .orders-table .store-order:focus-visible { outline-offset: 3px; }
 .order-payment-note { display: block; margin-top: 2px; color: #92400e; font-size: .72rem; font-weight: 650; }
 
-@container orders (max-width: 620px) {
+@container orders (max-width: 680px) {
   .orders-table .orders-table-reference { display: none; }
   .orders-table :is(th, td) { padding: 8px; }
+  .orders-table-card-types { min-inline-size: 4rem; font-size: .75rem; }
   .orders-table-mobile-reference {
     display: grid; gap: 2px; margin-top: 2px; color: var(--text-muted); font-size: .68rem; overflow-wrap: anywhere;
   }
-  .orders-table .store-order-status { white-space: normal; }
+  .orders-table .store-order-status { display: inline-block; white-space: normal; overflow-wrap: anywhere; }
+}
+
+@container orders (max-width: 360px) {
+  .orders-table :is(th, td) { padding-inline: 6px; }
 }
 
 .store-order-status {
@@ -1643,27 +1673,25 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 }
 
 .store-order-dialog-tools {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 82px), 1fr));
   gap: 8px;
-  flex-wrap: wrap;
-  margin: 8px 0;
 }
 
 .store-order-dialog-tools a,
 .store-order-dialog-tools button {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  text-align: center;
   min-height: 44px;
-  padding: 0 11px;
+  padding: 6px 8px;
   border-radius: 6px;
   font-size: 0.74rem;
   font-weight: 600;
   color: #475569;
   background: #ffffff;
   border: 1px solid rgba(18, 19, 22, 0.12);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
   text-decoration: none;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1964,26 +1992,46 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 }
 /* Order tools */
 .order-tools {
+  display: grid;
+  gap: var(--order-gap);
   border: 1px solid var(--border-light);
-  border-radius: 8px;
-  padding: 0 var(--order-inset);
+  border-radius: 10px;
+  padding: var(--order-inset);
   background: #fff;
 }
-.order-tools > summary,
-.order-extra-action > summary {
-  min-height: 44px;
-  padding: 12px 0;
-  align-content: center;
-  cursor: pointer;
-  font-size: .84rem;
-  font-weight: 700;
+.order-tools > h3,
+.order-secret-packing h3 {
+  margin: 0;
+  font-size: .95rem;
 }
-.order-extra-action { border-top: 1px solid var(--border-light); }
-.order-extra-action .order-inline-action-form { margin-bottom: 8px; }
-.order-tools[open] { padding-bottom: var(--order-inset); }
-.order-cod-settlement .order-inline-action-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.order-cod-settlement .button-action { grid-column: 1 / -1; justify-self: end; }
-.order-tools .order-email-history { margin-block: 8px; font-size: .78rem; overflow-wrap: anywhere; }
+.order-tools h4 {
+  margin: 0;
+  font-size: .84rem;
+  font-weight: 750;
+}
+.order-tool-block,
+.order-tools .order-secret-packing,
+.order-tools .order-email-history {
+  display: grid;
+  gap: 8px;
+  padding-top: var(--order-gap);
+  border-top: 1px solid var(--border-light);
+  min-width: 0;
+}
+.order-tool-block .order-inline-action-form {
+  padding: 0;
+  border: 0;
+}
+.order-cod-settlement .order-inline-action-form {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+}
+.order-tools .order-email-history {
+  justify-items: start;
+  font-size: .78rem;
+  overflow-wrap: anywhere;
+}
+.order-email-history > button { min-height: 44px; }
+.order-email-history > :is(p, ul) { margin: 0; }
 .order-cancel-fold {
   background: #fffafa;
   border: 1px solid rgba(239, 68, 68, 0.25);
@@ -2160,6 +2208,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   .order-info-cards { grid-template-columns: minmax(0, 1fr); }
   .order-info-card + .order-info-card { border-inline-start: 0; border-top: 1px solid var(--border-light); }
   .orders-filter-container { padding: 12px; }
+}
+
+@media (max-width: 480px) {
+  .order-cod-settlement .order-inline-action-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .order-cod-settlement .button-action { grid-column: 1 / -1; justify-content: center; }
 }
 
 @media (max-width: 360px) {
@@ -4465,11 +4518,18 @@ a.company-stat-cell:hover span, a.company-stat-cell:focus-visible span { text-de
 .order-packing { margin-inline: 0; border: 1px solid #dbe4e9; border-radius: 8px; }
 .order-packing > summary { min-height: 44px; padding: 12px 0; display: list-item; }
 .store-order-dialog .order-work-panels .operation-panel { margin: 0; }
-.store-order-dialog .order-secret-packing { padding: 0 var(--order-inset); }
-.store-order-dialog .order-secret-packing[open] { padding-bottom: var(--order-inset); }
+.order-secret-packing { display: grid; gap: 8px; padding: var(--order-inset); }
+.order-tools .order-secret-packing {
+  padding: var(--order-gap) 0 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  box-shadow: none;
+}
 .order-packing-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.order-packing-actions button { flex: 1 1 auto; }
 .order-secret-packing .quiet { min-height: 44px; }
-.order-secret-packing ul { margin: var(--order-gap) 0 8px; padding-inline-start: 20px; overflow-wrap: anywhere; }
+.order-secret-packing > .quiet { justify-self: start; }
+.order-secret-packing ul { margin: 0; padding-inline-start: 20px; overflow-wrap: anywhere; }
 .order-secret-packing form {
   display: grid;
   justify-items: start;
