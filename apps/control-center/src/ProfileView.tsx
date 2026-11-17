@@ -597,8 +597,24 @@ export function ProfileView({
     }
   }
 
-  const themeClass = `theme-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
+  const themeClass = `theme-${(profile.theme || "MIDNIGHT").toLowerCase().replace(/_/g, "-")}`;
   const themeUpper = (profile.theme || "MIDNIGHT").toUpperCase();
+  const wireColorMap: Record<string, string> = {
+    MINT: "#10b981",
+    IVORY: "#b48c48",
+    SAPPHIRE: "#38bdf8",
+    TITANIUM: "#cbd5e1",
+    ROSE_GOLD: "#fb7185",
+    BURGUNDY: "#f43f5e",
+    AMBER: "#f59e0b",
+    AMETHYST: "#c084fc",
+    FROST: "#0284c7",
+    ALPINE: "#a3e635",
+    TERRACOTTA: "#f97316",
+    OCEANIC: "#06b6d4",
+    LAVENDER: "#7c3aed",
+    CARBON: "#b9f56a",
+  };
   const wireColor =
     themeUpper === "MINT"
       ? "#10b981"
@@ -608,7 +624,24 @@ export function ProfileView({
       ? "#38bdf8"
       : themeUpper === "TITANIUM"
       ? "#cbd5e1"
-      : "#dfb877";
+      : wireColorMap[themeUpper] || "#dfb877";
+
+  const wireMidColorMap: Record<string, string> = {
+    MINT: "#059669",
+    IVORY: "#8c6a2e",
+    SAPPHIRE: "#1d4ed8",
+    TITANIUM: "#64748b",
+    ROSE_GOLD: "#e11d48",
+    BURGUNDY: "#9f1239",
+    AMBER: "#b45309",
+    AMETHYST: "#7e22ce",
+    FROST: "#0369a1",
+    ALPINE: "#4d7c0f",
+    TERRACOTTA: "#c2410c",
+    OCEANIC: "#0e7490",
+    LAVENDER: "#5b21b6",
+    CARBON: "#65a30d",
+  };
   const wireMidColor =
     themeUpper === "MINT"
       ? "#059669"
@@ -618,9 +651,9 @@ export function ProfileView({
       ? "#1d4ed8"
       : themeUpper === "TITANIUM"
       ? "#64748b"
-      : "#c99c4d";
-  const wireId = `coverWire-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
-  const shineId = `coverShine-${(profile.theme || "MIDNIGHT").toLowerCase()}`;
+      : wireMidColorMap[themeUpper] || "#c99c4d";
+  const wireId = `coverWire-${(profile.theme || "MIDNIGHT").toLowerCase().replace(/_/g, "-")}`;
+  const shineId = `coverShine-${(profile.theme || "MIDNIGHT").toLowerCase().replace(/_/g, "-")}`;
   const websiteLabel = profile.modeContent?.websiteLabel?.trim() || "Official Website";
   const websiteLink = { label: websiteLabel, url: profile.website };
   const socialLinks = [...links];

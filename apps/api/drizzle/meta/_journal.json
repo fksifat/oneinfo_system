@@ -183,6 +183,13 @@
       "when": 1794771000000,
       "tag": "0025_order_payment_sender",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794772000000,
+      "tag": "0026_profile_themes_expansion",
+      "breakpoints": true
     }
   ]
 }

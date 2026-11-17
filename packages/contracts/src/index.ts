@@ -138,7 +138,23 @@ export const PROFILE_BIO_MAX_LENGTH = 1500;
 export const PROFILE_ABOUT_MAX_SECTIONS = 12;
 export const PROFILE_ABOUT_HEADING_MAX_LENGTH = 80;
 
-export const profileThemes = ["MIDNIGHT", "IVORY", "MINT", "SAPPHIRE", "TITANIUM"] as const;
+export const profileThemes = [
+  "MIDNIGHT",
+  "IVORY",
+  "MINT",
+  "SAPPHIRE",
+  "TITANIUM",
+  "ROSE_GOLD",
+  "BURGUNDY",
+  "AMBER",
+  "AMETHYST",
+  "FROST",
+  "ALPINE",
+  "TERRACOTTA",
+  "OCEANIC",
+  "LAVENDER",
+  "CARBON",
+] as const;
 export type ProfileTheme = (typeof profileThemes)[number];
 
 export const CreateProfileSchema = z.object({

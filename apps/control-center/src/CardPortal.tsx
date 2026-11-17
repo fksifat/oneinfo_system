@@ -63,6 +63,56 @@ const PROFILE_THEMES = [
     name: "Titanium Noir",
     subtitle: "Sleek space graphite with brushed silver elegance",
   },
+  {
+    id: "ROSE_GOLD",
+    name: "Rose Gold Luxe",
+    subtitle: "Blush obsidian with radiant rose gold accents",
+  },
+  {
+    id: "BURGUNDY",
+    name: "Imperial Burgundy",
+    subtitle: "Deep velvety wine with champagne gold wireframe",
+  },
+  {
+    id: "AMBER",
+    name: "Warm Amber",
+    subtitle: "Dark roasted espresso with glowing amber and honey",
+  },
+  {
+    id: "AMETHYST",
+    name: "Royal Amethyst",
+    subtitle: "Midnight violet with luminous lilac highlights",
+  },
+  {
+    id: "FROST",
+    name: "Nordic Frost",
+    subtitle: "Crisp arctic pearl with sharp steel blue contrast",
+  },
+  {
+    id: "ALPINE",
+    name: "Alpine Forest",
+    subtitle: "Deep evergreen spruce with vibrant sage accents",
+  },
+  {
+    id: "TERRACOTTA",
+    name: "Sunset Terracotta",
+    subtitle: "Earthy spiced clay with warm sunset coral glow",
+  },
+  {
+    id: "OCEANIC",
+    name: "Oceanic Cyan",
+    subtitle: "Abyssal marine teal with electric cyan radiance",
+  },
+  {
+    id: "LAVENDER",
+    name: "Lavender Mist",
+    subtitle: "Delicate lavender pearl with deep plum contrast",
+  },
+  {
+    id: "CARBON",
+    name: "Carbon Matrix",
+    subtitle: "Pitch carbon black with electric volt performance glow",
+  },
 ] as const;
 
 function FormEmailIcon() {
@@ -1428,13 +1478,13 @@ export function CardPortal({
                         return (
                           <div
                             key={theme.id}
-                            className={`studio-theme-card theme-card-${theme.id.toLowerCase()} ${isSelected ? "is-selected" : ""}`}
+                            className={`studio-theme-card theme-card-${theme.id.toLowerCase().replace(/_/g, "-")} ${isSelected ? "is-selected" : ""}`}
                             onClick={() => update("theme", theme.id as Draft["theme"])}
                             role="button"
                             tabIndex={0}
                             onKeyDown={e => { if (e.key === "Enter" || e.key === " ") update("theme", theme.id as Draft["theme"]); }}
                           >
-                            <div className={`theme-card-preview-banner theme-banner-${theme.id.toLowerCase()}`}>
+                            <div className={`theme-card-preview-banner theme-banner-${theme.id.toLowerCase()} theme-banner-${theme.id.toLowerCase().replace(/_/g, "-")}`}>
                               <span className="theme-card-preview-chip">ONEINFO</span>
                             </div>
                             <div className="theme-card-info">
@@ -1460,11 +1510,9 @@ export function CardPortal({
                       aria-label="Theme"
                       onChange={event => update("theme", event.target.value as Draft["theme"])}
                     >
-                      <option value="MIDNIGHT">Midnight</option>
-                      <option value="IVORY">Ivory</option>
-                      <option value="MINT">Mint</option>
-                      <option value="SAPPHIRE">Royal Sapphire</option>
-                      <option value="TITANIUM">Titanium Noir</option>
+                      {PROFILE_THEMES.map(theme => (
+                        <option key={theme.id} value={theme.id}>{theme.name}</option>
+                      ))}
                     </select>
                   </fieldset>
 

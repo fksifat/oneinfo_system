@@ -57,7 +57,23 @@ export const jobStatus = pgEnum("job_status", [
 ]);
 export const attemptResult = pgEnum("attempt_result", ["SUCCEEDED", "FAILED"]);
 export const checkResult = pgEnum("check_result", ["PASSED", "FAILED"]);
-export const profileTheme = pgEnum("profile_theme", ["MIDNIGHT", "IVORY", "MINT", "SAPPHIRE", "TITANIUM"]);
+export const profileTheme = pgEnum("profile_theme", [
+  "MIDNIGHT",
+  "IVORY",
+  "MINT",
+  "SAPPHIRE",
+  "TITANIUM",
+  "ROSE_GOLD",
+  "BURGUNDY",
+  "AMBER",
+  "AMETHYST",
+  "FROST",
+  "ALPINE",
+  "TERRACOTTA",
+  "OCEANIC",
+  "LAVENDER",
+  "CARBON",
+]);
 
 export const operators = pgTable(
   "operators",
