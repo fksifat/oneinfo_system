@@ -405,11 +405,12 @@ try {
         assert.equal(response.statusCode,200,response.body);
         await evaluate(`window.dispatchEvent(new Event('focus'))`);
       };
-      await saveCodAdvance(false);
+      await until(`!document.querySelector('.order-prepare-payment').disabled`);
       await evaluate(`document.querySelector('[name=paymentMethod][value=COD]').click()`);
-      await until(`document.querySelector('.order-payment-details').hidden && document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').textContent==='Place order' && !document.querySelector('.order-submit').disabled`);
       await saveCodAdvance(true);
       await until(`document.querySelector('.order-cod-status').textContent.includes('100') && !document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').disabled && !document.querySelector('.order-prepare-payment').disabled`);
+      await saveCodAdvance(false);
+      await until(`document.querySelector('.order-payment-details').hidden && document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').textContent==='Place order' && !document.querySelector('.order-submit').disabled`);
       console.log('Inside Dhaka COD follows saved Admin advance switch on checkout focus PASS');
       await until(`!document.querySelector('[name=paymentMethod][value=ROCKET]').disabled`);
       await evaluate(`document.querySelector('[name=paymentMethod][value=ROCKET]').click()`);
