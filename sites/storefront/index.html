@@ -550,6 +550,7 @@
         </div>
         <div class="footer-bottom">
           <p class="copyright">© <span id="year"></span> Oneinfo. All rights reserved.</p>
+          <button id="marketing-settings" class="button" type="button" aria-controls="marketing-choice" hidden>Marketing settings</button>
           <div class="footer-credit">
             <span>Designed &amp; Developed by</span>
             <a href="https://arisestudio.co" target="_blank" rel="noopener noreferrer" class="arise-credit">
@@ -608,6 +609,14 @@
       </div>
     </div>
 
+    <aside id="marketing-choice" aria-labelledby="marketing-title" hidden>
+      <h2 id="marketing-title">Marketing measurement</h2>
+      <p>Allow Meta Pixel to measure ad results through page views, cart activity and completed orders. You can change this in Marketing settings.</p>
+      <div>
+        <button class="button" type="button" data-marketing="decline">Decline</button>
+        <button class="button button-primary" type="button" data-marketing="allow">Allow measurement</button>
+      </div>
+    </aside>
     <div class="toast" role="status" aria-live="polite"></div>
     <script type="module" src="./app.js"></script>
   </body>

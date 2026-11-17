@@ -1,0 +1,103 @@
+@font-face {
+  font-family: "Oneinfo Card";
+  src: url("./public/assets/fonts/inter-latin-variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+.card-design-viewport {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  aspect-ratio: 86 / 55;
+  min-width: 0;
+}
+.card-design-viewport .card-design-canvas {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 380px;
+  height: calc(380px * 55 / 86);
+  box-sizing: border-box;
+  overflow: hidden;
+  border-radius: 12px;
+  color: #f7eed8;
+  font: 16px/1.25 "Oneinfo Card", Arial, sans-serif;
+  font-synthesis: weight style;
+  text-align: start;
+  letter-spacing: normal;
+  transform: scale(var(--design-scale, 1));
+  transform-origin: top left;
+  isolation: isolate;
+}
+.card-design-canvas *, .card-design-canvas *::after { box-sizing: border-box; }
+.card-design-canvas .card-design-element {
+  position: absolute;
+  z-index: 3;
+  width: max-content;
+  max-width: none;
+  padding: 1px 2px;
+  line-height: 1.25;
+  white-space: nowrap;
+  transform: rotate(var(--rot, 0deg));
+}
+.card-design-canvas .card-design-element.pos-custom {
+  right: auto !important;
+  bottom: auto !important;
+  transform: translate(-50%, -50%) scale(var(--scale, 1)) rotate(var(--rot, 0deg)) !important;
+}
+.card-design-canvas .card-surface-motif { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.card-design-canvas .card-element-logo { display: inline-flex; align-items: center; top: 18px; left: 20px; transform: scale(var(--scale, 1)) rotate(var(--rot, 0deg)); transform-origin: top left; }
+.card-design-canvas .card-element-logo.pos-center,
+.card-design-canvas .card-element-logo.pos-header { left: 50%; top: 22px; transform: translateX(-50%) scale(var(--scale, 1)) rotate(var(--rot, 0deg)); transform-origin: top center; }
+.card-design-canvas .card-element-logo.pos-reverse { left: 22px; top: auto; bottom: 20px; transform-origin: bottom left; }
+.card-design-canvas .card-element-nfc { display: inline-flex; align-items: center; justify-content: center; right: 20px; top: 18px; transform: scale(var(--scale, 1)) rotate(var(--rot, 0deg)); transform-origin: top right; }
+.card-design-canvas .card-design-element.pos-custom { transform-origin: center; }
+.card-design-canvas .card-nfc-wave { display: flex; width: 22px; height: 22px; color: inherit; opacity: .9; }
+.card-design-canvas .card-nfc-wave svg { display: block; width: 100%; height: 100%; }
+.card-design-canvas .card-element-name { left: 22px; bottom: 48px; }
+.card-design-canvas .card-element-title { left: 22px; bottom: 20px; }
+.card-design-canvas .card-element-extra { left: 22px; bottom: 18px; }
+.card-design-canvas :is(.card-element-name, .card-element-title, .card-element-extra):is(.pos-center,.pos-header) {
+  left: 50%;
+  transform: translateX(-50%) rotate(var(--rot, 0deg));
+  text-align: center;
+}
+.card-design-canvas :is(.card-element-name, .card-element-title, .card-element-extra):is(.pos-right,.pos-diagonal) {
+  left: auto;
+  right: 22px;
+  text-align: right;
+}
+.card-design-canvas :is(.card-element-name, .card-element-title, .card-element-extra).pos-column { left: 58px; }
+.card-design-canvas :is(.card-custom-name,.card-custom-title,.card-custom-extra-line) { display: block; margin: 0; line-height: 1.25; }
+.card-design-canvas .card-custom-name { color: #f7eed8; letter-spacing: -.015em; line-height: 1.2; }
+.card-design-canvas :is(.card-custom-title,.card-custom-extra-line) { color: var(--card-accent); letter-spacing: .08em; text-transform: uppercase; }
+.card-design-canvas .font-sans { font-family: "Oneinfo Card", Arial, sans-serif !important; }
+.card-design-canvas .font-serif { font-family: Georgia, "Times New Roman", serif !important; }
+.card-design-canvas .font-mono { font-family: Menlo, Monaco, Consolas, monospace !important; }
+.card-design-canvas .font-sans :is(.card-custom-name,.card-custom-title,.card-custom-extra-line),
+.card-design-canvas .font-serif :is(.card-custom-name,.card-custom-title,.card-custom-extra-line),
+.card-design-canvas .font-mono :is(.card-custom-name,.card-custom-title,.card-custom-extra-line) { font-family: inherit !important; }
+.card-design-canvas .card-logo-placeholder { display: inline-flex; font: 800 14.08px/1.2 "Oneinfo Card", Arial, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.card-design-canvas .custom-user-logo { display: block; width: auto; height: auto; max-width: 110px; max-height: 32px; object-fit: contain; filter: none; }
+.card-design-canvas.is-light-surface .card-custom-name { color: #121316; }
+.card-design-canvas .card-side-column-bar { position: absolute; inset: 0 auto 0 0; width: 44px; border-right: 1px solid var(--card-accent); background: #ffffff0d; z-index: 1; }
+.card-design-canvas .card-header-banner { position: absolute; inset: 0 0 auto; height: 48px; border-bottom: 1px solid var(--card-accent); background: #00000047; z-index: 1; }
+.card-design-canvas.is-light-surface :is(.card-side-column-bar,.card-header-banner) { background: #0000000a; }
+.card-design-canvas .card-element-divider { display: flex; align-items: center; justify-content: center; padding: 6px 4px; color: var(--card-accent); z-index: 2; }
+.card-design-canvas .divider-horizontal { width: var(--divider-len,100px) !important; height: 14px; }
+.card-design-canvas .divider-horizontal::after { content: ""; display: block; width: 100%; border-top: 1.5px solid currentColor; }
+.card-design-canvas .divider-vertical { width: 14px !important; height: var(--divider-len,60px); padding: 4px 6px; }
+.card-design-canvas .divider-vertical::after { content: ""; display: block; height: 100%; border-left: 1.5px solid currentColor; }
+.card-design-canvas .is-dashed::after { border-style: dashed; }
+.card-design-canvas .card-back-center-qr { left: 50%; top: 50%; display: flex; flex-direction: column; align-items: center; gap: 0; transform: translate(-50%, -50%) scale(var(--scale,1)) rotate(var(--rot,0deg)); }
+.card-design-canvas .card-qr-wrap { display: inline-flex; padding: 0; background: #fff; border-radius: 10px; overflow: hidden; }
+.card-design-canvas .card-qr-svg { display: block; width: 74px; height: 74px; }
+.card-design-canvas .card-qr-wrap.framed { border: 1.5px solid var(--card-accent); }
+.card-design-canvas .card-qr-wrap.badge { border: 1.5px dashed var(--card-accent); }
+.card-design-canvas .card-back-subtitle { display: block; margin-top: 6px; max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; color: var(--card-accent); font-size: 10.88px; line-height: 1.25; font-weight: 500; letter-spacing: .05em; }
+.card-design-canvas .card-back-footer { position: absolute; bottom: 16px; left: 20px; right: 20px; display: flex; justify-content: space-between; align-items: center; z-index: 2; }
+.card-design-canvas .card-back-oneinfo-logo { display: block; width: 72px; height: auto; opacity: .95; }
+.card-design-canvas.is-light-surface .card-back-oneinfo-logo { filter: invert(1) brightness(.2); }
+.card-design-canvas .card-back-arise-svg { display: block; height: 11.2px; width: auto; color: #ffffffeb; }
+.card-design-canvas.is-light-surface .card-back-arise-svg { color: #121316e0; }
+.card-design-canvas:not([data-interactive-card]) { pointer-events: none; }

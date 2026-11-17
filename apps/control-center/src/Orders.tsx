@@ -1,8 +1,8 @@
 import { OrderPrint } from "./OrderPrint.js";
 import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { bkashNumber, paymentMethodLabels, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
-import { api, productMediaUrl } from "./api.js";
+import { bkashNumber, paymentMethodLabels, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type OrderDesignFile, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
+import { api, downloadOrderDesign, productMediaUrl } from "./api.js";
 import { downloadOrderEps } from "./eps-generator.js";
 import { AdminCardPreview } from "./AdminCardPreview.js";
 
@@ -329,7 +329,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
     finally { setDelivering(undefined); }
   }
 
-  const displayedItems = showCustomOnly ? items.filter(order => order.items.some(item => Boolean(item.customization))) : items;
+  const displayedItems = showCustomOnly ? items.filter(order => order.items.some(item => Boolean(item.customization || item.designFile))) : items;
   const filtered = Boolean(filters.query || filters.payment || filters.delivery);
 
   return <div className="store-orders">
@@ -396,10 +396,10 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 const cardTypes = new Map<string, { name: string; custom: boolean }>();
                 for (const item of order.items) {
                   const type = cardTypes.get(item.productId);
-                  if (type) type.custom ||= Boolean(item.customization);
+                  if (type) type.custom ||= Boolean(item.customization || item.designFile);
                   else cardTypes.set(item.productId, {
                     name: item.name.replace(/^Oneinfo\s+/i, ""),
-                    custom: Boolean(item.customization),
+                    custom: Boolean(item.customization || item.designFile),
                   });
                 }
                 const needsVerification = order.transactionId && order.paymentStatus === "PENDING_VERIFICATION" &&
@@ -553,11 +553,12 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 </div>
                 <ul className="order-items-list">
                   {order.items.map(item => (
-                    <li key={`${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : ""}`} className="order-item-row">
+                    <li key={`${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : item.designFile ? `${item.designFile.id}:${item.designFile.brandingMode}` : ""}`} className="order-item-row">
                       <span className="order-item-qty">{item.quantity}×</span>
                       <div className="order-item-details">
                         <strong className="order-item-title">{item.name}</strong>
                         <span className="order-item-variant">{item.variantName}</span>
+                        {item.designFile && <OrderDesignDownload file={item.designFile} token={token} />}
                         {item.customization && (
                           <details className="order-item-customization-details">
                             <summary>Customization</summary>
@@ -843,6 +844,23 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
 }
 
 type EmailAttempt = { id: string; kind: "confirmation" | "payment" | "shipping" | "delivery"; status: "accepted" | "failed" | "pending" | "sending"; createdAt: string };
+
+function OrderDesignDownload({ file, token }: { file: OrderDesignFile; token: string }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return <div className="order-design-download">
+    <span>{file.name}</span>
+    <small>{file.brandingMode === "with-logo" ? "With Oneinfo logo" : "Without Oneinfo logo"}</small>
+    <button className="quiet" type="button" disabled={busy} onClick={() => {
+      setBusy(true);
+      setError("");
+      void downloadOrderDesign(file, token)
+        .catch((error: unknown) => setError(error instanceof Error ? error.message : "Could not download the design."))
+        .finally(() => setBusy(false));
+    }}>{busy ? "Downloading…" : "Download design"}</button>
+    {error && <p role="alert" className="store-order-notice is-error">{error}</p>}
+  </div>;
+}
 
 function OrderEmailHistory({ orderId, token, onChange }: { orderId: string; token: string; onChange: () => void }) {
   const [items, setItems] = useState<EmailAttempt[]>();

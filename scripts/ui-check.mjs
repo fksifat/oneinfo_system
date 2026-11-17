@@ -66,9 +66,11 @@ try {
   // This is the guarded disposable database: replace migration seed IDs with the read-only catalog fixture.
   await connection.db.delete(schema.products);
   for(const {createdAt,updatedAt,...product} of catalog.items)await connection.db.insert(schema.products).values(product).onConflictDoUpdate({target:schema.products.id,set:product});
+  await connection.db.update(schema.products).set({customizable:true}).where(eq(schema.products.slug,'oneinfo-signature'));
   await connection.db.insert(schema.storeShippingSettings).values({id:'default',rates:{insideDhaka:6000,subDhaka:10000,outsideDhaka:12000},codAdvanceTaka:0}).onConflictDoUpdate({target:schema.storeShippingSettings.id,set:{codAdvanceTaka:0}});
   const nativeFetch=globalThis.fetch;
   const emails=[],crmForwards=[];
+  let customLogoUploaded = false;
   globalThis.fetch=(url,...args)=>{
     if(String(url)===config.CRM_LEAD_WEBHOOK_URL){crmForwards.push(JSON.parse(args[0].body));return Promise.resolve(Response.json({accepted:true}));}
     if(String(url)!=='https://api.resend.com/emails')return nativeFetch(url,...args);
@@ -126,6 +128,7 @@ try {
           ...(paused.request.postDataEntries?.some(entry=>entry.bytes) ? {payload:Buffer.concat(paused.request.postDataEntries.map(entry=>Buffer.from(entry.bytes??'','base64')))} : paused.request.postData ? { payload: paused.request.postData } : {}) }));
         if(contactShare&&contactFailure==='after-save'){result.statusCode=503;result.body=JSON.stringify({message:'Saved response interrupted; retry your contact.'});result.headers['content-length']=String(Buffer.byteLength(result.body));}
         if(expirePairingSoon&&url.pathname==='/api/v1/local-nfc/pairings'&&result.statusCode===201){result.body=JSON.stringify({...JSON.parse(result.body),expiresAt:new Date(Date.now()+1500).toISOString()});expirePairingSoon=false;}
+        if (url.pathname.includes('/product-media/custom-logo/') && result.statusCode === 201) customLogoUploaded = true;
         await command('Fetch.fulfillRequest', { requestId: paused.requestId, responseCode: result.statusCode,
           responseHeaders: Object.entries(result.headers).map(([name, value]) => ({ name, value: String(value) })), body: (/^(image\/|application\/(zip|octet-stream))/.test(String(result.headers['content-type'])) ? result.rawPayload : Buffer.from(result.body)).toString('base64') });
       } catch (error) {
@@ -398,6 +401,137 @@ try {
     await command('Page.navigate',{url:'http://127.0.0.1:5175/'});await until(`!!document.querySelector('.product-grid .product')`);await inspect('storefront-home-'+width);
     await evaluate(`document.querySelector('.product-link').click()`);await until(`!!document.querySelector('#product-title')`);await inspect('storefront-product-'+width);
     const added=await evaluate(`(()=>{const b=document.querySelector('#product-detail .add-to-cart');if(!b)return false;b.click();return true})()`);console.log('storefront-added',added);
+    if(width===1440){
+      await until(`JSON.parse(localStorage.getItem('oneinfo.storefront.cart')??'[]').length>0`);
+      await evaluate(`document.querySelector('.cart-trigger').click()`);
+      const originalSubtotal = await evaluate(`document.querySelector('.cart-total').textContent`);
+      await evaluate(`document.querySelector('.cart-items [data-cart-quantity-step="1"]').click()`);
+      await until(`document.querySelector('.cart-items output')?.textContent==='2' && !document.querySelector('.cart-items [data-cart-quantity-step="-1"]').disabled`);
+      assert.notEqual(await evaluate(`document.querySelector('.cart-total').textContent`),originalSubtotal);
+      await evaluate(`document.querySelector('.cart-items [data-cart-quantity-step="-1"]').click()`);
+      await until(`document.querySelector('.cart-items output')?.textContent==='1' && document.querySelector('.cart-items [data-cart-quantity-step="-1"]').disabled`);
+      assert.equal(await evaluate(`document.querySelector('.cart-total').textContent`),originalSubtotal);
+      await evaluate(`document.querySelector('.cart-close').click()`);
+      await evaluate(`location.hash='product/oneinfo-signature'`);
+      await until(`!!document.querySelector('[data-design-file]') && !!document.querySelector('[data-custom-input="name"]')`);
+      await evaluate(`new Promise(resolve=>{
+        const canvas=document.createElement('canvas');canvas.width=200;canvas.height=60;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#d8b26e';ctx.fillRect(0,0,200,60);
+        canvas.toBlob(blob=>{
+          const transfer=new DataTransfer();transfer.items.add(new File([blob],'logo.png',{type:'image/png'}));
+          const input=document.querySelector('[data-custom-file="logo"]');input.files=transfer.files;
+          input.dispatchEvent(new Event('change',{bubbles:true}));resolve(true);
+        });
+      })`);
+      for(let i=0;i<100&&!customLogoUploaded;i++) await delay(100);
+      assert.equal(customLogoUploaded,true);
+      assert.equal(await evaluate(`document.querySelector('.signature-design-upload .signature-design-support')?.href.split('?')[0]`), 'https://wa.me/8801315774162');
+      await set('[data-custom-input="name"]','Preview Roundtrip');
+      await set('[data-custom-input="title"]','Design Lead');
+      await evaluate(`document.querySelector('[data-custom-input="name"]').focus()`);
+      await set('[data-custom-element-size-input="name"]','19');
+      await set('[data-custom-font-select="name"]','serif');
+      await set('[data-custom-rot-input="name"]','15');
+      await evaluate(`document.querySelector('[data-custom-action="add-extra-line"]').click();document.querySelector('[data-custom-action="add-extra-line"]').click()`);
+      await set('[data-custom-extra-line="1"]','Position preserved');
+      await evaluate(`document.querySelector('[data-custom-set="layout"][data-value="column"]').click()`);
+      await evaluate(`document.querySelector('[data-custom-action="add-divider-line"]').click()`);
+      await set('[data-custom-rot-input="divider-0"]','30');
+      await set('[data-custom-input="backSubtitle"]','preview.example');
+      await evaluate(`document.querySelector('[data-custom-set="backQrStyle"][data-value="badge"]').click()`);
+      await evaluate(`document.querySelector('[data-interactive-card] [data-drag-element="back-qr"]').dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:100,clientY:100}))`);
+      await evaluate(`document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}))`);
+      await set('[data-custom-element-size-input="back-qr"]','120');
+      await set('[data-custom-rot-input="back-qr"]','-15');
+      for (const [key, x, y] of [['name', 42, 60], ['extra-1', 56, 86], ['back-qr', 62, 40]]) {
+        await evaluate(`(() => {
+          const item=document.querySelector('[data-interactive-card] [data-drag-element="${key}"]');
+          const rect=item.closest('[data-interactive-card]').getBoundingClientRect();
+          item.dispatchEvent(new MouseEvent('mousedown',{bubbles:true,clientX:rect.x,clientY:rect.y}));
+          document.dispatchEvent(new MouseEvent('mousemove',{bubbles:true,clientX:rect.x+rect.width*${x}/100,clientY:rect.y+rect.height*${y}/100}));
+          document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+        })()`);
+      }
+      const fingerprintSource = `(root) => [...document.querySelectorAll(root+' .card-design-canvas')].map(canvas=>{
+        const rect=canvas.getBoundingClientRect();
+        const round=v=>Math.round(v*1000)/1000;
+        return {face:canvas.dataset.cardFace,background:getComputedStyle(canvas).backgroundColor,
+          elements:[...canvas.querySelectorAll('.card-design-element')].map(element=>{
+            const r=element.getBoundingClientRect();const text=element.querySelector('.card-custom-name,.card-custom-title,.card-custom-extra-line,.card-back-subtitle');
+            const style=getComputedStyle(text??element);
+            return {key:element.dataset.dragElement??element.dataset.designElement,x:round((r.x-rect.x)/rect.width),y:round((r.y-rect.y)/rect.height),width:round(r.width/rect.width),height:round(r.height/rect.height),
+              font:style.fontFamily,size:style.fontSize,weight:style.fontWeight,italic:style.fontStyle,text:text?.textContent??''};
+          })};
+      })`;
+      await evaluate(`document.fonts.ready`);
+      const expectedDesign=await evaluate(`(${fingerprintSource})('#product-detail')`);
+      await inspect('signature-original-editor');
+      await click('Add to cart');
+      await until(`JSON.parse(localStorage.getItem('oneinfo.storefront.cart')??'[]').some(item=>item.customization?.name==='Preview Roundtrip')`);
+      await evaluate(`document.querySelector('.cart-trigger').click()`);
+      await delay(300);
+      assert.deepEqual(await evaluate(`(${fingerprintSource})('.cart-items')`),expectedDesign);
+      const customCartLine = '.cart-items .has-custom-design';
+      const customProduct = catalog.items.find(item=>item.slug==='oneinfo-signature');
+      const selectedCustomVariant = await evaluate(`document.querySelector('${customCartLine}').dataset.variantId`);
+      await connection.db.update(schema.products).set({variants:customProduct.variants.map(variant=>
+        variant.id===selectedCustomVariant?{...variant,stockQuantity:2}:variant)}).where(eq(schema.products.id,customProduct.id));
+      await evaluate(`document.querySelector('${customCartLine} [data-cart-quantity-step="1"]').click()`);
+      await until(`document.querySelector('${customCartLine} output')?.textContent==='2' && document.querySelector('${customCartLine} [data-cart-quantity-step="1"]').disabled`);
+      assert.equal(await evaluate(`JSON.parse(localStorage.getItem('oneinfo.storefront.cart')).find(item=>item.customization?.name==='Preview Roundtrip').quantity`),2);
+      assert.equal(await evaluate(`document.querySelector('.cart-items .cart-item:not(.has-custom-design) output').textContent`),'1');
+      await delay(150);
+      assert.deepEqual(await evaluate(`(${fingerprintSource})('.cart-items')`),expectedDesign);
+      await inspect('cart-quantity-stock-limit');
+      for (const quantityWidth of [320, 390]) {
+        await command('Emulation.setDeviceMetricsOverride',{width:quantityWidth,height:900,deviceScaleFactor:1,mobile:true});
+        await inspect('cart-quantity-'+quantityWidth);
+        assert.equal(await evaluate(`[...document.querySelectorAll('.cart-quantity-control button')].every(button=>button.getBoundingClientRect().height>=44)`),true);
+      }
+      await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+      await evaluate(`document.querySelector('${customCartLine} [data-cart-quantity-step="-1"]').click()`);
+      await until(`document.querySelector('${customCartLine} output')?.textContent==='1' && document.querySelector('${customCartLine} [data-cart-quantity-step="-1"]').disabled`);
+      await connection.db.update(schema.products).set({variants:customProduct.variants}).where(eq(schema.products.id,customProduct.id));
+      assert.equal(await evaluate(`document.querySelector('.cart-count').textContent`),'2');
+      console.log('Cart quantity +/- preserves each design, saves quantity, enforces stock and stops at one PASS');
+      await inspect('signature-original-cart');
+      await evaluate(`document.querySelector('.cart-close').click()`);
+      await reload();
+      await until(`!!document.querySelector('[data-design-file]')`);
+      await evaluate(`document.querySelector('.cart-trigger').click()`);
+      await delay(200);
+      assert.deepEqual(await evaluate(`(${fingerprintSource})('.cart-items')`),expectedDesign);
+      await evaluate(`document.querySelector('.cart-close').click()`);
+      globalThis.expectedCardFingerprint = expectedDesign;
+      globalThis.cardFingerprintSource = fingerprintSource;
+      const uploadArtwork = name => evaluate(`new Promise(resolve=>{
+        const canvas=document.createElement('canvas');canvas.width=430;canvas.height=275;
+        const context=canvas.getContext('2d');context.fillStyle='#12342c';context.fillRect(0,0,430,275);
+        context.fillStyle='#fff';context.font='24px sans-serif';context.fillText('Sample card artwork',24,230);
+        canvas.toBlob(blob=>{
+          const file=new File([blob],${JSON.stringify(name)},{type:'image/png'});
+          const transfer=new DataTransfer();transfer.items.add(file);
+          const input=document.querySelector('[data-design-file]');input.files=transfer.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+          resolve(true);
+        });
+      })`);
+      await uploadArtwork('wrong.pdf');
+      await until(`document.querySelector('.signature-design-upload [role=alert]')?.textContent.includes('does not match')`);
+      await uploadArtwork('UI Artwork.png');
+      await until(`document.querySelector('.artwork-preview img')?.naturalWidth===430 && !document.querySelector('.studio-tabs-nav')`);
+      await inspect('signature-upload-desktop');
+      await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+      await inspect('signature-upload-mobile');
+      assert.equal(await evaluate(`document.querySelector('.signature-design-support')?.getBoundingClientRect().height >= 44`), true);
+      await command('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+      await evaluate(`document.querySelector('[data-remove-design]').click()`);
+      await until(`!!document.querySelector('.studio-tabs-nav') && !!document.querySelector('[data-custom-input="name"]')`);
+      await uploadArtwork('UI Artwork.png');
+      await until(`!!document.querySelector('.artwork-preview img') && !document.querySelector('.add-to-cart').disabled`);
+      await evaluate(`document.querySelector('[data-custom-branding="without-logo"]').click()`);
+      await click('Add to cart');
+      await until(`JSON.parse(localStorage.getItem('oneinfo.storefront.cart')??'[]').some(item=>item.designFile?.name==='UI Artwork.png'&&!item.customization)`);
+    }
     await evaluate(`document.querySelector('.cart-trigger').click()`);await inspect('storefront-cart-'+width);
     await evaluate(`document.querySelector('.cart-close').click();location.hash='order-draft'`);await delay(250);await inspect('storefront-checkout-'+width);
     if(width===1440){
@@ -433,9 +567,54 @@ try {
       assert.equal(finalized.paymentMethod,'ROCKET');
       assert.equal(finalized.transactionId,'UICHECK123456');
       assert.equal(finalized.paymentSenderNumber,'01900000001');
+      const customLine=finalized.items.find(item=>item.customization?.name==='Preview Roundtrip');
+      assert.deepEqual(customLine.customization.extraLines,['','Position preserved']);
+      assert.equal(customLine.customization.elementPositions.name.size,19);
+      assert.equal(customLine.customization.elementPositions.name.rotate,15);
+      assert.equal(customLine.customization.elementPositions.name.x,42);
+      assert.equal(customLine.customization.elementPositions['extra-1'].x,56);
+      assert.equal(customLine.customization.elementPositions['back-qr'].x,62);
+      assert.equal(customLine.customization.elementPositions['back-qr'].size,120);
+      assert.ok(customLine.customization.logoUrl.startsWith('/api/v1/product-media/'));
+      const uploadedLine = finalized.items.find(item=>item.designFile);
+      assert.equal(uploadedLine?.designFile.name,'UI Artwork.png');
+      assert.equal(uploadedLine?.designFile.brandingMode,'without-logo');
+      assert.equal(uploadedLine?.customization,undefined);
+      const designPath = '/api/v1/product-media/design/'+uploadedLine.designFile.id;
+      assert.ok((await app.inject({url:designPath})).statusCode>=400);
+      const designDownload = await app.inject({url:designPath,headers});
+      assert.equal(designDownload.statusCode,200,designDownload.body);
+      assert.equal(designDownload.rawPayload.subarray(0,8).toString('hex'),'89504e470d0a1a0a');
+      assert.match(designDownload.headers['content-disposition'],/^attachment/);
       const visibleOrders=await api('/api/v1/orders/admin',undefined,headers);
       assert.equal(visibleOrders.items.find(order=>order.id===finalized.id)?.paymentSenderNumber,'01900000001');
       assert.equal((await api(`/api/v1/orders/admin/${finalized.id}/verify-payment`,{},headers)).paymentStatus,'VERIFIED');
+      await command('Page.navigate',{url:`http://127.0.0.1:5174/?order=${finalized.id}#orders`});
+      await until(`document.querySelector('.order-design-download')?.textContent.includes('UI Artwork.png')`);
+      assert.equal(await evaluate(`document.querySelector('.orders-table-custom-badge')?.textContent`),'Custom');
+      await evaluate(`document.querySelector('.order-item-customization-details > summary').click()`);
+      await until(`!!document.querySelector('.admin-card-design .card-design-canvas')`);
+      await evaluate(`document.fonts.ready`);
+      await delay(250);
+      assert.deepEqual(await evaluate(`(${globalThis.cardFingerprintSource})('.admin-card-design')`),globalThis.expectedCardFingerprint);
+      for (const face of ['Front', 'Back', 'Both sides']) {
+        await evaluate(`[...document.querySelectorAll('.admin-card-design button')].find(button=>button.textContent.trim()===${JSON.stringify(face)}).click()`);
+        await delay(150);
+        const expected = globalThis.expectedCardFingerprint.filter(item=>face==='Both sides'||item.face===face.toLowerCase());
+        assert.deepEqual(await evaluate(`(${globalThis.cardFingerprintSource})('.admin-card-design')`),expected);
+      }
+      await evaluate(`[...document.querySelectorAll('.admin-card-design button')].find(button=>button.textContent.trim()==='Zoom').click()`);
+      await delay(150);
+      assert.deepEqual(await evaluate(`(${globalThis.cardFingerprintSource})('.admin-card-design')`),globalThis.expectedCardFingerprint);
+      await inspect('signature-original-admin');
+      for(const checkWidth of [320,390,768]){
+        await command('Emulation.setDeviceMetricsOverride',{width:checkWidth,height:900,deviceScaleFactor:1,mobile:checkWidth<600});
+        await delay(200);
+        assert.deepEqual(await evaluate(`(${globalThis.cardFingerprintSource})('.admin-card-design')`),globalThis.expectedCardFingerprint);
+        await inspect('signature-original-admin-'+checkWidth);
+      }
+      console.log('Editor, cart, restored cart, order and Admin share identical front/back geometry and typography PASS');
+      console.log('Signature upload validates artwork, bypasses manual fields and persists the private file through checkout to Orders PASS');
     }
   }
   await command('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});

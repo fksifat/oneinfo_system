@@ -1,6 +1,7 @@
 import { lockPrintedStock } from "../domain/printed-stock.js";
 import { orderProfileClaimable } from "../domain/order-activation.js";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID, createHash } from "node:crypto";
@@ -14,6 +15,8 @@ import { db } from "../db/client.js";
 import { cardActivationSecrets, cards, storeOrders, companyEmployees } from "../db/schema.js";
 import { and, eq, gt } from "drizzle-orm";
 import { invoiceActivationTarget } from "../domain/order-invoice.js";
+import { OrderDesignFileIdSchema, orderDesignExtensions, orderDesignMaxBytes } from "@oneinfo/contracts";
+import { orderDesignDirectory, orderDesignExists, validOrderDesign } from "../domain/order-design.js";
 
 const directory = resolve(process.env.PRODUCT_MEDIA_DIR || resolve(dirname(fileURLToPath(import.meta.url)), "../../../../.product-media"));
 const formats = {
@@ -35,6 +38,30 @@ const maxDriveRequests = 8;
 
 export const productMediaRoutes: FastifyPluginAsync = async app => {
   app.addContentTypeParser("application/octet-stream", { parseAs: "buffer", bodyLimit: maxMediaBytes }, (_request, body, done) => done(null, body));
+  app.post<{ Params: { extension: string } }>("/design/:extension", { bodyLimit: orderDesignMaxBytes }, async (request, reply) => {
+    const extension = z.enum(orderDesignExtensions).safeParse(request.params.extension);
+    if (!extension.success) return reply.code(415).send({ message: "Choose a PNG, JPG, PDF, EPS or AI design file." });
+    if (!Buffer.isBuffer(request.body) || !validOrderDesign(extension.data, request.body)) {
+      return reply.code(415).send({ message: "The file content does not match its format." });
+    }
+    if (!await allowAuthAttempt(`order-design:${request.ip}`, 20, 60 * 60_000)) {
+      return reply.code(429).header("Retry-After", "3600").send({ message: "Design upload limit reached. Please try again in an hour." });
+    }
+    const id = `${randomUUID()}.${extension.data}`;
+    await mkdir(orderDesignDirectory, { recursive: true });
+    await writeFile(resolve(orderDesignDirectory, id), request.body, { flag: "wx" });
+    return reply.code(201).send({ id });
+  });
+  app.get<{ Params: { id: string } }>("/design/:id", async (request, reply) => {
+    await requireOperator(request, ["SUPER_ADMIN"]);
+    const id = OrderDesignFileIdSchema.safeParse(request.params.id);
+    if (!id.success || !await orderDesignExists(id.data)) return reply.code(404).send({ message: "Design file not found." });
+    return reply.type("application/octet-stream")
+      .header("Content-Disposition", `attachment; filename="${id.data}"`)
+      .header("Cache-Control", "private, no-store")
+      .header("X-Content-Type-Options", "nosniff")
+      .send(createReadStream(resolve(orderDesignDirectory, id.data)));
+  });
   let activeDriveRequests = 0;
   app.get<{ Params: { fileId: string } }>("/drive/:fileId", async (request, reply) => {
     const id = driveId.safeParse(request.params.fileId);

@@ -7,7 +7,16 @@ export function remainingVariantStock(cart, productId, variant) {
   return Math.max(0, variant.orderQuantityLimit - inCart);
 }
 
-export function addCartVariant(cart, product, variant, quantity, customization = null) {
+export function cartDesignKey({ designFile, customization }) {
+  return designFile ? `${designFile.id}:${designFile.brandingMode}` : customization ? JSON.stringify(customization) : "";
+}
+
+function cartHasLogo({ designFile, customization }) {
+  return designFile ? designFile.brandingMode === "with-logo"
+    : customization?.hasOneinfoLogo !== false && customization?.brandingMode !== "without-logo";
+}
+
+export function addCartVariant(cart, product, variant, quantity, customization = null, designFile = null) {
   if (!variant.available)
     throw new RangeError('This card is currently out of stock.');
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 99)
@@ -15,10 +24,10 @@ export function addCartVariant(cart, product, variant, quantity, customization =
   const remaining = remainingVariantStock(cart, product.id, variant);
   if (quantity > remaining)
     throw new RangeError(remaining ? `Only ${remaining} more available for this colour.` : 'All available stock for this colour is already in your cart.');
-  const customKey = customization ? JSON.stringify(customization) : '';
-  const existing = cart.find(item => item.id === product.id && item.variantId === variant.id && (item.customization ? JSON.stringify(item.customization) : '') === customKey);
+  const customKey = cartDesignKey({ customization, designFile });
+  const existing = cart.find(item => item.id === product.id && item.variantId === variant.id && cartDesignKey(item) === customKey);
   if ((existing?.quantity ?? 0) + quantity > 99) throw new RangeError('You can add up to 99 cards of each colour.');
-  const hasLogo = customization ? (customization.hasOneinfoLogo !== false && customization.brandingMode !== "without-logo") : true;
+  const hasLogo = cartHasLogo({ customization, designFile });
   const item = {
     id: product.id,
     variantId: variant.id,
@@ -27,7 +36,7 @@ export function addCartVariant(cart, product, variant, quantity, customization =
     colorHex: variant.colorHex,
     priceMinor: variantPriceForBranding(variant, hasLogo),
     quantity: (existing?.quantity ?? 0) + quantity,
-    ...(customization ? { customization } : {})
+    ...(designFile ? { designFile } : customization ? { customization } : {})
   };
   return existing ? cart.map(previous => previous === existing ? item : previous) : [...cart, item];
 }
@@ -42,7 +51,7 @@ export function reconcileCartItems(cart, products) {
     // Legacy carts predate colour selection; new carts never switch a missing colour.
     const variant = item.variantId ? product.variants.find(v => v.id === item.variantId) : product.variants[0];
     if (!variant?.available) continue;
-    const customKey = item.customization ? JSON.stringify(item.customization) : '';
+    const customKey = cartDesignKey(item);
     const variantKey = `${product.id}:${variant.id}`;
     const key = `${variantKey}:${customKey}`;
     const previousQuantity = merged.get(key)?.quantity ?? 0;
@@ -51,7 +60,7 @@ export function reconcileCartItems(cart, products) {
     if (added <= 0) continue;
     const quantity = previousQuantity + added;
     usedStock.set(variantKey, alreadyUsed + added);
-    const hasLogo = item.customization ? (item.customization.hasOneinfoLogo !== false && item.customization.brandingMode !== "without-logo") : true;
+    const hasLogo = cartHasLogo(item);
     merged.set(key, {
       id: product.id,
       variantId: variant.id,
@@ -60,7 +69,7 @@ export function reconcileCartItems(cart, products) {
       colorHex: variant.colorHex,
       priceMinor: variantPriceForBranding(variant, hasLogo),
       quantity,
-      ...(item.customization ? { customization: item.customization } : {})
+      ...(item.designFile ? { designFile: item.designFile } : item.customization ? { customization: item.customization } : {})
     });
   }
   return [...merged.values()];

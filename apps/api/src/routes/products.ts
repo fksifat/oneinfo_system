@@ -3,8 +3,10 @@ import { ProductInputSchema, UpdateProductSchema, type ProductInput } from "@one
 import { z } from "zod";
 import { and, asc, eq } from "drizzle-orm";
 import { requireOperator } from "../auth.js";
+import { config } from "../config.js";
 import { db } from "../db/client.js";
 import { products, auditLogs } from "../db/schema.js";
+import { metaCatalogCsv } from "../domain/meta-catalog.js";
 import { parseBody, sendCreated } from "../http.js";
 
 // Keep legacy columns populated while variant pricing becomes the source of truth.
@@ -13,16 +15,26 @@ function productValues(input: ProductInput) {
   return { ...input, priceMinor: first.priceMinor, finish: first.finish, appearance: first.appearance, imageUrl: first.imageUrl };
 }
 
+function publishedProducts() {
+  return db.select().from(products).where(eq(products.status, "PUBLISHED"))
+    .orderBy(asc(products.sortOrder), asc(products.name), asc(products.id));
+}
+
 export const productRoutes: FastifyPluginAsync = async app => {
   app.get("/public", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
-    const items = await db.select().from(products).where(eq(products.status, "PUBLISHED"))
-      .orderBy(asc(products.sortOrder), asc(products.name), asc(products.id));
+    const items = await publishedProducts();
     return { items: items.map(item => ({ ...item, variants: item.variants.map(({ stockQuantity, ...variant }) => ({
       ...variant, available: variant.available && stockQuantity !== 0,
       // Checkout accepts at most 50 lines of 99 cards each.
       ...(stockQuantity === undefined ? {} : { orderQuantityLimit: Math.min(stockQuantity, 50 * 99) }),
     })) })) };
+  });
+  app.get("/public/meta-catalog.csv", async (_request, reply) => {
+    if (!config.STOREFRONT_URL) return reply.code(503).send({ message: "Configure the public storefront URL to publish the catalog feed." });
+    const items = await publishedProducts();
+    return reply.type("text/csv; charset=utf-8").header("Cache-Control", "public, max-age=300")
+      .send(metaCatalogCsv(items, config.STOREFRONT_URL));
   });
   app.get("/", async request => {
     await requireOperator(request, ["SUPER_ADMIN", "AUDITOR"]);

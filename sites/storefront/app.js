@@ -1,10 +1,13 @@
-import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow } from "@oneinfo/contracts";
-import { addCartVariant, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg, renderBackMotifSvg, renderQrSvg, renderAriseLogoSvg } from "./catalog.js";
+import { renderCardDesign, observeCardDesigns, getElementStyle } from "./card-design.js";
+import "./card-design.css";
+import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow, orderDesignExtensions, orderDesignMaxBytes, orderDesignProductSlug } from "@oneinfo/contracts";
+import { addCartVariant, cartDesignKey, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
 import logoUrl from "./assets/oneinfo-logo.svg";
 import ariseLogoUrl from "./assets/arise-studio-logo.png";
 import { invoiceMarkup } from "./invoice.ts";
+import { catalogEventDetails, initializeStorefrontPixel, trackCheckout, trackPaymentInfo, trackPurchase, trackStorefront } from "./meta-pixel.js";
 import "./invoice.css";
 
 (function () {
@@ -18,6 +21,7 @@ import "./invoice.css";
   const money = new Intl.NumberFormat("en-BD", { style: "currency", currency: "BDT", currencyDisplay: "narrowSymbol", minimumFractionDigits: 0, maximumFractionDigits: 2 });
   const storageKey = "oneinfo.storefront.cart";
   const apiUrl = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:3001";
+  const signatureSupportUrl = `https://wa.me/8801315774162?text=${encodeURIComponent("Hi, I have a question about the Oneinfo Signature card.")}`;
   function driveVideoPreview(url) {
     const match = /^https:\/\/drive\.google\.com\/file\/d\/([\w-]+)(?:\/(?:view|preview))?\/?(?:[?#]|$)/.exec(url);
     if (!match) return null;
@@ -34,10 +38,13 @@ import "./invoice.css";
     return cover?.type === "image" ? cover.url : cover?.poster;
   }
   let products = [];
+  let updatingCartQuantity = false;
+  let lastTrackedVariant;
   const selectedVariants = new Map();
   const selectedMedia = new Map();
   const selectedModels = new Map();
   const productCustomizations = new Map();
+  const orderDesigns = new Map();
   let activeStudioTab = "details";
   let selectedElementId = "name";
   const quantities = new Map();
@@ -140,38 +147,89 @@ import "./invoice.css";
         const id = itemElement?.dataset.id;
         const variantId = itemElement?.dataset.variantId;
         const customKey = itemElement?.dataset.customKey || "";
-        cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && (item.customization ? JSON.stringify(item.customization) : "") === customKey));
+        cart = cart.filter((item) => !(item.id === id && item.variantId === variantId && cartDesignKey(item) === customKey));
         save(storageKey, cart);
         renderCart();
         if (productRoute(location.hash)) renderRoute();
         toast("Removed from cart");
       });
     });
+    $$("[data-cart-quantity-step]", items).forEach(button => {
+      button.addEventListener("click", () => void changeCartQuantity(button));
+    });
   }
 
+  async function changeCartQuantity(button) {
+    if (updatingCartQuantity || placingOrder || pendingOrder) return;
+    const row = button.closest(".cart-item");
+    const { id, variantId, customKey } = row.dataset;
+    const step = Number(button.dataset.cartQuantityStep);
+    updatingCartQuantity = true;
+    renderCart();
+    try {
+      if (!await loadProducts()) throw new Error("Could not check stock. Please try again.");
+      const item = cart.find(item => item.id === id && item.variantId === variantId && cartDesignKey(item) === customKey);
+      if (!item) return;
+      const product = products.find(product => product.id === id);
+      const variant = product?.variants.find(variant => variant.id === variantId);
+      if (!variant) return;
+      const next = step > 0
+        ? addCartVariant(cart, product, variant, 1, item.customization, item.designFile)
+        : cart.map(line => line === item ? { ...line, quantity: Math.max(1, line.quantity - 1) } : line);
+      save(storageKey, next);
+      cart = next;
+    } catch (error) {
+      toast(error.message || "Could not change the quantity. Please try again.");
+    } finally {
+      updatingCartQuantity = false;
+      renderCart();
+      if (productRoute(location.hash)) renderRoute();
+      const currentRow = $$(".cart-item", $(".cart-items")).find(row =>
+        row.dataset.id === id && row.dataset.variantId === variantId && row.dataset.customKey === customKey);
+      const nextButton = currentRow && $(`[data-cart-quantity-step="${step}"]:not(:disabled)`, currentRow);
+      (nextButton || currentRow?.querySelector(".cart-quantity-control output"))?.focus({ preventScroll: true });
+    }
+  }
+
+  const cartDesignObservers = new WeakMap();
   function renderCartItems(items, removable = false) {
+    cartDesignObservers.get(items)?.();
     items.innerHTML = cart.map(item => {
       const variant = products.find(p => p.id === item.id)?.variants.find(v => v.id === item.variantId);
       const cover = variant && variantCover(variant);
-      const customKey = item.customization ? JSON.stringify(item.customization) : "";
+      const customKey = cartDesignKey(item);
+      const quantityBusy = updatingCartQuantity || placingOrder || Boolean(pendingOrder);
+      const quantityMaximum = variant && Math.min(99, item.quantity + remainingVariantStock(cart, item.id, variant));
       return `
-          <div class="cart-item" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}" data-custom-key="${escapeHtml(customKey)}">
-            <div class="cart-item-art" aria-hidden="true">
+          <div class="cart-item ${item.customization ? "has-custom-design" : ""}" data-id="${escapeHtml(item.id)}" data-variant-id="${escapeHtml(item.variantId)}" data-custom-key="${escapeHtml(customKey)}">
+            ${!item.customization ? `<div class="cart-item-art" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18m-14 5h4"/></svg>
-              ${cover ? `<img src="${escapeHtml(imageSource(cover))}" alt="" referrerpolicy="no-referrer">` : ""}
-            </div>
+              ${cover && !item.designFile ? `<img src="${escapeHtml(imageSource(cover))}" alt="" referrerpolicy="no-referrer">` : ""}
+            </div>` : ""}
             <div class="cart-item-info">
               <strong>${escapeHtml(item.name)}</strong>
               <span>${escapeHtml(item.variantName)}</span>
+              ${item.designFile ? `<span class="cart-custom-badge design-file-name">Design file · ${escapeHtml(item.designFile.name)}</span>` : ""}
               ${item.customization ? `<span class="cart-custom-badge">Custom: <strong>${escapeHtml(item.customization.name)}</strong>${item.customization.title ? ` · ${escapeHtml(item.customization.title)}` : ""}${item.customization.extraLines && item.customization.extraLines.length ? ` · ${item.customization.extraLines.map(l => escapeHtml(l)).join(" · ")}` : ""}${item.customization.textSize && item.customization.textSize !== 14 ? ` (${item.customization.textSize}pt)` : ""}${item.customization.logoUrl ? ` · <span class="cart-custom-logo-tag">Logo attached</span>` : ""}<small style="display:block; opacity:0.85; margin-top:2px; font-weight:500;">${escapeHtml(String(item.customization.layout || item.customization.position || "left").replace("-", " "))} · ${escapeHtml(item.customization.surfaceMotif || "facets")} · ${escapeHtml(item.customization.font || "sans")}${item.customization.companyName ? ` · ${escapeHtml(item.customization.companyName)}` : ""}<span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.surfaceColor || '#0a0b0d')}; vertical-align:middle; margin:0 2px 0 4px; border:1px solid #777;"></span><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${escapeHtml(item.customization.accentColor || '#d8b26e')}; vertical-align:middle; border:1px solid #777;"></span></small></span>` : ""}
-              <span>Qty ${item.quantity}</span>
+              ${!removable ? `<span>Qty ${item.quantity}</span>` : ""}
             </div>
             <div class="cart-item-actions">
               ${removable ? `<button class="remove-item" type="button" aria-label="Remove ${escapeHtml(item.name)} ${escapeHtml(item.variantName)}">${icon("close")}</button>` : ""}
               <strong>${money.format(item.priceMinor * item.quantity / 100)}</strong>
             </div>
+            ${removable ? `<div class="quantity-control cart-quantity-control" role="group" aria-label="Quantity for ${escapeHtml(item.name)} ${escapeHtml(item.variantName)}">
+              <button type="button" data-cart-quantity-step="-1" aria-label="Decrease quantity" ${quantityBusy || item.quantity <= 1 ? "disabled" : ""}>${icon("minus")}</button>
+              <output aria-live="polite" tabindex="-1">${item.quantity}</output>
+              <button type="button" data-cart-quantity-step="1" aria-label="Increase quantity" ${quantityBusy || !catalogReady || !variant?.available || item.quantity >= quantityMaximum ? "disabled" : ""}>${icon("plus")}</button>
+            </div>` : ""}
+            ${item.customization ? `<div class="cart-design-faces">
+              ${["front", "back"].map(face => `<figure><figcaption>${face === "front" ? "Front" : "Back"}</figcaption>
+                ${renderCardDesign(item.customization, { face, logoUrl: item.customization.logoUrl ? mediaUrl(item.customization.logoUrl) : "", oneinfoLogoUrl: logoUrl })}
+              </figure>`).join("")}
+            </div>` : ""}
           </div>`;
     }).join("");
+    cartDesignObservers.set(items, observeCardDesigns(items));
     $$(".cart-item-art img", items).forEach(img => {
       if (img.complete && img.naturalWidth === 0) img.remove();
       else img.addEventListener("error", () => img.remove(), { once:true });
@@ -291,30 +349,6 @@ import "./invoice.css";
       if (img.complete && img.naturalWidth === 0) handleError();
       else img.addEventListener("error", handleError, { once:true });
     });
-  }
-
-  function getElementStyle(custom, elKey) {
-    if (!custom) return { font: "sans", size: 14, rotate: 0, bold: false, italic: false };
-    const ep = custom.elementPositions || {};
-    const pos = ep[elKey] || (elKey === "name" ? custom.customPos : null) || {};
-    const defaultTextSize = custom.textSize || 14;
-    let size = pos.size;
-    let font = pos.font || custom.font || "sans";
-    let rotate = Number(pos.rotate !== undefined ? pos.rotate : (elKey === "name" ? (custom.customPos?.rotate || 0) : 0)) || 0;
-    let bold = pos.bold !== undefined ? Boolean(pos.bold) : (elKey === "name" ? (custom.bold !== undefined ? custom.bold : true) : Boolean(custom.bold));
-    let italic = pos.italic !== undefined ? Boolean(pos.italic) : Boolean(custom.italic);
-
-    if (size === undefined || size === null) {
-      if (elKey === "name") size = defaultTextSize;
-      else if (elKey === "title") size = Math.max(8, Math.round(defaultTextSize * 0.75));
-      else if (elKey.startsWith("extra-")) size = Math.max(8, Math.round(defaultTextSize * 0.75));
-      else if (elKey === "logo") size = custom.logoSize || 100;
-      else if (elKey === "sign") size = custom.iconSize || 100;
-      else if (elKey === "back-qr") size = custom.qrSize || 100;
-      else size = 100;
-    }
-
-    return { font, size: Number(size), rotate, bold, italic, x: pos.x, y: pos.y };
   }
 
   function renderQuickInspectorMarkup(productId) {
@@ -484,6 +518,12 @@ import "./invoice.css";
     return Math.min(99 - inSameLine, remainingVariantStock(cart, product.id, variant));
   }
 
+  let stopDetailDesigns;
+  function fitDetailDesigns() {
+    stopDetailDesigns?.();
+    stopDetailDesigns = observeCardDesigns($("#product-detail"));
+  }
+
   function productMarkup(p, detail = false) {
       const v = p.variants.find(v => v.id === selectedVariants.get(p.id)) ?? p.variants.find(v => v.available) ?? p.variants[0];
       selectedVariants.set(p.id, v.id);
@@ -507,6 +547,8 @@ import "./invoice.css";
       const quantityHint = !quantityLimit ? "Quantity limit reached for this colour." : `Up to ${quantityLimit} available to add.`;
       const custom = productCustomizations.get(p.id) ?? defaultCustomization("01");
       const isCustomizable = detail && p.customizable;
+      const acceptsArtwork = isCustomizable && p.slug === orderDesignProductSlug;
+      const design = acceptsArtwork ? orderDesigns.get(p.id) : undefined;
       const hasLogo = !p.customizable || (custom.hasOneinfoLogo !== false && custom.brandingMode !== "without-logo");
       const activePrice = p.customizable ? variantPriceForBranding(v, hasLogo) : variantPrice(v);
       const activeRegular = p.customizable ? variantRegularPriceForBranding(v, hasLogo) : v.priceMinor;
@@ -518,172 +560,17 @@ import "./invoice.css";
       const regWithoutLogo = variantRegularPriceForBranding(v, false);
       const isLight = isCustomizable ? isColorLight(custom.surfaceColor) : (v.appearance === "light" || isColorLight(v.colorHex));
       const surfaceBg = isCustomizable ? escapeHtml(custom.surfaceColor) : escapeHtml(v.colorHex);
-      const cardAccent = isCustomizable ? escapeHtml(custom.accentColor) : 'var(--accent)';
-      const layoutClass = isCustomizable ? `layout-${escapeHtml(custom.layout || 'left')}` : "";
-      const motifClass = isCustomizable ? `motif-${escapeHtml(custom.surfaceMotif || 'facets')}` : "";
-      const luminanceClass = isLight ? "is-light-surface light-card" : "dark-card";
-
       const ep = custom.elementPositions || {};
-      const activeExtras = (custom.extraLines || []).filter(l => l && l.trim());
-      const numExtras = activeExtras.length;
-
-      const stName = getElementStyle(custom, "name");
-      const stTitle = getElementStyle(custom, "title");
-      const stLogo = getElementStyle(custom, "logo");
       const stSign = getElementStyle(custom, "sign");
-      const stQr = getElementStyle(custom, "back-qr");
 
-      const nameFontSize = `${(1.125 * stName.size / 14).toFixed(3)}rem`;
-      const titleFontSize = `${(0.65 * stTitle.size / 14).toFixed(3)}rem`;
-      const logoScale = (stLogo.size / 100).toFixed(2);
-      const iconScale = (stSign.size / 100).toFixed(2);
-      const qrScale = (stQr.size / 100).toFixed(2);
-
-      const logoRot = stLogo.rotate;
-      const signRot = stSign.rotate;
-      const nameRot = stName.rotate;
-      const titleRot = stTitle.rotate;
-      const logoPos = (ep.logo && ep.logo.x != null && ep.logo.y != null) ? ep.logo : null;
-      const signPos = (ep.sign && ep.sign.x != null && ep.sign.y != null) ? ep.sign : null;
-      const namePos = (ep.name && ep.name.x != null && ep.name.y != null) ? ep.name : ((custom.customPos && custom.customPos.x != null && custom.customPos.y != null) ? custom.customPos : null);
-      const titlePos = (ep.title && ep.title.x != null && ep.title.y != null) ? ep.title : null;
-      const backQrPos = (ep["back-qr"] && ep["back-qr"].x != null && ep["back-qr"].y != null) ? ep["back-qr"] : null;
-      const qrRot = stQr.rotate;
-
-      const logoStyle = logoPos ? `left:${logoPos.x}%; top:${logoPos.y}%; --scale:${logoScale}; --rot:${logoRot}deg;` : `--scale:${logoScale}; --rot:${logoRot}deg;`;
-      const signStyle = signPos ? `left:${signPos.x}%; top:${signPos.y}%; --scale:${iconScale}; --rot:${signRot}deg;` : `--scale:${iconScale}; --rot:${signRot}deg;`;
-
-      let nameStyle = namePos ? `left:${namePos.x}%; top:${namePos.y}%; --rot:${nameRot}deg;` : `--rot:${nameRot}deg;`;
-      if (!namePos) {
-        if (custom.layout === "reverse") {
-          nameStyle = `top:20px; bottom:auto; --rot:${nameRot}deg;`;
-        } else {
-          nameStyle = `bottom:${48 + numExtras * 18}px; --rot:${nameRot}deg;`;
-        }
-      }
-
-      let titleStyle = titlePos ? `left:${titlePos.x}%; top:${titlePos.y}%; --rot:${titleRot}deg;` : `--rot:${titleRot}deg;`;
-      if (!titlePos) {
-        if (custom.layout === "reverse") {
-          titleStyle = `top:46px; bottom:auto; --rot:${titleRot}deg;`;
-        } else {
-          titleStyle = `bottom:${20 + numExtras * 18}px; --rot:${titleRot}deg;`;
-        }
-      }
-
-      const logoPosClass = logoPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
-      const signPosClass = signPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
-      const namePosClass = namePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
-      const titlePosClass = titlePos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')}`;
-
-      const isLogoNearTop = !logoPos || logoPos.y < 24;
-      const isSignNearTop = !signPos || signPos.y < 24;
-      const isNameNearTop = namePos ? namePos.y < 24 : custom.layout === "reverse";
-      const isTitleNearTop = titlePos ? titlePos.y < 24 : false;
-
-      const renderRotateHandle = (key) => `
-        <span class="corner-pin pin-tl" aria-hidden="true"></span>
-        <span class="corner-pin pin-tr" aria-hidden="true"></span>
-        <span class="corner-pin pin-bl" aria-hidden="true"></span>
-        <span class="corner-pin pin-br" aria-hidden="true"></span>
-        <button type="button" class="element-rotate-handle" data-rotate-handle="${escapeHtml(key)}" title="Click to rotate 90°, or drag to rotate freely" aria-label="Rotate element">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-          </svg>
-        </button>
-      `;
-
-      const frontIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${layoutClass} ${motifClass} ${luminanceClass} card-view-front" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="front" data-interactive-card="${escapeHtml(p.id)}">
-        ${renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor)}
-        ${custom.layout === "column" ? `<div class="card-side-column-bar" aria-hidden="true"></div>` : ""}
-        ${custom.layout === "header" ? `<div class="card-header-banner" aria-hidden="true"></div>` : ""}
-
-        <div class="card-drag-item card-element-logo ${logoPosClass} ${isLogoNearTop ? 'is-near-top' : ''} ${selectedElementId === 'logo' ? 'is-selected' : ''}" style="${logoStyle}" data-drag-element="logo" data-product-id="${escapeHtml(p.id)}">
-          ${(custom.logoPreviewUrl || custom.logoUrl) ? `
-            <img class="mini-product-logo custom-user-logo" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Custom logo" />
-          ` : `
-            <span class="card-logo-placeholder" style="color:${escapeHtml(custom.accentColor)};">YOUR LOGO</span>
-          `}
-          ${renderRotateHandle("logo")}
-        </div>
-
-        <div class="card-drag-item card-element-nfc ${signPosClass} ${isSignNearTop ? 'is-near-top' : ''} ${selectedElementId === 'sign' ? 'is-selected' : ''}" style="color:${escapeHtml(custom.accentColor)}; ${signStyle}" data-drag-element="sign" data-product-id="${escapeHtml(p.id)}">
-          <span class="card-nfc-wave" aria-hidden="true" style="color:inherit;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9a5 5 0 0 1 0 6"/><path d="M10 6a9 9 0 0 1 0 12"/><path d="M14 3a13 13 0 0 1 0 18"/></svg>
-          </span>
-          ${renderRotateHandle("sign")}
-        </div>
-
-        <div class="card-drag-item card-element-name ${namePosClass} ${isNameNearTop ? 'is-near-top' : ''} font-${escapeHtml(stName.font)} ${selectedElementId === 'name' ? 'is-selected' : ''}" style="${nameStyle}" data-drag-element="name" data-product-id="${escapeHtml(p.id)}">
-          <strong class="card-custom-name ${!custom.name ? "is-placeholder" : ""} ${stName.bold ? "is-bold" : "is-not-bold"} ${stName.italic ? "is-italic" : ""}" style="font-size:${nameFontSize}; font-weight:${stName.bold ? 700 : 400}; font-style:${stName.italic ? 'italic' : 'normal'};">${escapeHtml(custom.name || "Your Name")}</strong>
-          ${renderRotateHandle("name")}
-        </div>
-
-        <div class="card-drag-item card-element-title ${titlePosClass} ${isTitleNearTop ? 'is-near-top' : ''} font-${escapeHtml(stTitle.font)} ${selectedElementId === 'title' ? 'is-selected' : ''}" style="${titleStyle}" data-drag-element="title" data-product-id="${escapeHtml(p.id)}">
-          <span class="card-custom-title ${!custom.title && numExtras === 0 ? "is-placeholder" : ""} ${stTitle.bold ? "is-bold" : "is-not-bold"} ${stTitle.italic ? "is-italic" : ""}" style="color:${escapeHtml(custom.accentColor)}; font-size:${titleFontSize}; font-weight:${stTitle.bold ? 700 : 400}; font-style:${stTitle.italic ? 'italic' : 'normal'};">${escapeHtml(custom.title || (numExtras > 0 ? "" : "Your Title / Role"))}</span>
-          ${renderRotateHandle("title")}
-        </div>
-
-        ${(custom.extraLines || []).map((line, idx) => {
-          if (!line || !line.trim()) return "";
-          const extraKey = `extra-${idx}`;
-          const stExtra = getElementStyle(custom, extraKey);
-          const extraPos = ep[extraKey];
-          const extraRot = stExtra.rotate;
-          const extraFontSize = `${(0.65 * stExtra.size / 14).toFixed(3)}rem`;
-          const extraPosClass = extraPos ? "pos-custom" : `pos-${escapeHtml(custom.layout || 'left')} pos-extra-${idx}`;
-          let extraStyle = extraPos ? `left:${extraPos.x}%; top:${extraPos.y}%; --rot:${extraRot}deg;` : `--rot:${extraRot}deg;`;
-          if (!extraPos) {
-            if (custom.layout === "reverse") {
-              extraStyle = `top:${60 + idx * 16}px; bottom:auto; --rot:${extraRot}deg;`;
-            } else {
-              extraStyle = `bottom:${22 + (numExtras - 1 - idx) * 16}px; --rot:${extraRot}deg;`;
-            }
-          }
-          return `
-            <div class="card-drag-item card-element-extra ${extraPosClass} font-${escapeHtml(stExtra.font)} ${selectedElementId === extraKey ? 'is-selected' : ''}" style="${extraStyle}" data-drag-element="${extraKey}" data-extra-index="${idx}" data-product-id="${escapeHtml(p.id)}">
-              <span class="card-custom-extra-line ${stExtra.bold ? 'is-bold' : 'is-not-bold'} ${stExtra.italic ? 'is-italic' : ''}" style="color:${escapeHtml(custom.accentColor)}; font-size:${extraFontSize}; font-weight:${stExtra.bold ? 700 : 400}; font-style:${stExtra.italic ? 'italic' : 'normal'};">${escapeHtml(line.trim())}</span>
-              ${renderRotateHandle(extraKey)}
-            </div>
-          `;
-        }).join("")}
-
-        ${(custom.dividerLines || []).map((line, idx) => {
-          const dividerKey = `divider-${idx}`;
-          const dividerPos = ep[dividerKey];
-          const divRot = dividerPos?.rotate || 0;
-          const isVert = line.orientation === "vertical";
-          const len = line.length || (isVert ? 60 : 100);
-          const dividerStyle = dividerPos
-            ? `left:${dividerPos.x}%; top:${dividerPos.y}%; --divider-len:${len}px; --rot:${divRot}deg;`
-            : `left:50%; top:${50 + idx * 12}%; --divider-len:${len}px; --rot:${divRot}deg;`;
-          return `
-            <div class="card-drag-item card-element-divider divider-${escapeHtml(line.orientation || 'horizontal')} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom ${selectedElementId === dividerKey ? 'is-selected' : ''}" style="${dividerStyle} color:${escapeHtml(custom.accentColor)};" data-drag-element="${dividerKey}" data-divider-index="${idx}" data-product-id="${escapeHtml(p.id)}">
-              ${renderRotateHandle(dividerKey)}
-            </div>
-          `;
-        }).join("")}
-      </div>`;
-
-      const backQrStyle = backQrPos ? `left:${backQrPos.x}%; top:${backQrPos.y}%; --scale:${qrScale}; --rot:${qrRot}deg;` : `--scale:${qrScale}; --rot:${qrRot}deg;`;
-      const backQrClass = backQrPos ? "pos-custom" : "";
-
-      const backIllustration = `<div class="mini-product-card ${v.appearance}-card customizable-card ${luminanceClass} card-view-back" style="background:${surfaceBg}; --card-accent:${cardAccent};" data-card-face="back" data-interactive-card="${escapeHtml(p.id)}">
-        ${renderBackMotifSvg(custom.surfaceMotif, custom.accentColor)}
-        <div class="card-drag-item card-back-center-qr ${backQrClass} ${selectedElementId === 'back-qr' ? 'is-selected' : ''}" style="${backQrStyle}" data-drag-element="back-qr" data-product-id="${escapeHtml(p.id)}">
-          <div class="card-qr-wrap ${escapeHtml(custom.backQrStyle || 'minimal')}">
-            ${renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal')}
-          </div>
-          ${(custom.backSubtitle && custom.backSubtitle.trim()) ? `<span class="card-back-subtitle" style="color:${escapeHtml(custom.accentColor)};">${escapeHtml(custom.backSubtitle.trim())}</span>` : ""}
-          ${renderRotateHandle("back-qr")}
-        </div>
-        <div class="card-back-footer" style="${custom.hasOneinfoLogo !== false ? '' : 'display:none;'}">
-          ${custom.hasOneinfoLogo !== false ? `
-            <img class="mini-product-logo card-back-oneinfo-logo" src="${logoUrl}" alt="Oneinfo logo" />
-            ${renderAriseLogoSvg()}
-          ` : `<!-- Brand labeling omitted (Without Oneinfo Logo edition) -->`}
-        </div>
-      </div>`;
+      const designOptions = {
+        interactiveProductId: p.id,
+        selectedElementId,
+        logoUrl: custom.logoPreviewUrl || (custom.logoUrl ? mediaUrl(custom.logoUrl) : ""),
+        oneinfoLogoUrl: logoUrl,
+      };
+      const frontIllustration = renderCardDesign(custom, { ...designOptions, face: "front" });
+      const backIllustration = renderCardDesign(custom, { ...designOptions, face: "back" });
 
       const standardIllustration = p.customizable ? `
         <div class="mini-product-card ${v.appearance}-card is-catalog-card" style="background:#0a0b0d; --card-accent:#d8b26e;" aria-label="${escapeHtml(p.name)} bespoke preview">
@@ -707,7 +594,11 @@ import "./invoice.css";
 
       return `<article class="product ${detail ? "detail-product" : ""} ${p.featured ? "featured" : ""} ${!v.available ? "is-out-of-stock" : ""}" data-id="${escapeHtml(p.id)}">
         ${detail ? `<div class="product-gallery">` : ""}
-        ${isCustomizable ? `
+        ${design?.file ? `
+          <div class="product-art artwork-preview">
+            ${design.preview ? `<img src="${escapeHtml(design.preview)}" alt="Uploaded card design" />` : `<span>Artwork file · ${escapeHtml(design.file.id.split(".").at(-1).toUpperCase())}</span>`}
+          </div>
+        ` : isCustomizable ? `
           <div class="product-art custom-stage-unified ${p.featured ? 'has-badge' : ''}">
             <div class="product-badges">
               ${!v.available ? `<span class="out-of-stock-badge">Out of stock</span>` : ""}
@@ -810,6 +701,22 @@ import "./invoice.css";
             </button>
           </div>
 
+          ${acceptsArtwork ? `<div class="signature-design-upload">
+            <div>
+              ${design?.file ? '<strong>Design attached</strong>' : '<label for="signature-design-file">Upload your design</label>'}
+              <p id="signature-design-formats">${design?.file ? escapeHtml(design.file.name) : "PNG, JPG, PDF, EPS or AI · Up to 10 MB"}</p>
+            </div>
+            ${design?.file
+              ? `<button type="button" data-remove-design>Use manual editor</button>`
+              : `<input type="file" id="signature-design-file" data-design-file
+                  aria-describedby="signature-design-formats" accept=".png,.jpg,.jpeg,.pdf,.eps,.ai" ${design?.uploading || addingToCart ? "disabled" : ""} />`}
+            ${design?.uploading ? '<p role="status">Uploading design…</p>' : ""}
+            ${design?.error ? `<p role="alert">${escapeHtml(design.error)}</p>` : ""}
+            <a class="signature-design-support" href="${escapeHtml(signatureSupportUrl)}" target="_blank" rel="noopener noreferrer">
+              ${icon("whatsapp")} Contact on WhatsApp ${icon("arrow-up-right")}
+            </a>
+          </div>` : ""}
+          ${!design?.file ? `
           <!-- 2. Studio Tabs Navigation -->
           <div class="studio-tabs-nav" role="tablist" aria-label="Studio Configuration Tabs">
             <button type="button" class="studio-tab-btn ${activeStudioTab === 'details' ? 'is-active' : ''}" data-studio-tab="details" role="tab" aria-selected="${activeStudioTab === 'details'}">
@@ -861,6 +768,8 @@ import "./invoice.css";
                 <span>Upload Logo</span>
               </div>
               <div class="custom-logo-zone">
+                ${custom.logoUploading ? '<p role="status">Uploading logo…</p>' : ""}
+                ${custom.logoUploadError ? `<p role="alert">${escapeHtml(custom.logoUploadError)}</p>` : ""}
                 ${(custom.logoPreviewUrl || custom.logoUrl) ? `
                   <div class="logo-preview-active">
                     <img class="logo-thumb" src="${escapeHtml(mediaUrl(custom.logoPreviewUrl || custom.logoUrl))}" alt="Uploaded logo" />
@@ -1057,8 +966,9 @@ import "./invoice.css";
               </div>
             </div>
           </div>
+          ` : ""}
         </section>` : ""}
-        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity <= 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity >= quantityLimit ? 'disabled' : ''}>${icon("plus")}</button></div></div>${v.available && (v.orderQuantityLimit !== undefined || !quantityLimit) ? `<p class="purchase-stock-limit" role="status">${quantityHint}</p>` : ""}<div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !quantityLimit || addingToCart ? "disabled" : ""}>${addingToCart ? 'Adding…' : !v.available ? 'Out of stock' : quantityLimit ? 'Add to cart' : 'Limit reached'}</button></div>
+        ${detail ? `<div class="purchase-actions">${!v.available ? `<div class="product-stock-notice is-out-of-stock" role="alert"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="/assets/icons.svg#alert-circle"></use></svg><div><strong>Out of stock</strong><p>This colour finish is currently sold out and cannot be ordered.</p></div></div>` : ''}<div class="purchase-quantity-row"><span id="purchase-quantity-label">Quantity</span><div class="quantity-control" role="group" aria-labelledby="purchase-quantity-label"><button type="button" data-quantity-step="-1" aria-label="Decrease quantity" ${quantity <= 1 ? 'disabled' : ''}>${icon("minus")}</button><output class="purchase-quantity" aria-live="polite">${quantity}</output><button type="button" data-quantity-step="1" aria-label="Increase quantity" ${quantity >= quantityLimit ? 'disabled' : ''}>${icon("plus")}</button></div></div>${v.available && (v.orderQuantityLimit !== undefined || !quantityLimit) ? `<p class="purchase-stock-limit" role="status">${quantityHint}</p>` : ""}<div class="purchase-total"><span>Total</span><strong>${money.format(activePrice * quantity / 100)}</strong></div><button class="button add-to-cart ${!v.available ? 'is-out-of-stock' : ''}" type="button" ${!catalogReady || !quantityLimit || addingToCart || design?.uploading || !design?.file && (custom.logoUploading || custom.logoUploadError) ? "disabled" : ""}>${addingToCart ? 'Adding…' : !v.available ? 'Out of stock' : quantityLimit ? 'Add to cart' : 'Limit reached'}</button></div>
         <div class="purchase-information">${p.description || p.features.length ? `<details class="purchase-disclosure" data-disclosure="product"><summary>Product details<span aria-hidden="true">${icon("plus")}</span></summary><div>${p.description ? `<p>${escapeHtml(p.description)}</p>` : ''}${p.features.length ? `<ul>${p.features.map(f => `<li>${escapeHtml(f)}</li>`).join("")}</ul>` : ''}</div></details>` : ''}${!p.warrantyIsDemo && p.warranty?.trim() ? `<details class="purchase-disclosure" data-disclosure="warranty"><summary>Warranty<span aria-hidden="true">${icon("plus")}</span></summary><div><p>${escapeHtml(p.warranty)}</p></div></details>` : ''}<details class="purchase-disclosure" data-disclosure="ordering"><summary>Ordering & delivery<span aria-hidden="true">${icon("plus")}</span></summary><div><p>See your delivery charge and payment options at checkout.</p></div></details><a class="purchase-team-link" href="#teams"><span>Ordering for a team?<small>Explore team options</small></span><span aria-hidden="true">${icon("arrow-up-right")}</span></a></div></div>` : ""}</article>`;
   }
 
@@ -1224,6 +1134,7 @@ import "./invoice.css";
     const trackingToken = location.hash.startsWith("#track/") ? location.hash.slice(7) : "";
     const invoicePage = location.hash.startsWith("#invoice/");
     const route = productRoute(location.hash);
+    if (!route) lastTrackedVariant = undefined;
     document.body.classList.toggle("product-page", Boolean(route));
     const page = order ? "order-draft" : reviewToken ? "review-portal" : trackingPage ? "tracking-portal" : invoicePage ? "invoice-portal" : route ? "product-detail" : "";
     $$("#main > section").forEach(section => {
@@ -1260,10 +1171,18 @@ import "./invoice.css";
     const quantityFocused = focused?.closest("#product-detail") ? focused.dataset.quantityStep : null;
     const openDisclosures = new Map($$(".purchase-disclosure", host).map(el => [el.dataset.disclosure, el.open]));
     host.innerHTML = `<a class="back-to-products" href="#products">${icon("arrow-left")} Back to cards</a>` + (product ? productMarkup(product, true) + reviewsMarkup(product) : `<div class="product-missing"><h1 id="product-title" tabindex="-1">${catalogReady ? "This card is no longer available" : "Loading product…"}</h1><p>${catalogReady ? "Explore the collection to find another card." : "Fetching the latest product details."}</p></div>`);
-    if (product) void loadProductReviews(product, host);
+    if (product) {
+      const viewed = product.variants.find(item => item.id === selectedVariants.get(product.id));
+      if (viewed && lastTrackedVariant !== `${product.id}:${viewed.id}` && trackStorefront("ViewContent",
+        catalogEventDetails([{ productId: product.id, variantId: viewed.id, quantity: 1, unitPriceMinor: variantPrice(viewed) }]))) {
+        lastTrackedVariant = `${product.id}:${viewed.id}`;
+      }
+      void loadProductReviews(product, host);
+    }
     if (!catalogReady && catalogFailed) host.insertAdjacentHTML("beforeend", '<p role="status">Product information is unavailable. <button type="button" class="detail-retry">Retry</button></p>');
     document.title = product ? `${product.name} | Oneinfo` : "Product | Oneinfo";
     watchImages();
+    fitDetailDesigns();
     $$(".purchase-disclosure", host).forEach(el => { el.open = openDisclosures.get(el.dataset.disclosure) ?? false; });
     const strip = $(".gallery-items", host);
     const activeThumb = strip && $("[aria-pressed=true]", strip);
@@ -1319,374 +1238,19 @@ import "./invoice.css";
   }
   $("#catalog-retry").addEventListener("click", () => void loadProducts());
 
-  function ensureRotateHandle(el, key) {
-    if (!el || !key) return;
-    if (!el.querySelector(".corner-pin")) {
-      el.insertAdjacentHTML("afterbegin", `
-        <span class="corner-pin pin-tl" aria-hidden="true"></span>
-        <span class="corner-pin pin-tr" aria-hidden="true"></span>
-        <span class="corner-pin pin-bl" aria-hidden="true"></span>
-        <span class="corner-pin pin-br" aria-hidden="true"></span>
-      `);
-    }
-    if (!el.querySelector(".element-rotate-handle")) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "element-rotate-handle";
-      btn.dataset.rotateHandle = key;
-      btn.title = "Click to rotate 90°, or drag to rotate freely";
-      btn.setAttribute("aria-label", "Rotate element");
-      btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
-      el.appendChild(btn);
-    }
-  }
-
   function syncCustomCardPreview(productId) {
     const custom = productCustomizations.get(productId) ?? defaultCustomization("01");
-    const light = isColorLight(custom.surfaceColor);
-
-    // 1. Update Front Card (Top)
-    const frontCard = $("#product-detail .card-view-front");
-    if (frontCard) {
-      frontCard.style.background = custom.surfaceColor;
-      frontCard.style.setProperty("--card-accent", custom.accentColor);
-      frontCard.classList.toggle("is-light-surface", light);
-      frontCard.classList.toggle("light-card", light);
-      frontCard.classList.toggle("dark-card", !light);
-
-      frontCard.className = frontCard.className
-        .replace(/\blayout-\S+/g, "")
-        .replace(/\bmotif-\S+/g, "")
-        .trim() + ` layout-${custom.layout || 'left'} motif-${custom.surfaceMotif || 'facets'}`;
-
-      const existingMotif = frontCard.querySelector(".card-surface-motif");
-      const nextMotifHtml = renderSurfaceMotifSvg(custom.surfaceMotif, custom.accentColor);
-      if (existingMotif) {
-        if (nextMotifHtml) existingMotif.outerHTML = nextMotifHtml;
-        else existingMotif.remove();
-      } else if (nextMotifHtml) {
-        frontCard.insertAdjacentHTML("afterbegin", nextMotifHtml);
-      }
-
-      const colBar = frontCard.querySelector(".card-side-column-bar");
-      if (custom.layout === "column") {
-        if (!colBar) frontCard.insertAdjacentHTML("afterbegin", `<div class="card-side-column-bar" aria-hidden="true"></div>`);
-      } else if (colBar) {
-        colBar.remove();
-      }
-
-      const headerBanner = frontCard.querySelector(".card-header-banner");
-      if (custom.layout === "header") {
-        if (!headerBanner) frontCard.insertAdjacentHTML("afterbegin", `<div class="card-header-banner" aria-hidden="true"></div>`);
-      } else if (headerBanner) {
-        headerBanner.remove();
-      }
-
-      const ep = custom.elementPositions || {};
-      const stName = getElementStyle(custom, "name");
-      const stTitle = getElementStyle(custom, "title");
-      const stLogo = getElementStyle(custom, "logo");
-      const stSign = getElementStyle(custom, "sign");
-      const nameSize = `${(1.125 * stName.size / 14).toFixed(3)}rem`;
-      const titleSize = `${(0.65 * stTitle.size / 14).toFixed(3)}rem`;
-
-      // 1. Logo element (Customer Logo or "YOUR LOGO" text placeholder)
-      const logoEl = frontCard.querySelector(".card-element-logo");
-      if (logoEl) {
-        logoEl.style.display = "";
-        const activeLogo = custom.logoPreviewUrl || custom.logoUrl;
-        let logoImg = logoEl.querySelector(".mini-product-logo");
-        let logoPlaceholder = logoEl.querySelector(".card-logo-placeholder");
-
-        if (activeLogo) {
-          if (logoPlaceholder) logoPlaceholder.remove();
-          if (!logoImg) {
-            logoImg = document.createElement("img");
-            logoEl.appendChild(logoImg);
-          }
-          logoImg.className = "mini-product-logo custom-user-logo";
-          logoImg.src = mediaUrl(activeLogo);
-          logoImg.alt = "Custom logo";
-          logoImg.style.display = "";
-        } else {
-          if (logoImg) logoImg.remove();
-          if (!logoPlaceholder) {
-            logoPlaceholder = document.createElement("span");
-            logoPlaceholder.className = "card-logo-placeholder";
-            logoPlaceholder.textContent = "YOUR LOGO";
-            logoEl.appendChild(logoPlaceholder);
-          }
-          logoPlaceholder.style.display = "";
-          logoPlaceholder.style.color = custom.accentColor;
-        }
-        const logoScale = ((stLogo.size || 100) / 100).toFixed(2);
-        const logoRot = stLogo.rotate || 0;
-        logoEl.style.setProperty("--scale", logoScale);
-        logoEl.style.setProperty("--rot", `${logoRot}deg`);
-        ensureRotateHandle(logoEl, "logo");
-        if (ep.logo && ep.logo.x != null && ep.logo.y != null) {
-          logoEl.className = "card-drag-item card-element-logo pos-custom";
-          logoEl.style.left = `${ep.logo.x}%`;
-          logoEl.style.top = `${ep.logo.y}%`;
-          logoEl.style.transform = `translate(-50%, -50%) scale(${logoScale}) rotate(${logoRot}deg)`;
-        } else {
-          logoEl.className = `card-drag-item card-element-logo pos-${custom.layout || 'left'}`;
-          logoEl.style.left = ""; logoEl.style.top = "";
-          logoEl.style.transform = (custom.layout === "center" || custom.layout === "header")
-            ? `translateX(-50%) scale(${logoScale}) rotate(${logoRot}deg)`
-            : `scale(${logoScale}) rotate(${logoRot}deg)`;
-        }
-      }
-
-      // 2. NFC wave sign element
-      const nfcEl = frontCard.querySelector(".card-element-nfc");
-      if (nfcEl) {
-        const iconScale = ((stSign.size || 100) / 100).toFixed(2);
-        const signRot = stSign.rotate || 0;
-        nfcEl.style.setProperty("--scale", iconScale);
-        nfcEl.style.setProperty("--rot", `${signRot}deg`);
-        nfcEl.style.color = custom.accentColor;
-        ensureRotateHandle(nfcEl, "sign");
-        if (ep.sign && ep.sign.x != null && ep.sign.y != null) {
-          nfcEl.className = "card-drag-item card-element-nfc pos-custom";
-          nfcEl.style.left = `${ep.sign.x}%`;
-          nfcEl.style.top = `${ep.sign.y}%`;
-          nfcEl.style.transform = `translate(-50%, -50%) scale(${iconScale}) rotate(${signRot}deg)`;
-        } else {
-          nfcEl.className = `card-drag-item card-element-nfc pos-${custom.layout || 'left'}`;
-          nfcEl.style.left = ""; nfcEl.style.top = "";
-          nfcEl.style.transform = `scale(${iconScale}) rotate(${signRot}deg)`;
-        }
-      }
-
-      // 3. Name element
-      const nameBox = frontCard.querySelector(".card-element-name");
-      const nameEl = frontCard.querySelector(".card-custom-name");
-      const activeExtras = (custom.extraLines || []).filter(l => l && l.trim());
-      const numExtras = activeExtras.length;
-
-      if (nameBox) {
-        const namePos = (ep.name && ep.name.x != null && ep.name.y != null) ? ep.name : ((custom.customPos && custom.customPos.x != null && custom.customPos.y != null) ? custom.customPos : null);
-        const nameRot = stName.rotate || 0;
-        nameBox.style.setProperty("--rot", `${nameRot}deg`);
-        ensureRotateHandle(nameBox, "name");
-        if (namePos) {
-          nameBox.className = `card-drag-item card-element-name pos-custom font-${stName.font || 'sans'}`;
-          nameBox.style.left = `${namePos.x}%`;
-          nameBox.style.top = `${namePos.y}%`;
-          nameBox.style.bottom = "auto";
-          nameBox.style.right = "auto";
-          nameBox.style.transform = `translate(-50%, -50%) rotate(${nameRot}deg)`;
-        } else {
-          nameBox.className = `card-drag-item card-element-name pos-${custom.layout || 'left'} font-${stName.font || 'sans'}`;
-          nameBox.style.left = "";
-          nameBox.style.top = custom.layout === "reverse" ? "20px" : "";
-          nameBox.style.bottom = custom.layout === "reverse" ? "auto" : `${48 + numExtras * 18}px`;
-          nameBox.style.right = "";
-          nameBox.style.transform = `rotate(${nameRot}deg)`;
-        }
-      }
-      if (nameEl) {
-        nameEl.textContent = custom.name ? custom.name.trim() : "Your Name";
-        nameEl.classList.toggle("is-placeholder", !custom.name);
-        nameEl.classList.toggle("is-bold", Boolean(stName.bold));
-        nameEl.classList.toggle("is-not-bold", !stName.bold);
-        nameEl.classList.toggle("is-italic", Boolean(stName.italic));
-        nameEl.style.fontSize = nameSize;
-        nameEl.style.fontWeight = stName.bold ? "700" : "400";
-        nameEl.style.fontStyle = stName.italic ? "italic" : "normal";
-      }
-
-      // 4. Title element (independent draggable line)
-      const legacyDetails = frontCard.querySelector(".card-element-details");
-      if (legacyDetails) legacyDetails.remove();
-
-      let titleBox = frontCard.querySelector(".card-element-title");
-      if (!titleBox) {
-        titleBox = document.createElement("div");
-        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${stTitle.font || 'sans'}`;
-        titleBox.setAttribute("data-drag-element", "title");
-        titleBox.setAttribute("data-product-id", productId);
-        titleBox.innerHTML = `<span class="card-custom-title" style="color:${custom.accentColor}; font-size:${titleSize};"></span>`;
-        frontCard.appendChild(titleBox);
-      }
-      const titleRot = stTitle.rotate || 0;
-      titleBox.style.setProperty("--rot", `${titleRot}deg`);
-      ensureRotateHandle(titleBox, "title");
-      const titleEl = titleBox.querySelector(".card-custom-title");
-      const titlePos = (ep.title && ep.title.x != null && ep.title.y != null) ? ep.title : null;
-      if (titlePos) {
-        titleBox.className = `card-drag-item card-element-title pos-custom font-${stTitle.font || 'sans'}`;
-        titleBox.style.left = `${titlePos.x}%`;
-        titleBox.style.top = `${titlePos.y}%`;
-        titleBox.style.bottom = "auto";
-        titleBox.style.right = "auto";
-        titleBox.style.transform = `translate(-50%, -50%) rotate(${titleRot}deg)`;
-      } else {
-        titleBox.className = `card-drag-item card-element-title pos-${custom.layout || 'left'} font-${stTitle.font || 'sans'}`;
-        titleBox.style.left = "";
-        titleBox.style.top = custom.layout === "reverse" ? "46px" : "";
-        titleBox.style.bottom = custom.layout === "reverse" ? "auto" : `${20 + numExtras * 18}px`;
-        titleBox.style.right = "";
-        titleBox.style.transform = `rotate(${titleRot}deg)`;
-      }
-      if (titleEl) {
-        titleEl.textContent = custom.title ? custom.title.trim() : (numExtras > 0 ? "" : "Your Title / Role");
-        titleEl.classList.toggle("is-placeholder", !custom.title && numExtras === 0);
-        titleEl.classList.toggle("is-bold", Boolean(stTitle.bold));
-        titleEl.classList.toggle("is-not-bold", !stTitle.bold);
-        titleEl.classList.toggle("is-italic", Boolean(stTitle.italic));
-        titleEl.style.color = custom.accentColor;
-        titleEl.style.fontSize = titleSize;
-        titleEl.style.fontWeight = stTitle.bold ? "700" : "400";
-        titleEl.style.fontStyle = stTitle.italic ? "italic" : "normal";
-      }
-
-      // 5. Extra Lines elements (each line is an independent draggable element)
-      frontCard.querySelectorAll(".card-element-extra").forEach(el => el.remove());
-      if (Array.isArray(custom.extraLines)) {
-        custom.extraLines.forEach((line, idx) => {
-          if (!line || !line.trim()) return;
-          const extraKey = `extra-${idx}`;
-          const stExtra = getElementStyle(custom, extraKey);
-          const extraPos = ep[extraKey];
-          const extraRot = stExtra.rotate || 0;
-          const extraSize = `${(0.65 * stExtra.size / 14).toFixed(3)}rem`;
-          const div = document.createElement("div");
-          div.setAttribute("data-drag-element", extraKey);
-          div.setAttribute("data-product-id", productId);
-          div.setAttribute("data-extra-index", String(idx));
-          div.style.setProperty("--rot", `${extraRot}deg`);
-          if (extraPos) {
-            div.className = `card-drag-item card-element-extra pos-custom font-${stExtra.font || 'sans'}`;
-            div.style.left = `${extraPos.x}%`;
-            div.style.top = `${extraPos.y}%`;
-            div.style.bottom = "auto";
-            div.style.right = "auto";
-            div.style.transform = `translate(-50%, -50%) rotate(${extraRot}deg)`;
-          } else {
-            div.className = `card-drag-item card-element-extra pos-${custom.layout || 'left'} pos-extra-${idx} font-${stExtra.font || 'sans'}`;
-            if (custom.layout === "reverse") {
-              div.style.top = `${60 + idx * 16}px`;
-              div.style.bottom = "auto";
-            } else {
-              div.style.bottom = `${22 + (numExtras - 1 - idx) * 16}px`;
-              div.style.top = "";
-            }
-            div.style.transform = `rotate(${extraRot}deg)`;
-          }
-          const span = document.createElement("span");
-          span.className = `card-custom-extra-line ${stExtra.bold ? 'is-bold' : 'is-not-bold'} ${stExtra.italic ? 'is-italic' : ''}`;
-          span.style.color = custom.accentColor;
-          span.style.fontSize = extraSize;
-          span.style.fontWeight = stExtra.bold ? "700" : "400";
-          span.style.fontStyle = stExtra.italic ? "italic" : "normal";
-          span.textContent = line.trim();
-          div.appendChild(span);
-          ensureRotateHandle(div, extraKey);
-          frontCard.appendChild(div);
-        });
-      }
-
-      // 6. Divider Lines (Horizontal HR & Vertical)
-      frontCard.querySelectorAll(".card-element-divider").forEach(el => el.remove());
-      if (Array.isArray(custom.dividerLines)) {
-        custom.dividerLines.forEach((line, idx) => {
-          const dividerKey = `divider-${idx}`;
-          const dividerPos = ep[dividerKey];
-          const divRot = dividerPos?.rotate || 0;
-          const isVert = line.orientation === "vertical";
-          const len = line.length || (isVert ? 60 : 100);
-          const div = document.createElement("div");
-          div.setAttribute("data-drag-element", dividerKey);
-          div.setAttribute("data-divider-index", String(idx));
-          div.setAttribute("data-product-id", productId);
-          div.className = `card-drag-item card-element-divider divider-${line.orientation || 'horizontal'} ${line.style === 'dashed' ? 'is-dashed' : ''} pos-custom`;
-          div.style.setProperty("--divider-len", `${len}px`);
-          div.style.setProperty("--rot", `${divRot}deg`);
-          div.style.color = custom.accentColor;
-          if (dividerPos) {
-            div.style.left = `${dividerPos.x}%`;
-            div.style.top = `${dividerPos.y}%`;
-            div.style.transform = `translate(-50%, -50%) rotate(${divRot}deg)`;
-          } else {
-            div.style.left = "50%";
-            div.style.top = `${50 + idx * 12}%`;
-            div.style.transform = `translate(-50%, -50%) rotate(${divRot}deg)`;
-          }
-          ensureRotateHandle(div, dividerKey);
-          frontCard.appendChild(div);
-        });
-      }
+    const options = {
+      interactiveProductId: productId,
+      selectedElementId,
+      logoUrl: custom.logoPreviewUrl || (custom.logoUrl ? mediaUrl(custom.logoUrl) : ""),
+      oneinfoLogoUrl: logoUrl,
+    };
+    for (const face of ["front", "back"]) {
+      const frame = $(`#product-detail .card-view-${face}`)?.closest(".card-design-viewport");
+      if (frame) frame.outerHTML = renderCardDesign(custom, { ...options, face });
     }
-
-    // 2. Update Back Card (Bottom)
-    const backCard = $("#product-detail .card-view-back");
-    if (backCard) {
-      backCard.style.background = custom.surfaceColor;
-      backCard.style.setProperty("--card-accent", custom.accentColor);
-      backCard.classList.toggle("is-light-surface", light);
-      backCard.classList.toggle("light-card", light);
-      backCard.classList.toggle("dark-card", !light);
-
-      const existingBackMotif = backCard.querySelector(".card-surface-motif");
-      const nextBackMotifHtml = renderBackMotifSvg(custom.surfaceMotif, custom.accentColor);
-      if (existingBackMotif) {
-        if (nextBackMotifHtml) existingBackMotif.outerHTML = nextBackMotifHtml;
-        else existingBackMotif.remove();
-      } else if (nextBackMotifHtml) {
-        backCard.insertAdjacentHTML("afterbegin", nextBackMotifHtml);
-      }
-
-      const backWave = backCard.querySelector(".card-nfc-wave");
-      if (backWave) backWave.style.color = custom.accentColor;
-
-      const qrCenter = backCard.querySelector(".card-back-center-qr");
-      const backQrPos = ep["back-qr"];
-      const stQr = getElementStyle(custom, "back-qr");
-      const qrScale = ((stQr.size || 100) / 100).toFixed(2);
-      const qrRot = stQr.rotate || 0;
-      if (qrCenter) {
-        qrCenter.style.setProperty("--scale", qrScale);
-        qrCenter.style.setProperty("--rot", `${qrRot}deg`);
-        ensureRotateHandle(qrCenter, "back-qr");
-        if (backQrPos && backQrPos.x != null && backQrPos.y != null) {
-          qrCenter.className = "card-drag-item card-back-center-qr pos-custom";
-          qrCenter.style.left = `${backQrPos.x}%`;
-          qrCenter.style.top = `${backQrPos.y}%`;
-          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`;
-        } else {
-          qrCenter.className = "card-drag-item card-back-center-qr";
-          qrCenter.style.left = "";
-          qrCenter.style.top = "";
-          qrCenter.style.transform = `translate(-50%, -50%) scale(${qrScale}) rotate(${qrRot}deg)`;
-        }
-
-        let subEl = qrCenter.querySelector(".card-back-subtitle");
-        if (custom.backSubtitle && custom.backSubtitle.trim()) {
-          if (!subEl) {
-            subEl = document.createElement("span");
-            subEl.className = "card-back-subtitle";
-            qrCenter.appendChild(subEl);
-          }
-          subEl.style.color = custom.accentColor;
-          subEl.textContent = custom.backSubtitle.trim();
-        } else if (subEl) {
-          subEl.remove();
-        }
-      }
-
-      const qrWrap = backCard.querySelector(".card-qr-wrap");
-      if (qrWrap) {
-        qrWrap.className = `card-qr-wrap ${custom.backQrStyle || 'minimal'}`;
-        qrWrap.innerHTML = renderQrSvg(custom.accentColor, custom.backQrStyle || 'minimal');
-      }
-
-      const backFooter = backCard.querySelector(".card-back-footer");
-      if (backFooter) {
-        backFooter.style.display = custom.hasOneinfoLogo !== false ? "flex" : "none";
-      }
-    }
+    fitDetailDesigns();
 
     // Update toolbar inputs and states in studio
     const studio = $(`#product-detail .card-customizer-studio[data-product-id="${productId}"]`);
@@ -1875,6 +1439,16 @@ import "./invoice.css";
       selectedMedia.set(variantId, Number(mediaButton.dataset.media));
       renderRoute(); return;
     }
+    const removeDesign = event.target.closest("[data-remove-design]");
+    if (removeDesign) {
+      const productId = removeDesign.closest(".product").dataset.id;
+      const preview = orderDesigns.get(productId)?.preview;
+      if (preview) URL.revokeObjectURL(preview);
+      orderDesigns.delete(productId);
+      renderRoute();
+      $("[data-design-file]")?.focus({ preventScroll: true });
+      return;
+    }
     const brandingBtn = event.target.closest("[data-custom-branding]");
     if (brandingBtn) {
       const studio = brandingBtn.closest(".card-customizer-studio");
@@ -1925,6 +1499,8 @@ import "./invoice.css";
       current.logoUrl = "";
       current.logoPreviewUrl = "";
       current.logoFileName = "";
+      current.logoUploading = false;
+      current.logoUploadError = "";
       productCustomizations.set(productId, current);
       renderRoute();
       syncCustomCardPreview(productId);
@@ -2415,7 +1991,10 @@ import "./invoice.css";
       if (prop === "layout") {
         current.position = val;
         current.customPos = null;
-        current.elementPositions = {};
+        for (const position of Object.values(current.elementPositions || {})) {
+          delete position.x;
+          delete position.y;
+        }
       }
       const studio = document.querySelector(`.card-customizer-studio[data-product-id="${productId}"]`);
       if (studio && (prop === "surfaceMotif" || prop === "surfaceColor" || prop === "accentColor" || prop === "layout")) {
@@ -2477,8 +2056,10 @@ import "./invoice.css";
       const expectedVariant = product.customizable ? variantPriceForBranding(variant, hasLogo) : variantPrice(variant);
       if (!before || expectedBefore !== expectedVariant) { toast("The price changed. Please review it before adding to cart."); return; }
 
+      const design = product.customizable && product.slug === orderDesignProductSlug ? orderDesigns.get(productId)?.file : undefined;
+      const designFile = design ? { ...design, brandingMode: hasLogo ? "with-logo" : "without-logo" } : null;
       let customization = null;
-      if (product.customizable) {
+      if (product.customizable && !designFile) {
         if (!draft.name || !draft.name.trim()) {
           toast("Please enter your cardholder name to personalize your card.");
           $(`#custom-name-${productId}`)?.focus();
@@ -2488,21 +2069,21 @@ import "./invoice.css";
           button.textContent = "Add to cart";
           return;
         }
-        const stName = getElementStyle(draft, "name");
         customization = {
           name: draft.name.trim(),
           title: (draft.title || "").trim(),
-          extraLines: (draft.extraLines || []).map(l => (l || "").trim()).filter(Boolean),
-          textSize: stName.size || draft.textSize || 14,
+          extraLines: (draft.extraLines || []).map(l => (l || "").trim()),
+          textSize: draft.textSize || 14,
           logoSize: draft.logoSize || 100,
           iconSize: draft.iconSize || 100,
           qrSize: draft.qrSize || 100,
           dividerLines: (draft.dividerLines || []),
           brandingMode: draft.brandingMode || "with-logo",
           hasOneinfoLogo: hasLogo,
-          bold: stName.bold,
-          italic: stName.italic,
-          font: stName.font || draft.font || "sans",
+          ...(draft.bold !== undefined ? { bold: draft.bold } : {}),
+          ...(draft.italic !== undefined ? { italic: draft.italic } : {}),
+          font: draft.font || "sans",
+          ...(draft.elementStyles ? { elementStyles: draft.elementStyles } : {}),
           ...(draft.customPos ? { customPos: draft.customPos } : {}),
           ...(draft.elementPositions && Object.keys(draft.elementPositions).length ? { elementPositions: draft.elementPositions } : {}),
           layout: draft.layout || "left",
@@ -2520,8 +2101,10 @@ import "./invoice.css";
         };
       }
 
-      const nextCart = addCartVariant(cart, product, variant, quantity, customization);
+      const nextCart = addCartVariant(cart, product, variant, quantity, customization, designFile);
+      const added = nextCart.find((item, index) => item !== cart[index]);
       save(storageKey, nextCart); cart = nextCart; renderCart();
+      if (added) trackStorefront("AddToCart", catalogEventDetails([{ productId: product.id, variantId: variant.id, quantity, unitPriceMinor: added.priceMinor }]));
       toast(`${quantity} x ${product.name} · ${variant.name}${customization ? ` (${customization.name})` : ""} added to cart`);
     } catch (error) { toast(error instanceof RangeError ? error.message : "Could not save the cart. Please try again."); }
     finally { addingToCart = false; renderRoute(); }
@@ -2769,40 +2352,92 @@ import "./invoice.css";
       toast("Logo file is too large. Please choose an image under 5 MB.");
       return;
     }
+    const current = productCustomizations.get(productId) ?? defaultCustomization("01");
+    current.logoUploading = true;
+    current.logoUploadError = "";
+    current.logoFileName = file.name;
+    productCustomizations.set(productId, current);
     const reader = new FileReader();
-    reader.onload = e => {
-      const dataUrl = e.target?.result;
-      if (!dataUrl || typeof dataUrl !== "string") return;
-      const current = productCustomizations.get(productId) ?? defaultCustomization("01");
-      current.logoPreviewUrl = dataUrl;
-      current.logoUrl = dataUrl;
-      current.logoFileName = file.name;
-      productCustomizations.set(productId, current);
+    reader.onerror = () => {
+      current.logoUploading = false;
+      current.logoUploadError = "Could not read this logo. Please choose the file again.";
       renderRoute();
-      syncCustomCardPreview(productId);
-
-      // Upload to API in background to obtain clean media URL
-      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-      fetch(`${apiUrl}/api/v1/product-media/custom-logo/${ext}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: file,
-      })
-        .then(res => res.ok ? res.json() : null)
-        .then(data => {
-          if (data?.url) {
-            const updated = productCustomizations.get(productId) ?? current;
-            updated.logoPreviewUrl = dataUrl;
-            updated.logoUrl = data.url;
-            productCustomizations.set(productId, updated);
-          }
-        })
-        .catch(() => {});
+    };
+    reader.onload = async e => {
+      const dataUrl = e.target?.result;
+      if (typeof dataUrl !== "string") return;
+      current.logoPreviewUrl = dataUrl;
+      current.logoUrl = "";
+      renderRoute();
+      const extension = file.name.split(".").pop()?.toLowerCase();
+      const ext = extension === "jpeg" ? "jpg" : extension;
+      try {
+        const response = await fetch(`${apiUrl}/api/v1/product-media/custom-logo/${ext}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: file,
+          signal: AbortSignal.timeout(60_000),
+        });
+        const result = await response.json();
+        if (!response.ok || !result.url) throw new Error(result.message || "Logo upload failed. Please choose the file again.");
+        const updated = productCustomizations.get(productId);
+        if (updated?.logoPreviewUrl === dataUrl) updated.logoUrl = result.url;
+      } catch (error) {
+        const updated = productCustomizations.get(productId);
+        if (updated?.logoPreviewUrl === dataUrl) updated.logoUploadError = error.message || "Logo upload failed. Please choose the file again.";
+      } finally {
+        const updated = productCustomizations.get(productId);
+        if (updated?.logoPreviewUrl === dataUrl) updated.logoUploading = false;
+        renderRoute();
+      }
     };
     reader.readAsDataURL(file);
+    renderRoute();
+  }
+
+  async function uploadSignatureDesign(file, productId) {
+    if (addingToCart || orderDesigns.get(productId)?.uploading) return;
+    const selectedExtension = file.name.split(".").at(-1).toLowerCase();
+    const extension = selectedExtension === "jpeg" ? "jpg" : selectedExtension;
+    const state = { uploading: false };
+    orderDesigns.set(productId, state);
+    if (!file.name.includes(".") || !orderDesignExtensions.includes(extension)) state.error = "Choose a PNG, JPG, PDF, EPS or AI file.";
+    else if (!file.size || file.size > orderDesignMaxBytes) state.error = "Choose a design file up to 10 MB.";
+    if (state.error) {
+      renderRoute();
+      $("[data-design-file]")?.focus({ preventScroll: true });
+      return;
+    }
+    state.uploading = true;
+    renderRoute();
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/product-media/design/${extension}`, {
+        method: "POST",
+        headers: { "content-type": "application/octet-stream" },
+        body: file,
+        signal: AbortSignal.timeout(60_000),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.id) throw new Error(result.message ?? "Upload failed. Please choose the file again.");
+      state.file = { id: result.id, name: file.name.replace(/[/\\\x00-\x1f\x7f]/g, "_").trim().slice(-255) };
+      if (extension === "jpg" || extension === "png") state.preview = URL.createObjectURL(new Blob([file], { type: extension === "jpg" ? "image/jpeg" : "image/png" }));
+    } catch (error) {
+      state.error = error.message || "Upload failed. Please choose the file again.";
+    } finally {
+      state.uploading = false;
+      if (productRoute(location.hash)?.slug === orderDesignProductSlug) {
+        renderRoute();
+        $(state.file ? "[data-remove-design]" : "[data-design-file]")?.focus({ preventScroll: true });
+      }
+    }
   }
 
   $("#product-detail").addEventListener("change", event => {
+    const designInput = event.target.closest("[data-design-file]");
+    if (designInput?.files?.[0]) {
+      void uploadSignatureDesign(designInput.files[0], designInput.closest(".product").dataset.id);
+      return;
+    }
     const fileInput = event.target.closest("[data-custom-file='logo']");
     if (fileInput && fileInput.files && fileInput.files[0]) {
       const studio = fileInput.closest(".card-customizer-studio");
@@ -2967,8 +2602,8 @@ import "./invoice.css";
     const { dragItem, cardFace, productId, elKey } = activeDragItem;
     const rect = cardFace.getBoundingClientRect();
 
-    const halfW = ((dragItem.offsetWidth || 24) / 2 / rect.width) * 100;
-    const halfH = ((dragItem.offsetHeight || 24) / 2 / rect.height) * 100;
+    const halfW = ((dragItem.offsetWidth || 24) / 2 / cardFace.offsetWidth) * 100;
+    const halfH = ((dragItem.offsetHeight || 24) / 2 / cardFace.offsetHeight) * 100;
     const minX = Math.max(1, Math.min(15, Math.round(halfW)));
     const maxX = Math.min(98, Math.max(minX, Math.round(101 - halfW)));
     const minY = Math.max(1, Math.min(15, Math.round(halfH)));
@@ -3149,8 +2784,8 @@ import "./invoice.css";
     const touch = event.touches[0];
     const rect = cardFace.getBoundingClientRect();
 
-    const halfW = ((dragItem.offsetWidth || 24) / 2 / rect.width) * 100;
-    const halfH = ((dragItem.offsetHeight || 24) / 2 / rect.height) * 100;
+    const halfW = ((dragItem.offsetWidth || 24) / 2 / cardFace.offsetWidth) * 100;
+    const halfH = ((dragItem.offsetHeight || 24) / 2 / cardFace.offsetHeight) * 100;
     const minX = Math.max(1, Math.min(15, Math.round(halfW)));
     const maxX = Math.min(98, Math.max(minX, Math.round(101 - halfW)));
     const minY = Math.max(1, Math.min(15, Math.round(halfH)));
@@ -3281,6 +2916,7 @@ import "./invoice.css";
     renderCartItems($(".order-items"));
     const subtotal = cart.reduce((total, item) => total + item.priceMinor * item.quantity, 0);
     $(".order-total").textContent = money.format(subtotal / 100);
+    if (location.hash === "#order-draft") trackCheckout(checkoutItems(cart));
     renderDelivery();
   }
 
@@ -3395,7 +3031,7 @@ import "./invoice.css";
     const needsPayment = dueNow === null ? (method === "COD" ? defaultCodAdvanceMinor > 0 : true) : dueNow > 0;
     const walletNumber = method === "ROCKET" ? (rocketNumber || "01305087389") : (paymentSettings?.bkashNumber || "01760320810");
     const prepared = Boolean(checkout && walletNumber && matchesReservation(checkout) && reservation?.reserved);
-    const canSubmit = !placingOrder && !pendingOrder && Boolean(walletNumber && checkout);
+    const canSubmit = !placingOrder && !updatingCartQuantity && !pendingOrder && Boolean(walletNumber && checkout);
     const displayAmount = dueNow !== null ? dueNow : method === "COD" ? defaultCodAdvanceMinor : total;
 
     const guideBadge = $(".order-payment-guide-title");
@@ -3497,7 +3133,7 @@ import "./invoice.css";
   function checkoutItems(items) {
     return items.map(item => ({
       productId: item.id, variantId: item.variantId, quantity: item.quantity, unitPriceMinor: item.priceMinor,
-      ...(item.customization ? { customization: item.customization } : {}),
+      ...(item.designFile ? { designFile: item.designFile } : item.customization ? { customization: item.customization } : {}),
     }));
   }
 
@@ -3509,6 +3145,7 @@ import "./invoice.css";
     orderSubmit.disabled = retryButton.disabled = true;
     retryButton.textContent = "Checking order…";
     try {
+      if (request.payment?.transactionId) trackPaymentInfo(request.requestId, request.items);
       const response = await fetch(`${apiUrl}/api/v1/orders`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -3538,6 +3175,7 @@ import "./invoice.css";
         throw new Error("Confirmation unavailable");
       }
       if (!result.id || !Number.isSafeInteger(result.totalMinor)) throw new Error("Invalid order receipt");
+      trackPurchase(result, request.items);
       save(receiptKey, result);
       if (JSON.stringify(checkoutItems(load(storageKey, []))) === JSON.stringify(request.items)) {
         save(storageKey, []);
@@ -3736,7 +3374,7 @@ import "./invoice.css";
   orderForm.addEventListener("submit", async event => {
     event.preventDefault();
     const preparing = Boolean(preparePayment && event.submitter === preparePayment);
-    if (placingOrder || pendingOrder || !cart.length || (preparing ? preparePayment?.disabled : orderSubmit.disabled)) return;
+    if (placingOrder || updatingCartQuantity || pendingOrder || !cart.length || (preparing ? preparePayment?.disabled : orderSubmit.disabled)) return;
     const fields = readCheckoutFields();
     const { addressLine, district, postal, customer } = fields;
     if (!customer.name) return setOrderMessage("Enter your full name.", orderForm.elements.name);
@@ -3885,6 +3523,7 @@ import "./invoice.css";
 
   $("#year").textContent = String(new Date().getFullYear());
   $(".checkout-trigger").disabled = true;
+  initializeStorefrontPixel(() => renderRoute());
   renderRoute();
   void loadProducts();
 })();

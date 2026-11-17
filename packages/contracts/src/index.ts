@@ -355,6 +355,7 @@ export function productGallery(variants: ProductVariant[], selected: ProductVari
     .flatMap(variant => productMedia(variant).map((media, index) => ({variant, media, index})));
 }
 export const variantPrice = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) => v.salePriceMinor ?? v.priceMinor;
+export const catalogVariantId = (productId: string, variantId: string) => `${productId}_${variantId}`;
 export const discountPercent = (v: Pick<ProductVariant, "priceMinor" | "salePriceMinor">) =>
   v.salePriceMinor === null || v.priceMinor <= 0 ? 0 : Math.floor((v.priceMinor - v.salePriceMinor) * 100 / v.priceMinor);
 
@@ -556,13 +557,26 @@ export function checkoutDeliveryZone(district: string, address: string): Shippin
   return deliveryZone(district, suggestDhakaArea(address) ?? "city");
 }
 
+export const orderDesignExtensions = ["png", "jpg", "pdf", "eps", "ai"] as const;
+export const orderDesignMaxBytes = 10 * 1024 * 1024;
+export const orderDesignProductSlug = "oneinfo-signature";
+export const OrderDesignFileIdSchema = z.string().regex(/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\.(png|jpg|pdf|eps|ai)$/);
+export const OrderDesignFileSchema = z.object({
+  id: OrderDesignFileIdSchema,
+  name: z.string().trim().min(1).max(255).regex(/^[^/\\\x00-\x1f\x7f]+$/),
+  brandingMode: z.enum(["with-logo", "without-logo"]),
+}).refine(file => file.name.toLowerCase().replace(/\.jpeg$/, ".jpg").endsWith(file.id.slice(file.id.lastIndexOf("."))),
+  "The design file name and format must match.");
+export type OrderDesignFile = z.infer<typeof OrderDesignFileSchema>;
+
 const OrderLineSchema = z.object({
   productId: z.uuid(),
   variantId: z.uuid(),
   quantity: z.number().int().min(1).max(99),
   unitPriceMinor: z.number().int().min(1).max(100_000_000),
   customization: ProductCustomizationSchema.nullable().optional(),
-});
+  designFile: OrderDesignFileSchema.optional(),
+}).refine(line => !line.customization || !line.designFile, "Choose either uploaded artwork or manual customization.");
 export const CouponCodeSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9][A-Z0-9_-]{2,31}$/);
 export const StoreCouponSchema = z.object({
   code: CouponCodeSchema,
@@ -604,7 +618,7 @@ export const PlaceOrderSchema = z.object({
     senderNumber: PaymentSenderNumberSchema.optional(),
   }).optional(),
   items: z.array(OrderLineSchema).min(1).max(50).refine(
-    items => new Set(items.map(item => `${item.productId}:${item.variantId}:${item.customization ? JSON.stringify(item.customization) : ""}`)).size === items.length,
+    items => new Set(items.map(item => `${item.productId}:${item.variantId}:${item.designFile ? `${item.designFile.id}:${item.designFile.brandingMode}` : item.customization ? JSON.stringify(item.customization) : ""}`)).size === items.length,
     "Order lines must be unique",
   ),
 });

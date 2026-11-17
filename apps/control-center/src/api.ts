@@ -1,4 +1,4 @@
-import { resolveProductImageUrl } from "@oneinfo/contracts";
+import { resolveProductImageUrl, type OrderDesignFile } from "@oneinfo/contracts";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 let renewal: Promise<string> | undefined;
@@ -41,4 +41,18 @@ export function productMediaUrl(path?: string) {
   const source = resolveProductImageUrl(path);
   const base = source.startsWith("/api/v1/product-media/") ? API_URL : import.meta.env.VITE_STOREFRONT_URL ?? "http://127.0.0.1:5175";
   return new URL(source, base || window.location.origin).href;
+}
+
+export async function downloadOrderDesign(file: OrderDesignFile, token: string) {
+  const response = await fetch(`${API_URL}/api/v1/product-media/design/${encodeURIComponent(file.id)}`, {
+    headers: { authorization: `Bearer ${localStorage.getItem("oneinfo.admin.token") || token}` },
+  });
+  if (response.status === 401) window.dispatchEvent(new Event("oneinfo-session-expired"));
+  if (!response.ok) throw new Error(response.status === 404 ? "Design file not found." : "Could not download the design file.");
+  const href = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = file.name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
