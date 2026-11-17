@@ -14,7 +14,7 @@ vi.mock("../src/config.js", () => ({
   },
 }));
 
-it("sends an inline logo and escaped receipt once, with an accurate pending payment status", async () => {
+it("sends a brief escaped confirmation with a tracking link and inline logo only", async () => {
   sendMail.mockResolvedValue({ accepted: ["buyer@example.com"] });
   const order: StoreOrder = {
     id: "00000000-0000-4000-8000-000000000001", createdAt: new Date().toISOString(), paymentMethod: "COD",
@@ -38,27 +38,20 @@ it("sends an inline logo and escaped receipt once, with an accurate pending paym
   expect(message.attachments[0].content.subarray(0, 8)).toEqual(Buffer.from("89504e470d0a1a0a", "hex"));
   expect(message.html).toContain('src="cid:oneinfo-logo@oneinfo.online"');
   expect(message.html).toContain("&lt;Buyer &amp; Co&gt;");
-  expect(message.html).toContain("Essential &amp; Co");
-  expect(message.html).toContain("House 12 &lt;West&gt;");
-  expect(message.html).toContain("bKash payment pending verification: BDT 100.00");
-  expect(message.html).toContain('bgcolor="#173a34"');
-  expect(message.html).toContain("Set up your card after delivery");
-  expect(message.html).toContain("20261113-ABC123");
-  expect(message.text).toContain("Remaining on delivery after verification: BDT 449.10");
+  expect(message.html).toContain("Thanks for your order.");
+  expect(message.attachments).toHaveLength(1);
   expect(message.html).toMatch(/href="https:\/\/www\.oneinfo\.online\/#track\/00000000-0000-4000-8000-000000000001\.[a-zA-Z0-9_-]{43}"/);
-  expect(message.html).toMatch(/href="https:\/\/www\.oneinfo\.online\/#invoice\/00000000-0000-4000-8000-000000000001\.[a-zA-Z0-9_-]{43}"/);
-  expect(message.html.indexOf("Track your order")).toBeLessThan(message.html.indexOf("Order summary"));
-  expect(await sendOrderConfirmation({ ...order, paymentStatus: "VERIFIED" }, true, true)).toBe("accepted");
-  const verified = sendMail.mock.lastCall![0];
-  expect(verified.html).toContain("Verified bKash payment: BDT 100.00");
-  expect(verified.text).toContain("Remaining on delivery: BDT 449.10");
+  for (const body of [message.text, message.html]) {
+    expect(body).toContain("Track your order");
+    expect(body).not.toMatch(/Order ID|Invoice|20261113-ABC123|Order summary|House 12/i);
+  }
   sendMail.mockRejectedValueOnce(new Error("SMTP unavailable"));
   expect(await sendOrderConfirmation(order, true)).toBe("failed");
 });
 
 it("sends branded payment and delivery updates with the correct amounts and private link", async () => {
   sendMail.mockClear().mockResolvedValue({ accepted: ["buyer@example.com"] });
-  const order = { id: "test-order", customer: { name: "Buyer", email: "buyer@example.com", phone: "01700000000", note: "" }, totalMinor: 135000, paymentAmountMinor: 10000 };
+  const order = { id: "test-order", customer: { name: "Buyer", email: "buyer@example.com", phone: "01700000000", note: "" }, paymentMethod: "COD" as const, totalMinor: 135000, paymentAmountMinor: 10000 };
   expect(await sendPaymentVerifiedEmail(order)).toBe(true);
   expect(await sendPaymentVerifiedEmail({ ...order, paymentAmountMinor: order.totalMinor })).toBe(true);
   expect(await sendReviewInvitation(order, "private-token")).toBe(true);
