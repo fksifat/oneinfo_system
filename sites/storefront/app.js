@@ -3400,23 +3400,42 @@ import "./invoice.css";
 
     const guideBadge = $(".order-payment-guide-title");
     const guideDue = $(".order-payment-guide-due-val");
-    const walletBox = $(".order-payment-wallet-number");
+    const bkashBox = $('.order-payment-wallet-box[data-wallet="bkash"]');
+    const rocketBox = $('.order-payment-wallet-box[data-wallet="rocket"]');
+    const bkashNumEl = $(".order-wallet-num-bkash");
+    const rocketNumEl = $(".order-wallet-num-rocket");
     const stepsEl = $(".order-payment-steps");
+
     if (guideBadge) {
       guideBadge.textContent = method === "BKASH" ? "bKash" : method === "ROCKET" ? "Rocket" : "Cash on Delivery";
     }
     if (guideDue) {
       guideDue.textContent = method === "COD" ? `${money.format(displayAmount / 100)} Advance` : money.format(displayAmount / 100);
     }
-    if (walletBox) {
-      walletBox.textContent = walletNumber;
-    }
-    if (stepsEl) {
-      if (method === "BKASH" || method === "ROCKET") {
-        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)}</strong> via ${paymentMethodLabels[method]} (Send Money) to the number above, then enter the TrxID below.`;
-      } else {
+    const effectiveBkashNumber = paymentSettings?.bkashNumber || "01760320810";
+    const effectiveRocketNumber = rocketNumber || "01305087389";
+    if (bkashNumEl) bkashNumEl.textContent = effectiveBkashNumber;
+    if (rocketNumEl) rocketNumEl.textContent = effectiveRocketNumber;
+
+    if (method === "BKASH") {
+      if (bkashBox) bkashBox.hidden = false;
+      if (rocketBox) rocketBox.hidden = true;
+      if (stepsEl) {
+        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)}</strong> via bKash (Send Money) to the number above, then enter the TrxID below.`;
+      }
+    } else if (method === "ROCKET") {
+      if (bkashBox) bkashBox.hidden = true;
+      if (rocketBox) rocketBox.hidden = false;
+      if (stepsEl) {
+        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)}</strong> via Rocket (Send Money) to the number above, then enter the TrxID below.`;
+      }
+    } else {
+      if (bkashBox) bkashBox.hidden = false;
+      if (rocketBox) rocketBox.hidden = Boolean(paymentSettings && !rocketNumber);
+      if (stepsEl) {
         const remaining = Math.max(0, total - displayAmount);
-        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)} advance</strong> to confirm your order.${remaining > 0 ? ` Remaining <strong>${money.format(remaining / 100)}</strong> is due on delivery.` : ""}`;
+        const hasRocket = Boolean(!paymentSettings || rocketNumber);
+        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)} advance</strong> via ${hasRocket ? "bKash or Rocket" : "bKash"} to confirm your order.${remaining > 0 ? ` Remaining <strong>${money.format(remaining / 100)}</strong> is due on delivery.` : ""}`;
       }
     }
 
@@ -3692,22 +3711,22 @@ import "./invoice.css";
     if (event.target.name === "paymentMethod") senderField.value = transactionField.value = "";
     renderDelivery();
   });
-  const copyBtn = $(".order-payment-copy-btn");
-  if (copyBtn) {
-    copyBtn.addEventListener("click", () => {
-      const num = $(".order-payment-wallet-number")?.textContent?.trim();
+  $$(".order-payment-copy-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const box = btn.closest(".order-payment-wallet-box");
+      const num = box?.querySelector(".order-payment-wallet-number")?.textContent?.trim();
       if (!num) return;
       navigator.clipboard?.writeText(num).then(() => {
-        copyBtn.classList.add("copied");
-        const text = $(".order-copy-text", copyBtn);
+        btn.classList.add("copied");
+        const text = $(".order-copy-text", btn);
         if (text) text.textContent = "Copied!";
         setTimeout(() => {
-          copyBtn.classList.remove("copied");
+          btn.classList.remove("copied");
           if (text) text.textContent = "Copy";
         }, 2000);
       }).catch(() => {});
     });
-  }
+  });
   transactionField.addEventListener("keydown", event => {
     if (event.key !== "Enter" || event.isComposing) return;
     event.preventDefault();

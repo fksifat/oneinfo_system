@@ -1003,6 +1003,8 @@ test("storefront checkout payment section directly displays payment instructions
   assert.match(indexHtml, /class="order-payment-options"/);
   assert.match(indexHtml, /class="order-payment-guide"/);
   assert.match(indexHtml, /class="order-payment-wallet-box"/);
+  assert.match(indexHtml, /data-wallet="bkash"/);
+  assert.match(indexHtml, /data-wallet="rocket"/);
   assert.match(indexHtml, /class="order-payment-copy-btn"/);
   assert.match(indexHtml, /class="order-payment-inputs-grid"/);
   assert.match(indexHtml, /order-payment-cod-mark/);
@@ -1010,6 +1012,8 @@ test("storefront checkout payment section directly displays payment instructions
   // app.js handles direct payment guide, COD advance requirement, copy button, and seamless reservation on submit
   assert.match(appJs, /order-payment-guide-title/);
   assert.match(appJs, /order-payment-wallet-number/);
+  assert.match(appJs, /order-wallet-num-bkash/);
+  assert.match(appJs, /order-wallet-num-rocket/);
   assert.match(appJs, /order-payment-copy-btn/);
   assert.match(appJs, /advance required/);
   assert.match(appJs, /transactionField\.value\.toUpperCase\(\)/);
