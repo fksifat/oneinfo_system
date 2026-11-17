@@ -3807,6 +3807,8 @@ import "./invoice.css";
           placingOrder = false;
           renderDelivery();
           return setOrderMessage(error instanceof Error ? error.message : "Could not reserve your order.");
+        } finally {
+          placingOrder = false;
         }
       }
       request.payment.transactionId = transaction.data;
