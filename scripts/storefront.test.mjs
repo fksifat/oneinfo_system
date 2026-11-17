@@ -10,6 +10,7 @@ import {
   isColorLight, defaultCustomization, renderSurfaceMotifSvg,
   renderBackMotifSvg, renderQrSvg,
 } from "../sites/storefront/catalog.js";
+import { renderCardDesign, getElementStyle } from "../sites/storefront/card-design.js";
 import { CustomerProfileSchema, ProductCustomizationSchema, PROFILE_BIO_MAX_LENGTH } from "@oneinfo/contracts";
 
 const source = readFileSync(new URL("../sites/oneinfo-storefront/dist/app.js", import.meta.url), "utf8");
@@ -399,7 +400,7 @@ test("customization supports With Oneinfo Logo vs Without Oneinfo Logo with admi
   const appSrc = readFileSync("sites/storefront/app.js", "utf8");
   assert.match(appSrc, /card-logo-placeholder.*YOUR LOGO/s);
   // 2. Back footer brand labeling is hidden when hasOneinfoLogo is false
-  assert.match(appSrc, /card-back-footer.*custom\.hasOneinfoLogo !== false/s);
+  assert.match(readFileSync("sites/storefront/card-design.js", "utf8"), /card-back-footer.*custom\.hasOneinfoLogo !== false/s);
 
   // 3. EPS print generator contract
   const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
@@ -442,12 +443,12 @@ test("draggable card elements support rotation interactively, in admin preview, 
   assert.match(cssSrc, /\.compact-prop-row/);
   assert.match(cssSrc, /rotate\(var\(--rot, 0deg\)\)/);
 
-  // Admin Card Preview contains rotation in styles
-  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
-  assert.match(adminSrc, /rotate\(\$\{logoRot\}deg\)/);
-  assert.match(adminSrc, /rotate\(\$\{signRot\}deg\)/);
-  assert.match(adminSrc, /rotate\(\$\{nameRot\}deg\)/);
-  assert.match(adminSrc, /rotate\(\$\{qrRot\}deg\)/);
+  const sharedSource = readFileSync("sites/storefront/card-design.js", "utf8");
+  for (const key of ["logo", "sign", "name", "back-qr"]) {
+    const custom = { name: "Rotated card", elementPositions: { [key]: { x: 40, y: 50, rotate: 35 } } };
+    assert.match(renderCardDesign(custom, { face: key === "back-qr" ? "back" : "front" }), /--rot:35deg/);
+  }
+  assert.match(sharedSource, /getElementStyle/);
 
   // EPS generator contains PostScript rotation transformations
   const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
@@ -494,12 +495,17 @@ test("customization quick inspector supports font dropdown, bold and italic text
   assert.match(cssSrc, /\.card-custom-name\.is-bold/);
   assert.match(cssSrc, /\.is-italic/);
 
-  // Admin Card Preview supports bold and italic font rendering
-  const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
-  assert.match(adminSrc, /isNameBold \? 700 : 400/);
-  assert.match(adminSrc, /isNameItalic \? "italic" : "normal"/);
-  assert.match(adminSrc, /isTitleBold \? 700 : 400/);
-  assert.match(adminSrc, /isTitleItalic \? "italic" : "normal"/);
+  assert.deepEqual(
+    ["name", "title", "extra-0"].map(key => {
+      const { bold, italic, font, size } = getElementStyle(parsed, key);
+      return { bold, italic, font, size };
+    }),
+    [
+      { bold: true, italic: false, font: "serif", size: 16 },
+      { bold: false, italic: true, font: "mono", size: 10 },
+      { bold: true, italic: true, font: "sans", size: 9 },
+    ],
+  );
 
   // EPS generator supports PostScript font variants (Bold, Oblique, Italic)
   const epsSrc = readFileSync("apps/control-center/src/eps-generator.ts", "utf8");
@@ -528,12 +534,9 @@ test("customizable product in catalog grid shows Limitless color, infinity optio
 
 test("admin card preview and storefront accurately reflect exact design, custom element positions, and media URLs", () => {
   const adminSrc = readFileSync("apps/control-center/src/AdminCardPreview.tsx", "utf8");
-  assert.match(adminSrc, /hasLogoPos = epLogo\?\.x != null && epLogo\?\.y != null/);
-  assert.match(adminSrc, /hasSignPos = epSign\?\.x != null && epSign\?\.y != null/);
-  assert.match(adminSrc, /hasNamePos = epName\?\.x != null && epName\?\.y != null/);
-  assert.match(adminSrc, /hasTitlePos = epTitle\?\.x != null && epTitle\?\.y != null/);
-  assert.match(adminSrc, /hasQrPos = epQr\?\.x != null && epQr\?\.y != null/);
-  assert.match(adminSrc, /productMediaUrl\(custom\.logoUrl\)/);
+  assert.match(adminSrc, /renderCardDesign/);
+  assert.match(adminSrc, /observeCardDesigns/);
+  assert.match(adminSrc, /productMediaUrl\(custom.logoUrl/);
 
   const ordersSrc = readFileSync("apps/control-center/src/Orders.tsx", "utf8");
   assert.match(ordersSrc, /productMediaUrl\(item\.customization\.logoUrl\)/);
@@ -543,8 +546,21 @@ test("admin card preview and storefront accurately reflect exact design, custom 
 
   const appSrc = readFileSync("sites/storefront/app.js", "utf8");
   assert.doesNotMatch(appSrc, /\{ x: 50, y: 50/);
-  assert.match(appSrc, /logoPos = \(ep\.logo && ep\.logo\.x != null/);
-  assert.match(appSrc, /namePos = \(ep\.name && ep\.name\.x != null/);
+  assert.match(appSrc, /renderCardDesign/);
+  assert.match(appSrc, /observeCardDesigns/);
+  const design = ProductCustomizationSchema.parse({
+    name: "Centered card", layout: "column", extraLines: ["", "Second line"],
+    elementStyles: { title: { size: 12, italic: true } },
+    elementPositions: { name: { x: 0, y: 50, rotate: 35 }, "extra-1": { x: 50, y: 80 }, logo: { rotate: 10 } },
+  });
+  assert.match(renderCardDesign(design, { face: "front" }), /left:0%; top:50%; --rot:35deg/);
+  assert.match(renderCardDesign(design, { face: "front" }), /data-design-element="extra-1"/);
+  assert.doesNotMatch(renderCardDesign(design, { face: "front" }), /undefined%/);
+  assert.equal(getElementStyle(design, "title").size, 12);
+  assert.equal(getElementStyle(design, "title").italic, true);
+  assert.match(renderCardDesign({ name: '"><script>evil()</script>' }, { face: "front" }), /&lt;script&gt;/);
+  assert.doesNotMatch(renderCardDesign({ name: "Card", accentColor: '#fff"><script>' }, { face: "front" }), /<script>/);
+
 });
 
 test("storefront supports product category filter pills and admin category assignment", () => {
