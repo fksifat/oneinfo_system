@@ -1,17 +1,12 @@
 import type { StoreOrder } from "@oneinfo/contracts";
 
-export type OrderStage = "payment" | "packing" | "qc" | "processing" | "shipping" | "delivery";
-const stageIds: OrderStage[] = ["payment", "packing", "qc", "processing", "shipping", "delivery"];
-
 const arrowSvg = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M4 12h15m-5-5 5 5-5 5" />
   </svg>
 );
 
-export function OrderTrackingPipeline({ order, compact = false, selectedStage, controls, onStageSelect }: {
-  order: StoreOrder; compact?: boolean; selectedStage?: OrderStage; controls?: string; onStageSelect?: (stage: OrderStage) => void;
-}) {
+export function OrderTrackingPipeline({ order }: { order: StoreOrder }) {
   const cards = order.cards ?? {
     total: order.items?.reduce((sum, item) => sum + item.quantity, 0) || 1,
     qrGenerated: order.assignedCards?.filter(c => c.qcStatus === "PASSED" || c.publicSlug).length || 0,
@@ -43,7 +38,7 @@ export function OrderTrackingPipeline({ order, compact = false, selectedStage, c
   const doneCount = stages.filter(s => s.done).length;
 
   return (
-    <div className={`admin-tracking-pipeline ${compact ? "is-compact" : ""}`}>
+    <div className="admin-tracking-pipeline">
       <div className="pipeline-header">
         <div className="pipeline-title-group">
           <span className="pipeline-kicker">LIVE CARD JOURNEY</span>
@@ -54,16 +49,12 @@ export function OrderTrackingPipeline({ order, compact = false, selectedStage, c
           <span className="pipeline-percent">{Math.round((doneCount / 6) * 100)}%</span>
         </div>
       </div>
-      {onStageSelect && <p className="pipeline-instruction">Select a stage to open its actions.</p>}
       <ol className="pipeline-stages">
         {stages.map((stage, i) => {
-          const id = stageIds[i]!;
           const state = isCancelled && !stage.done ? "cancelled" : stage.done ? "done" : i === activeIndex ? "current" : "upcoming";
-          const Card = onStageSelect ? "button" : "div";
           return (
-            <li key={id} className="pipeline-stage-item" data-state={state}>
-              <Card className="pipeline-card" {...(onStageSelect && { type: "button", "aria-controls": controls,
-                "aria-pressed": selectedStage === id, "aria-label": `${stage.title} actions`, onClick: () => onStageSelect(id) })}>
+            <li key={stage.title} className="pipeline-stage-item" data-state={state}>
+              <div className="pipeline-card">
                 <span className="pipeline-card-top">
                   <span className="pipeline-badge" aria-hidden="true">{stage.done ? "✓" : `0${i + 1}`}</span>
                   <small>{stage.sub}</small>
@@ -71,7 +62,7 @@ export function OrderTrackingPipeline({ order, compact = false, selectedStage, c
                 <strong className="pipeline-stage-name">{stage.title}</strong>
                 <span className="pipeline-note">{stage.note}</span>
                 <span className="pipeline-meta">{stage.meta}</span>
-              </Card>
+              </div>
               {i < stages.length - 1 && (
                 <span className={`pipeline-arrow ${stage.done ? "is-done" : state === "current" ? "is-active" : ""}`} aria-hidden="true">
                   {arrowSvg}

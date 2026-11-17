@@ -1653,18 +1653,33 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   gap: 16px;
 }
 
-.store-order-dialog .pipeline-stages {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+.order-stage-nav {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
-.store-order-dialog .pipeline-card {
-  min-height: 60px;
-  padding: 7px 8px;
+.order-stage-nav button {
+  min-height: 44px;
+  padding: 6px 2px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  color: var(--ink);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 750;
+  cursor: pointer;
 }
 
-.store-order-dialog :is(.pipeline-arrow, .pipeline-card-top small, .pipeline-note, .pipeline-meta, .pipeline-kicker) {
-  display: none;
+.order-stage-nav button[aria-pressed="true"] {
+  border-color: #173d45;
+  background: #173d45;
+  color: #fff;
+}
+
+.order-stage-nav button:hover {
+  border-color: #27849a;
 }
 
 /* Operations Deck (Print & Packing) */
@@ -1673,7 +1688,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 16px;
 }
-.order-work-panels[hidden] { display: none; }
+.order-work-panels[hidden], .order-work-panels:empty, .order-stage-actions .store-order-actions:empty { display: none; }
 .order-print,
 .order-packing {
   background: #ffffff;
@@ -1698,40 +1713,35 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 /* Structured Order Info Cards */
 .order-info-cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
 }
 .order-info-card {
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 18px 20px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 6px;
   box-shadow: 0 1px 3px rgba(16, 45, 66, 0.03);
 }
 .order-info-card-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--border-light);
-}
-.order-card-icon {
-  font-size: 1rem;
 }
 .order-info-card-head h3 {
   margin: 0;
   font-size: .84rem;
   font-weight: 800;
-  letter-spacing: .06em;
-  text-transform: uppercase;
   color: var(--ink);
 }
 .order-info-card dl {
   display: grid;
-  gap: 8px;
+  gap: 2px;
   margin: 0;
   padding: 0;
   background: transparent;
@@ -1745,11 +1755,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   border-bottom: 0;
 }
 .order-info-card dt {
-  margin-bottom: 3px;
-  font-size: .68rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: .06em;
+  margin-bottom: 2px;
+  font-size: .73rem;
+  font-weight: 650;
   color: var(--text-muted);
 }
 .order-info-card dd {
@@ -1767,25 +1775,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   border-radius: 4px;
   color: #1e293b;
 }
-.order-slug-link {
-  font-weight: 750;
-  color: var(--interactive);
-  text-decoration: none;
-}
-.order-slug-link:hover {
-  text-decoration: underline;
-}
-.qc-badge {
-  display: inline-block;
-  padding: 2px 7px;
-  border-radius: 100px;
-  font-size: .66rem;
-  font-weight: 800;
-  background: #ecfdf5;
-  color: #047857;
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  margin-left: 6px;
-}
 .order-contact-email {
   color: var(--text-muted);
   font-size: .78rem;
@@ -1800,11 +1789,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 }
 .order-external-link {
   display: inline-flex;
+  align-self: flex-start;
   align-items: center;
   gap: 4px;
   font-size: .78rem;
   font-weight: 750;
-  color: var(--interactive);
+  color: #173d45;
   text-decoration: none;
   background: #eef8fa;
   padding: 4px 10px;
@@ -1936,7 +1926,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   scroll-margin-block: 24px;
 }
 .order-stage-actions h3, .order-stage-actions > p { margin: 0; }
-.order-stage-actions:focus-visible, button.pipeline-card:focus-visible {
+.order-stage-actions:focus-visible, .order-stage-nav button:focus-visible {
   outline: 2px solid #27849a;
   outline-offset: 3px;
 }
@@ -2213,7 +2203,6 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
 /* Responsive Adjustments for Orders */
 @media (max-width: 900px) {
   .order-filter-form { grid-template-columns: 1fr 1fr; }
-  .order-info-cards { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {
@@ -2224,7 +2213,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--interactive); bo
   .store-order-dialog { width: 100%; max-width: 100%; height: 100dvh; max-height: 100%; margin: 0; border: 0; border-radius: 0; }
   .store-order-dialog-header { padding: 12px; }
   .store-order-content { padding: 12px 12px 20px; }
-  .store-order-dialog .pipeline-stages { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .order-info-cards { grid-template-columns: minmax(0, 1fr); }
   .orders-filter-container { padding: 12px; }
 }
 
@@ -4152,10 +4141,6 @@ button.submit-lead-btn:disabled {
   border-radius: 12px;
   background: #f8faf9;
 }
-.admin-tracking-pipeline.is-compact {
-  margin: 12px 0 16px;
-  padding: 14px;
-}
 .pipeline-header {
   display: flex;
   flex-wrap: wrap;
@@ -4233,15 +4218,6 @@ button.submit-lead-btn:disabled {
   flex-direction: column;
   gap: 4px;
 }
-button.pipeline-card {
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-.pipeline-instruction { margin: 0 0 10px; color: var(--text-muted); font-size: .78rem; }
-.pipeline-stage-item button.pipeline-card:hover { border-color: #27849a; }
-.pipeline-stage-item button.pipeline-card[aria-pressed="true"] { box-shadow: inset 0 -3px #27849a; }
 .pipeline-card-top {
   display: flex;
   align-items: center;

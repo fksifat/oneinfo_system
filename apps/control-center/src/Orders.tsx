@@ -3,7 +3,6 @@ import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { bkashNumber, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api, productMediaUrl } from "./api.js";
-import { OrderTrackingPipeline, type OrderStage } from "./OrderTrackingPipeline.js";
 import { downloadOrderEps } from "./eps-generator.js";
 import { AdminCardPreview } from "./AdminCardPreview.js";
 
@@ -14,15 +13,18 @@ const path = "/api/v1/orders";
 const searchFields = ["payment", "delivery", "qr"] as const;
 const needsPacking = (order: StoreOrder) => order.activationMethod === "ORDER_SECRET" ? !order.packedAt : Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
-const stageActionTitles: Record<OrderStage, string> = {
-  payment: "Order received", packing: "Prepare the cards", qc: "NFC & quality checks",
-  processing: "Order processing", shipping: "Courier handoff", delivery: "Delivery confirmation",
-};
+const orderStages = [
+  { id: "payment", label: "Received", title: "Order received" },
+  { id: "processing", label: "Processing", title: "Order processing" },
+  { id: "shipping", label: "Shipped", title: "Courier handoff" },
+  { id: "delivery", label: "Delivered", title: "Delivery confirmation" },
+] as const;
+type OrderStage = typeof orderStages[number]["id"];
 
 function nextOrderStage(order: StoreOrder): OrderStage {
   if (order.status === "CANCELLED" || order.status === "AWAITING_PAYMENT" || order.paymentStatus === "PENDING_VERIFICATION") return "payment";
   if (order.status === "SHIPPED" || order.status === "DELIVERED") return "delivery";
-  if (needsPacking(order) || order.qrAllocation?.status === "AWAITING_QR" && !order.invoiceNumber) return "packing";
+  if (needsPacking(order) || order.qrAllocation?.status === "AWAITING_QR" && !order.invoiceNumber) return "processing";
   return order.status === "RECEIVED" ? "processing" : "shipping";
 }
 
@@ -452,14 +454,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
       {selectedOrder && (() => {
         const order = selectedOrder;
           const deepLink = requestedOrder === order.id ? requestedTask : null;
-          const stage = selectedStages[order.id] ?? (deepLink === "print" ? "packing" : deepLink === "packing" || deepLink === "payment" ? deepLink : nextOrderStage(order));
+          const packingLink = deepLink === "print" || deepLink === "packing";
+          const stage = selectedStages[order.id] ?? (packingLink ? "processing" : deepLink === "payment" ? "payment" : nextOrderStage(order));
           const actionId = `order-actions-${order.id}`;
           const closed = order.status === "CANCELLED" || order.status === "AWAITING_PAYMENT";
           const paid = order.paymentStatus !== "PENDING_VERIFICATION";
           const notice = actionNotice?.orderId === order.id && actionNotice.stage === stage ? actionNotice : undefined;
           const chooseStage = (value: OrderStage) => {
             selectStage(order.id, value);
-            requestAnimationFrame(() => document.getElementById(actionId)?.focus());
+            requestAnimationFrame(() => document.getElementById(actionId)?.focus({ preventScroll: true }));
           };
           const quantity = order.items.reduce((sum, item) => sum + item.quantity, 0);
           const busy = Boolean(delivering || verifyingPayment || refreshingOrder);
@@ -477,33 +480,21 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                 <button type="button" className="quiet" disabled={busy} onClick={() => void refreshOrder(order.id)}>{refreshingOrder ? "Refreshing…" : "Refresh order"}</button>
               </div>
               {detailError?.id === order.id && <p className="store-order-notice is-error" role="alert">{detailError.text}</p>}
-              <OrderTrackingPipeline order={order} compact selectedStage={stage} controls={actionId} onStageSelect={chooseStage} />
+              <div className="order-stage-nav" role="group" aria-label="Order stages">
+                {orderStages.map(({ id, label }) => <button key={id} type="button" aria-controls={actionId}
+                  aria-pressed={stage === id} onClick={() => chooseStage(id)}>{label}</button>)}
+              </div>
 
               <section className="store-order-actions-bar order-stage-actions" id={actionId} tabIndex={-1} aria-labelledby={`${actionId}-title`}>
-                <h3 id={`${actionId}-title`}>{stageActionTitles[stage]}</h3>
+                <h3 id={`${actionId}-title`}>{orderStages.find(item => item.id === stage)?.title}</h3>
                 {notice && <p className={`store-order-notice${notice.error ? " is-error" : ""}`} role={notice.error ? "alert" : "status"}>{notice.text}</p>}
                 {closed && <p>{order.status === "CANCELLED" ? "This order was cancelled." : "Waiting for the customer to submit payment details."}</p>}
                 {stage === "payment" && !closed && (paid ? <p>{order.paymentStatus === "VERIFIED" ? "bKash payment is verified." : "Order received. No advance payment is required."}</p>
                   : <p>Check the bKash transaction before verifying payment.</p>)}
-                <div className="order-work-panels" hidden={stage !== "packing" || closed}>
-                  {!order.invoiceNumber && <OrderPrint order={order} token={token} onChange={() => void refreshOrder(order.id)}
-                    startCardId={deepLink === "print" ? params.get("card") : null} initiallyOpen />}
-                  <OrderPacking order={order} token={token} onChange={() => refreshOrder(order.id)} initiallyOpen />
-                  {!closed && (order.status === "SHIPPED" || order.status === "DELIVERED") && <p>The order has left packing.</p>}
-                </div>
-                {stage === "qc" && !closed && <>
-                  <p>{order.activationMethod === "ORDER_SECRET"
-                    ? "Use printed, NFC-written and QC-passed stock. Confirm the package after checking the cards you're sending."
-                    : "Verify each physical card in the production console. The timeline updates when its quality check passes."}</p>
-                  <div className="store-order-actions"><a href="#production">Open NFC &amp; QR operations</a>
-                    {order.activationMethod !== "ORDER_SECRET" && <a href="?work=qc#tracking">Open the QC work queue</a>}
-                    {order.activationMethod === "ORDER_SECRET" && <button type="button" className="button-action button-action-primary" onClick={() => chooseStage("packing")}>Open packing checklist</button>}
-                  </div>
-                </>}
-                {stage === "processing" && !closed && order.status !== "RECEIVED" && <p>Processing started.</p>}
+                {stage === "processing" && !closed && order.status !== "RECEIVED" && <p>{order.status === "SHIPPED" || order.status === "DELIVERED" ? "The order has left packing." : "Processing started."}</p>}
                 {(stage === "shipping" || stage === "delivery") && !closed && order.status !== "DELIVERED" && (!paid || needsPacking(order)) && (
                   <p>{!paid ? "Verify bKash payment before continuing." : "Confirm packing before continuing."} <button type="button" className="button-action button-action-primary"
-                    onClick={() => chooseStage(paid ? "packing" : "payment")}>{paid ? "Open packing checklist" : "Open payment verification"}</button></p>
+                    onClick={() => chooseStage(paid ? "processing" : "payment")}>{paid ? "Open packing checklist" : "Open payment verification"}</button></p>
                 )}
                 {stage === "shipping" && order.status === "DELIVERED" && <p>{order.courierTrackingId ? `Courier tracking ID ${order.courierTrackingId}` : "This order was delivered."}</p>}
                 <div className="store-order-actions">
@@ -522,6 +513,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                       <span aria-hidden="true">★</span> {delivering === order.id ? "Saving…" : order.reviewInviteSentAt ? "Review invitation sent" : order.deliveredAt ? "Retry review invitation" : "Mark delivered & invite review"}
                     </button>
                   )}
+                </div>
+                <div className="order-work-panels" hidden={stage !== "processing" || closed}>
+                  {!order.invoiceNumber && <OrderPrint order={order} token={token} onChange={() => void refreshOrder(order.id)}
+                    startCardId={deepLink === "print" ? params.get("card") : null} initiallyOpen />}
+                  <OrderPacking order={order} token={token} onChange={() => refreshOrder(order.id)} initiallyOpen />
                 </div>
 
                 {stage === "shipping" && order.trackingPath && !closed && order.status !== "DELIVERED" && paid && !needsPacking(order) && (
@@ -556,21 +552,6 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
               <div className="order-info-cards">
                 <div className="order-info-card">
                   <div className="order-info-card-head">
-                    <h3>Cards and activation</h3>
-                  </div>
-                  <dl>
-                    <div><dt>Order ID</dt><dd className="mono-code">{order.id}</dd></div>
-                    {order.invoiceNumber && <div><dt>Invoice number</dt><dd className="mono-code">{order.invoiceNumber}</dd></div>}
-                    <div><dt>QR allocation</dt><dd>{order.status === "CANCELLED" ? "Released" : order.status === "AWAITING_PAYMENT" ? "Starts after payment details are submitted"
-                      : order.activationMethod === "ORDER_SECRET" ? "Card links to its temporary profile when the client activates it" : order.invoiceNumber ? needsPacking(order) ? "Pick ready stock and scan the cards while packing" : "Cards linked at packing"
-                      : `${order.qrAllocation?.assigned ?? 0} assigned · ${order.qrAllocation?.pending ?? 0} awaiting printed stock`}</dd></div>
-                    <div><dt>Client activation</dt><dd>{order.activationMethod === "ORDER_SECRET" ? "Include one private secret code per card. The client scans any unused card, enters the code, and completes their profile." : order.invoiceNumber ? "After delivery, scan the card, enter the invoice number and verify through the order email." : "The client claims ownership using their secret code and account."}</dd></div>
-                    {order.assignedCards?.map(card => <div key={card.id}><dt>Assigned QR</dt><dd><a href={card.canonicalUrl} target="_blank" rel="noreferrer" className="order-slug-link">{card.publicSlug} ↗</a> <span className="qc-badge">QC {card.qcStatus}</span></dd></div>)}
-                  </dl>
-                </div>
-
-                <div className="order-info-card">
-                  <div className="order-info-card-head">
                     <h3>Delivery details</h3>
                   </div>
                   <dl>
@@ -579,8 +560,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
                     <div><dt>Delivery zone</dt><dd>{shippingZoneLabels[order.shippingZone]} · {bdt(order.shippingMinor)}</dd></div>
                     {order.customer.note && <div><dt>Customer note</dt><dd className="order-note-bubble">{order.customer.note}</dd></div>}
                     {order.courierTrackingId && <div><dt>Courier tracking ID</dt><dd className="mono-code">{order.courierTrackingId}</dd></div>}
-                    {order.trackingPath && <div><dt>Tracking page</dt><dd><a href={new URL(order.trackingPath, import.meta.env.VITE_STOREFRONT_URL || location.origin).href} target="_blank" rel="noreferrer" className="order-external-link">Open order tracking ↗</a></dd></div>}
                   </dl>
+                  {order.trackingPath && <a href={new URL(order.trackingPath, import.meta.env.VITE_STOREFRONT_URL || location.origin).href} target="_blank" rel="noreferrer" className="order-external-link">Open order tracking ↗</a>}
                 </div>
 
                 <div className="order-info-card">
