@@ -11,7 +11,7 @@ const tracked = new Map();
 export function trackStorefront(event, details, options) {
   if (!active || privateRoute()) return false;
   try {
-    window.fbq("trackSingle", pixelId, event, details, options);
+    window.fbq("trackSingle", pixelId, event, details, { ...options, eventID: options?.eventID || `oneinfo-${crypto.randomUUID()}` });
     return true;
   } catch { return false; }
 }
