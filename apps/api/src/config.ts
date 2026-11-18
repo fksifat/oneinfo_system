@@ -34,6 +34,8 @@ const ConfigSchema = z
     STOREFRONT_URL: z.string().url().optional(),
     CRM_LEAD_WEBHOOK_URL: z.url({ protocol: /^https$/ }).optional(),
     CRM_LEAD_WEBHOOK_TOKEN: z.string().trim().min(1).optional(),
+    META_PIXEL_ID: z.string().regex(/^\d+$/).default("1307488551509212"),
+    META_CONVERSIONS_API_TOKEN: z.string().trim().min(1).optional(),
   })
   .superRefine((value, context) => {
     if ((value.BREVO_SMTP_USER || value.BREVO_SMTP_KEY) && !(value.BREVO_SMTP_USER && value.BREVO_SMTP_KEY && value.ORDER_EMAIL_FROM)) {

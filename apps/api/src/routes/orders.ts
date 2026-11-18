@@ -12,7 +12,9 @@ import {
 import { requireOperator } from "../auth.js";
 import { db } from "../db/client.js";
 import { auditLogs, cardActivationSecrets, cardBatches, cards, orderCardAllocations, products, storeCoupons, storeOrders, storeReviewInvites, storeShippingSettings, orderActivationProfiles } from "../db/schema.js";
-import { createOrderProfiles, orderProfileCodes } from "../domain/order-activation.js";
+import { config } from "../config.js";
+import { createOrderProfiles, encryptOrderCode, orderProfileCodes } from "../domain/order-activation.js";
+import { sendMetaPurchaseEvent } from "../domain/meta-conversions.js";
 import { registerOrderPrint } from "./order-print.js";
 import { nextInvoiceNumber } from "../domain/order-invoice.js";
 import { assertInvoicePacked, packInvoiceOrder, packedCards } from "../domain/order-packing.js";
@@ -35,6 +37,7 @@ async function readCheckoutSettings(client: Pick<typeof db, "select"> = db) {
     rates: settings?.rates ?? defaultShippingRates,
     codAdvanceTaka: settings?.codAdvanceTaka ?? defaultCodAdvanceTaka,
     codAdvanceInsideDhaka: settings?.codAdvanceInsideDhaka ?? defaultCodAdvanceInsideDhaka,
+    metaConversionsEnabled: Boolean(settings?.encryptedMetaCapiToken || config.META_CONVERSIONS_API_TOKEN),
   };
 }
 
@@ -182,6 +185,19 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { codAdvanceTaka, codAdvanceInsideDhaka } });
     });
     return { codAdvanceTaka, codAdvanceInsideDhaka };
+  });
+
+  app.put("/admin/meta-capi", async request => {
+    const actor = await requireOperator(request, ["SUPER_ADMIN"]);
+    const { token } = parseBody(z.object({ token: z.string().trim().max(512) }), request.body);
+    const encryptedMetaCapiToken = token ? encryptOrderCode(token) : null;
+    await db.transaction(async tx => {
+      await tx.insert(storeShippingSettings).values({ id: shippingSettingsId, rates: defaultShippingRates, encryptedMetaCapiToken })
+        .onConflictDoUpdate({ target: storeShippingSettings.id, set: { encryptedMetaCapiToken } });
+      await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_META_CAPI_UPDATED",
+        targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { configured: Boolean(token) } });
+    });
+    return { metaConversionsEnabled: Boolean(token || config.META_CONVERSIONS_API_TOKEN) };
   });
 
   app.post("/admin/:id/verify-payment", async request => {
@@ -502,6 +518,12 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       await sendOrderConfirmation({ ...result, customer: order.customer, deliveryAddress: order.deliveryAddress, items: order.items }, true, true) === "accepted") : undefined;
     if (emailStatus === "failed") request.log.warn({ orderId: order.id }, "Order confirmation email was not accepted");
     if (emailStatus) result.confirmationEmail = emailStatus;
+    if (created && !order.awaitingPayment) {
+      void sendMetaPurchaseEvent(order, result.totalMinor, {
+        ip: request.ip,
+        userAgent: typeof request.headers["user-agent"] === "string" ? request.headers["user-agent"] : undefined,
+      });
+    }
     return created ? sendCreated(reply, result) : result;
   });
 };

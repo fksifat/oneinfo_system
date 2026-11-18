@@ -61,6 +61,11 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   const [savingCoupon, setSavingCoupon] = useState(false);
   const [couponError, setCouponError] = useState("");
   const [couponMessage, setCouponMessage] = useState("");
+  const [metaCapiEnabled, setMetaCapiEnabled] = useState(false);
+  const [metaCapiToken, setMetaCapiToken] = useState("");
+  const [savingMetaCapi, setSavingMetaCapi] = useState(false);
+  const [metaCapiError, setMetaCapiError] = useState("");
+  const [metaCapiMessage, setMetaCapiMessage] = useState("");
 
   function readOrders(filters: AdminOrderSearch, beforeId?: string) {
     type Page = { items: StoreOrder[]; hasMore: boolean; supportsSearch?: boolean };
@@ -91,13 +96,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   async function loadRates() {
     setRatesError("");
     try {
-      const { rates, codAdvanceTaka, codAdvanceInsideDhaka } = await api<{
+      const { rates, codAdvanceTaka, codAdvanceInsideDhaka, metaConversionsEnabled } = await api<{
         rates: ShippingRates;
         codAdvanceTaka: number;
         codAdvanceInsideDhaka?: boolean;
+        metaConversionsEnabled?: boolean;
       }>(`${path}/shipping`);
       setCodAdvance(String(CodAdvanceSchema.parse(codAdvanceTaka)));
       setCodAdvanceInsideDhaka(codAdvanceInsideDhaka !== false);
+      setMetaCapiEnabled(Boolean(metaConversionsEnabled));
       setRates({ insideDhaka: String(rates.insideDhaka / 100), subDhaka: String(rates.subDhaka / 100), outsideDhaka: String(rates.outsideDhaka / 100) });
     } catch {
       setRatesError("Could not load delivery rates.");
@@ -265,6 +272,26 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
       setPaymentError(error instanceof Error ? error.message : "Could not save payment settings.");
     } finally {
       setSavingPayment(false);
+    }
+  }
+
+  async function updateMetaCapi(nextToken: string) {
+    if (savingMetaCapi) return;
+    setMetaCapiError("");
+    setMetaCapiMessage("");
+    setSavingMetaCapi(true);
+    try {
+      const result = await api<{ metaConversionsEnabled: boolean }>(`${path}/admin/meta-capi`, token, {
+        method: "PUT",
+        body: JSON.stringify({ token: nextToken.trim() }),
+      });
+      setMetaCapiEnabled(Boolean(result.metaConversionsEnabled));
+      setMetaCapiToken("");
+      setMetaCapiMessage(nextToken.trim() ? "Meta Conversions API token saved." : "Meta Conversions API token removed.");
+    } catch (error) {
+      setMetaCapiError(error instanceof Error ? error.message : "Could not save Meta Conversions API token.");
+    } finally {
+      setSavingMetaCapi(false);
     }
   }
 
@@ -837,6 +864,20 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
         }}>Edit {coupon.code}</button>
       </div>)}</div>
     </section>
+      <section className="store-settings-card">
+        <div className="panel-head"><div><h2>Meta Conversions API</h2><p>Pixel 1307488551509212 · {metaCapiEnabled ? "Connected (Server Purchase events active)" : "Not configured"}</p></div></div>
+        <form className="store-payment-form" onSubmit={event => { event.preventDefault(); void updateMetaCapi(metaCapiToken); }}>
+          <div className="store-payment-row">
+            <label>Conversions API access token<input type="password" value={metaCapiToken} maxLength={512}
+              placeholder={metaCapiEnabled ? "Replace existing token (EAA…)" : "Paste token from Events Manager (EAA…)"}
+              onChange={event => setMetaCapiToken(event.target.value)} disabled={savingMetaCapi} /></label>
+            <button disabled={savingMetaCapi || !metaCapiToken.trim()}>{savingMetaCapi ? "Saving…" : "Save CAPI token"}</button>
+            {metaCapiEnabled && <button type="button" className="quiet" disabled={savingMetaCapi} onClick={() => void updateMetaCapi("")}>Disconnect</button>}
+          </div>
+        </form>
+        {metaCapiMessage && <p className="store-order-feedback" role="status">{metaCapiMessage}</p>}
+        {metaCapiError && <p className="store-order-feedback is-error" role="alert">{metaCapiError}</p>}
+      </section>
 
     </section>
     </dialog>
