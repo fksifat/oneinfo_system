@@ -419,6 +419,7 @@ export const storeShippingSettings = pgTable("store_shipping_settings", {
   rates: jsonb("rates").$type<ShippingRates>().notNull(),
   codAdvanceTaka: integer("cod_advance_taka").notNull().default(100),
   codAdvanceInsideDhaka: boolean("cod_advance_inside_dhaka").notNull().default(true),
+  encryptedMetaCapiToken: text("encrypted_meta_capi_token"),
 });
 
 export const accountTokens = pgTable("account_tokens", {

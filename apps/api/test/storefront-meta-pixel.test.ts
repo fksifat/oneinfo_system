@@ -1,6 +1,12 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { config } from "../src/config.js";
+import { sendMetaPurchaseEvent } from "../src/domain/meta-conversions.js";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.resetModules(); });
+afterEach(() => {
+  config.META_CONVERSIONS_API_TOKEN = undefined;
+  vi.unstubAllGlobals();
+  vi.resetModules();
+});
 
 it("measures the consenting checkout once per step, without sending personal fields", async () => {
   const calls = vi.fn();
@@ -67,4 +73,45 @@ it("does not generate or send events without consent", async () => {
   expect(trackStorefront("AddToCart", {})).toBe(false);
   expect(randomUUID).not.toHaveBeenCalled();
   expect(calls).not.toHaveBeenCalled();
+});
+
+it("sends matching Purchase event_id and hashed customer data through Meta Conversions API", async () => {
+  const fetchSpy = vi.fn(async () => Response.json({ events_received: 1 }));
+  vi.stubGlobal("fetch", fetchSpy);
+  config.META_CONVERSIONS_API_TOKEN = "test-capi-token";
+
+  const sent = await sendMetaPurchaseEvent(
+    {
+      id: "order",
+      createdAt: "2026-11-18T09:00:00.000Z",
+      customer: { email: "Buyer@Example.com", phone: "01712-345678" },
+      deliveryAddress: { district: "Dhaka" },
+      items: [
+        { productId: "one", variantId: "blue", quantity: 1, unitPriceMinor: 49900 },
+        { productId: "one", variantId: "blue", quantity: 2, unitPriceMinor: 49900 },
+      ],
+    },
+    155700,
+    { ip: "203.0.113.10", userAgent: "Mozilla/5.0" },
+  );
+
+  expect(sent).toBe(true);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  const [url, init] = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+  expect(url).toBe("https://graph.facebook.com/v21.0/1307488551509212/events");
+  const body = JSON.parse(String(init.body));
+  expect(body.data[0]).toMatchObject({
+    event_name: "Purchase",
+    event_id: "oneinfo-order-order",
+    action_source: "website",
+    custom_data: {
+      value: 1557,
+      currency: "BDT",
+      content_ids: ["one_blue"],
+      contents: [{ id: "one_blue", quantity: 3 }],
+      num_items: 3,
+    },
+  });
+  expect(JSON.stringify(body)).not.toContain("Buyer@Example.com");
+  expect(JSON.stringify(body)).not.toContain("01712");
 });
