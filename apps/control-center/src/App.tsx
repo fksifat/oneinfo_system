@@ -224,7 +224,7 @@ export function App() {
   const cardPath = window.location.pathname.match(/^\/c\/([A-Za-z0-9_-]{1,64})(?:\/(?:signup|login|edit))?\/?$/);
   if (cardPath) return <CardPortal slug={cardPath[1]!} />;
   const namedPath = window.location.pathname.match(/^\/([A-Za-z0-9]{1,64})\/?$/);
-  if (namedPath && !["admin", "team", "dashboard", "health", "api", "c"].includes(namedPath[1]!.toLowerCase())) return <NamedProfile handle={namedPath[1]!} />;
+  if (namedPath && !["admin", "team", "dashboard", "health", "api", "c", "products"].includes(namedPath[1]!.toLowerCase())) return <NamedProfile handle={namedPath[1]!} />;
   const profileSlug = new URLSearchParams(window.location.search).get("profile");
   if (profileSlug) return <PublicProfile slug={profileSlug} />;
 

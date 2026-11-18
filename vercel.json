@@ -4,6 +4,10 @@
   "buildCommand": "npm run build:cloud",
   "outputDirectory": ".cloud-dist",
   "regions": ["sin1"],
+  "redirects": [
+    { "source": "/products", "destination": "/#products", "permanent": false },
+    { "source": "/products/", "destination": "/#products", "permanent": false }
+  ],
   "rewrites": [
     { "source": "/api/v1/:path*", "destination": "https://api.oneinfo.online/api/v1/:path*" },
     { "source": "/health", "destination": "https://api.oneinfo.online/health" },
@@ -11,6 +15,8 @@
     { "source": "/admin/:path*", "destination": "/dashboard/index.html" },
     { "source": "/team", "destination": "/dashboard/index.html" },
     { "source": "/c/:path*", "destination": "/dashboard/index.html" },
+    { "source": "/products", "destination": "/index.html" },
+    { "source": "/products/:path*", "destination": "/index.html" },
     { "source": "/:handle([a-zA-Z0-9]{1,64})", "destination": "/dashboard/index.html" }
   ],
   "headers": [

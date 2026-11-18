@@ -1056,3 +1056,19 @@ test("storefront checkout payment section directly displays payment instructions
   assert.match(stylesCss, /\.order-payment-guide\s*\{/);
   assert.match(stylesCss, /\.order-payment-copy-btn\s*\{/);
 });
+
+test("storefront and hosting cleanly support direct /products route and auto-scrolls to collection", () => {
+  const appJs = readFileSync("sites/storefront/app.js", "utf8");
+  const controlCenterApp = readFileSync("apps/control-center/src/App.tsx", "utf8");
+  const buildCloud = readFileSync("scripts/build-cloud.mjs", "utf8");
+
+  // app.js handles /products pathname directly
+  assert.match(appJs, /\/products/);
+  assert.match(appJs, /document\.getElementById\("products"\)\?\.scrollIntoView/);
+
+  // control center excludes 'products' from being treated as a user profile handle
+  assert.match(controlCenterApp, /"products"/);
+
+  // cloud build generates .cloud-dist/products/index.html
+  assert.match(buildCloud, /\.cloud-dist\/products/);
+});

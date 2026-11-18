@@ -12,4 +12,12 @@ test('Vercel proxies compatibility API URLs to the single VPS backend',()=>{
   const names = config.rewrites.find(rule => rule.source === '/:handle([a-zA-Z0-9]{1,64})');
   assert.equal(names.destination, '/dashboard/index.html');
   assert.ok(config.rewrites.indexOf(names) > config.rewrites.findIndex(rule => rule.source === '/admin'));
+
+  const productsRedirect = config.redirects?.find(rule => rule.source === '/products');
+  assert.equal(productsRedirect?.destination, '/#products');
+  assert.equal(productsRedirect?.permanent, false);
+
+  const productsRewrite = config.rewrites.find(rule => rule.source === '/products');
+  assert.equal(productsRewrite?.destination, '/index.html');
+  assert.ok(config.rewrites.indexOf(names) > config.rewrites.indexOf(productsRewrite));
 });
