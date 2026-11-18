@@ -1156,8 +1156,13 @@ import "./invoice.css";
     }
     if (!route) {
       document.title = "Oneinfo Smart Business Cards";
-      if (focus && location.hash === "#top") window.scrollTo({ top: 0, behavior: "instant" });
-      else if (focus) document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior:"instant" });
+      if (location.hash === "#top") {
+        if (focus) window.scrollTo({ top: 0, behavior: "instant" });
+      } else if (location.hash) {
+        document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: focus ? "smooth" : "instant" });
+      } else if (/^\/products(?:\/|$)/i.test(location.pathname)) {
+        document.getElementById("products")?.scrollIntoView({ behavior: focus ? "smooth" : "instant" });
+      }
       return;
     }
     const product = products.find(p => p.slug === route.slug);

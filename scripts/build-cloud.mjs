@@ -18,3 +18,5 @@ for (const args of [
 }
 mkdirSync(`${root}.cloud-dist`, { recursive: true });
 cpSync(`${root}sites/storefront/dist`, `${root}.cloud-dist`, { recursive: true });
+mkdirSync(`${root}.cloud-dist/products`, { recursive: true });
+cpSync(`${root}sites/storefront/dist/index.html`, `${root}.cloud-dist/products/index.html`);
