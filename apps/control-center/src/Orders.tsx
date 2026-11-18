@@ -281,13 +281,15 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
     setMetaCapiMessage("");
     setSavingMetaCapi(true);
     try {
-      const result = await api<{ metaConversionsEnabled: boolean }>(`${path}/admin/meta-capi`, token, {
+      const result = await api<{ metaConversionsEnabled: boolean; syncedOrders?: number }>(`${path}/admin/meta-capi`, token, {
         method: "PUT",
         body: JSON.stringify({ token: nextToken.trim() }),
       });
       setMetaCapiEnabled(Boolean(result.metaConversionsEnabled));
       setMetaCapiToken("");
-      setMetaCapiMessage(nextToken.trim() ? "Meta Conversions API token saved." : "Meta Conversions API token removed.");
+      setMetaCapiMessage(nextToken.trim()
+        ? `Meta Conversions API token saved${result.syncedOrders ? ` · Synced ${result.syncedOrders} recent order(s) to Meta` : ""}.`
+        : "Meta Conversions API token removed.");
     } catch (error) {
       setMetaCapiError(error instanceof Error ? error.message : "Could not save Meta Conversions API token.");
     } finally {

@@ -1,6 +1,6 @@
 import { allowAuthAttempt } from "../domain/auth-attempts.js";
 import { createHash } from "node:crypto";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
@@ -197,7 +197,18 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_META_CAPI_UPDATED",
         targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { configured: Boolean(token) } });
     });
-    return { metaConversionsEnabled: Boolean(token || config.META_CONVERSIONS_API_TOKEN) };
+    let syncedOrders = 0;
+    if (token) {
+      const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
+      const recentOrders = await db.select().from(storeOrders)
+        .where(and(eq(storeOrders.awaitingPayment, false), isNull(storeOrders.cancelledAt), gt(storeOrders.createdAt, since)))
+        .orderBy(desc(storeOrders.createdAt)).limit(50);
+      for (const order of recentOrders) {
+        const totalMinor = order.subtotalMinor + order.shippingMinor - order.discountMinor;
+        if (await sendMetaPurchaseEvent(order, totalMinor)) syncedOrders++;
+      }
+    }
+    return { metaConversionsEnabled: Boolean(token || config.META_CONVERSIONS_API_TOKEN), syncedOrders };
   });
 
   app.post("/admin/:id/verify-payment", async request => {
