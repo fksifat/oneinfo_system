@@ -215,7 +215,7 @@ try {
       if(label==='Products'){const opened=await evaluate(`(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent.startsWith('Edit ')&&b.classList.contains('catalog-secondary'));if(!b)return false;b.click();return true})()`);if(opened){await delay(200);await inspect('admin-product-editor-'+width);for(const section of ['Details','Colours & prices','Media','Warranty','Publishing']){await evaluate(`(()=>{const b=[...document.querySelectorAll('.catalog-editor-nav button')].find(b=>b.textContent===${JSON.stringify(section)});b.click()})()`);assert.equal(await evaluate(`document.querySelectorAll('.catalog-section:not([hidden])').length`),1);}await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});}}
       if(label==='Orders'){
         await click('Settings');await until(`!!document.querySelector('.store-settings-dialog[open]')`);await inspect('admin-order-settings-'+width);
-        if(width===1440){await click('Save payment settings');await until(`document.body.innerText.includes('COD advance saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
+        if(width===1440){await until(`document.body.innerText.includes('Nagad receiving number')`);await click('Save payment settings');await until(`document.body.innerText.includes('Payment settings saved.')`);await click('Save rates');await until(`document.body.innerText.includes('Delivery rates saved.')`);await fill('Coupon code','UICHECK');await fill('Discount (%)','15');await click('Save coupon');await until(`document.body.innerText.includes('UICHECK saved.')`);}
         await command('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});await until(`!document.querySelector('.store-settings-dialog[open]')`);
         await until(`!!document.querySelector('.store-order[data-order-id="${uiOrder.id}"]')`);
         assert.deepEqual(await evaluate(`[...document.querySelectorAll('.orders-table th')].map(cell=>cell.textContent)`), ['Customer','Card type','Invoice','Placed','Status','Total']);
@@ -537,19 +537,33 @@ try {
     if(width===1440){
       await set('#order-form input[name=name]','UI Checkout Buyer');await set('#order-phone','01712345678');await set('#order-email','checkout-ui@example.com');await set('#order-form [name=addressLine]','UI test address, Dhaka');await set('#order-form [name=district]','Dhaka');
       await evaluate(`document.querySelector('.order-coupon-toggle').click()`);await set('#order-coupon-form [name=code]','UICHECK');await evaluate(`document.querySelector('#order-coupon-form').requestSubmit()`);await until(`document.querySelector('.order-coupon-status').textContent.includes('15')`);
-      const saveCodAdvance = async codAdvanceInsideDhaka => {
+      const { wallets } = await api('/api/v1/orders/admin/payment', undefined, headers);
+      const savePaymentSettings = async (codAdvanceInsideDhaka, codAdvanceTaka = 100, configuredWallets = wallets) => {
         const response = await app.inject({ method:'PUT', url:'/api/v1/orders/admin/payment', headers,
-          payload:{codAdvanceTaka:100,codAdvanceInsideDhaka} });
+          payload:{codAdvanceTaka,codAdvanceInsideDhaka,wallets:configuredWallets} });
         assert.equal(response.statusCode,200,response.body);
         await evaluate(`window.dispatchEvent(new Event('focus'))`);
       };
       await until(`!document.querySelector('[name=paymentMethod][value=BKASH]').disabled`);
       await evaluate(`document.querySelector('[name=paymentMethod][value=COD]').click()`);
-      await saveCodAdvance(true);
+      await savePaymentSettings(true);
       await until(`document.querySelector('.order-cod-status').textContent.includes('100') && !document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').disabled`);
-      await saveCodAdvance(false);
-      await until(`document.querySelector('.order-payment-details').hidden && document.querySelector('.order-due-now').hidden && document.querySelector('.order-submit').textContent==='Place order' && !document.querySelector('.order-submit').disabled`);
-      console.log('Inside Dhaka COD follows saved Admin advance switch on checkout focus PASS');
+      await savePaymentSettings(false);
+      const directCod = `document.querySelector('[name=paymentMethod]:checked').value==='COD' && document.querySelector('.order-payment-details').hidden && document.querySelector('.order-due-now').hidden && document.querySelector('#order-transaction').disabled && !document.querySelector('#order-transaction').required && document.querySelector('.order-submit').textContent==='Place order'`;
+      const visibleMethods = `[...document.querySelectorAll('.order-payment-option:not([hidden]) input')].map(input=>input.value).join()`;
+      await until(`${directCod} && ${visibleMethods}==='BKASH,ROCKET,COD' && !document.querySelector('.order-submit').disabled`);
+      await evaluate(`document.querySelector('[name=paymentMethod][value=BKASH]').click()`);
+      await savePaymentSettings(false,0,{...wallets,BKASH:{...wallets.BKASH,enabled:false},NAGAD:{enabled:true,number:'01900000003'}});
+      await until(`${directCod} && ${visibleMethods}==='ROCKET,NAGAD,COD'`);
+      await evaluate(`document.querySelector('[name=paymentMethod][value=NAGAD]').click()`);
+      await until(`!document.querySelector('[data-wallet=nagad]').hidden && document.querySelector('[data-wallet=nagad]').textContent.includes('01900000003') && document.querySelector('#order-transaction').required`);
+      await evaluate(`document.querySelector('[name=paymentMethod][value=COD]').click()`);
+      await set('#order-form [name=addressLine]','UI test address, Chattogram');
+      await set('#order-form [name=district]','Chattogram');
+      await until(`${directCod} && !document.querySelector('.order-submit').disabled`);
+      await savePaymentSettings(false);
+      await until(`${visibleMethods}==='BKASH,ROCKET,COD' && !document.querySelector('.order-payment-details').hidden && document.querySelector('.order-cod-status').textContent.includes('100')`);
+      console.log('Checkout follows Admin wallet availability independently of COD advance, including Nagad PASS');
       await until(`!document.querySelector('[name=paymentMethod][value=ROCKET]').disabled`);
       await evaluate(`document.querySelector('[name=paymentMethod][value=ROCKET]').click()`);
       assert.equal(await evaluate(`document.querySelector('.order-submit').disabled`),true);

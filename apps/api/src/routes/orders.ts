@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import {
-  bkashNumber, rocketNumber, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
+  CheckoutWalletsSchema, defaultCheckoutWallets, walletPaymentMethods, paymentMethodLabels, CodAdvanceSchema, defaultCodAdvanceTaka, defaultCodAdvanceInsideDhaka, paymentDueNow, CouponCodeSchema, couponDiscount, checkoutDeliveryZone, defaultShippingRates, deliveryZone, PlaceOrderSchema,
   ShippingRatesSchema, StoreCouponSchema, variantPrice, variantPriceForBranding, AdminOrderSearchSchema, OrderFulfillmentSchema,
   type AdminOrderSearch, type OrderLine, type OrderReceipt,
   orderDesignProductSlug,
@@ -37,6 +37,7 @@ async function readCheckoutSettings(client: Pick<typeof db, "select"> = db) {
     rates: settings?.rates ?? defaultShippingRates,
     codAdvanceTaka: settings?.codAdvanceTaka ?? defaultCodAdvanceTaka,
     codAdvanceInsideDhaka: settings?.codAdvanceInsideDhaka ?? defaultCodAdvanceInsideDhaka,
+    wallets: settings?.checkoutWallets ?? defaultCheckoutWallets,
     metaConversionsEnabled: Boolean(settings?.encryptedMetaCapiToken || config.META_CONVERSIONS_API_TOKEN),
   };
 }
@@ -157,7 +158,10 @@ export const orderRoutes: FastifyPluginAsync = async app => {
 
   app.get("/shipping", async (_request, reply) => {
     reply.header("Cache-Control", "no-store");
-    return { ...await readCheckoutSettings(), bkashNumber, rocketNumber, confirmationEmailEnabled };
+    const { wallets, ...settings } = await readCheckoutSettings();
+    const walletNumbers = Object.fromEntries(walletPaymentMethods.filter(method => wallets[method].enabled)
+      .map(method => [method, wallets[method].number]));
+    return { ...settings, walletNumbers, bkashNumber: walletNumbers.BKASH, rocketNumber: walletNumbers.ROCKET, confirmationEmailEnabled };
   });
 
   app.put("/shipping", async request => {
@@ -172,17 +176,30 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     return { rates };
   });
 
+  app.get("/admin/payment", async (request, reply) => {
+    await requireOperator(request, ["SUPER_ADMIN"]);
+    reply.header("Cache-Control", "no-store");
+    const { wallets } = await readCheckoutSettings();
+    return { wallets };
+  });
+
   app.put("/admin/payment", async request => {
     const actor = await requireOperator(request, ["SUPER_ADMIN"]);
-    const { codAdvanceTaka, codAdvanceInsideDhaka } = parseBody(
-      z.object({ codAdvanceTaka: CodAdvanceSchema, codAdvanceInsideDhaka: z.boolean().default(true) }),
+    const { codAdvanceTaka, codAdvanceInsideDhaka, wallets } = parseBody(
+      z.object({ codAdvanceTaka: CodAdvanceSchema, codAdvanceInsideDhaka: z.boolean().default(true), wallets: CheckoutWalletsSchema.optional() }),
       request.body
     );
     await db.transaction(async tx => {
-      await tx.insert(storeShippingSettings).values({ id: shippingSettingsId, rates: defaultShippingRates, codAdvanceTaka, codAdvanceInsideDhaka })
-        .onConflictDoUpdate({ target: storeShippingSettings.id, set: { codAdvanceTaka, codAdvanceInsideDhaka } });
+      await tx.insert(storeShippingSettings).values({ id: shippingSettingsId, rates: defaultShippingRates }).onConflictDoNothing();
+      const [current] = await tx.select({ wallets: storeShippingSettings.checkoutWallets }).from(storeShippingSettings)
+        .where(eq(storeShippingSettings.id, shippingSettingsId)).for("update");
+      const configuredWallets = wallets ?? current?.wallets ?? defaultCheckoutWallets;
+      const enabledWallets = walletPaymentMethods.filter(method => configuredWallets[method].enabled);
+      if (codAdvanceTaka > 0 && !enabledWallets.length) conflict("Enable a mobile wallet or set the COD advance to ৳0.");
+      await tx.update(storeShippingSettings).set({ codAdvanceTaka, codAdvanceInsideDhaka, ...(wallets && { checkoutWallets: wallets }) })
+        .where(eq(storeShippingSettings.id, shippingSettingsId));
       await tx.insert(auditLogs).values({ actorId: actor.operatorId, action: "STORE_COD_ADVANCE_UPDATED",
-        targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { codAdvanceTaka, codAdvanceInsideDhaka } });
+        targetType: "store_shipping", targetId: shippingSettingsId, requestId: request.id, metadata: { codAdvanceTaka, codAdvanceInsideDhaka, enabledWallets } });
     });
     return { codAdvanceTaka, codAdvanceInsideDhaka };
   });
@@ -425,7 +442,9 @@ export const orderRoutes: FastifyPluginAsync = async app => {
     const { requestId, ...input } = parseBody(PlaceOrderSchema, request.body);
     const senderNumber = input.payment?.senderNumber;
     if (senderNumber && !input.payment?.transactionId) conflict("Enter your transaction ID with the payment number.");
-    if (!reserving && input.payment?.method === "ROCKET" && input.payment.amountMinor > 0 && !senderNumber) conflict("Enter the Rocket number used to pay.");
+    if (!reserving && input.payment && ["ROCKET", "NAGAD"].includes(input.payment.method) && input.payment.amountMinor > 0 && !senderNumber) {
+      conflict(`Enter the ${paymentMethodLabels[input.payment.method]} number used to pay.`);
+    }
     const requestHash = createHash("sha256").update(JSON.stringify(input)).digest("hex");
     const [replay] = await db.select({ id: storeOrders.id }).from(storeOrders).where(eq(storeOrders.requestId, requestId)).limit(1);
     if (!replay && !await allowAuthAttempt(`checkout:${request.ip}`, 20, 15 * 60_000)) {
@@ -458,7 +477,11 @@ export const orderRoutes: FastifyPluginAsync = async app => {
       // Keep pending requests from older checkout pages valid during the rollout.
       const zone = dhakaArea ? deliveryZone(district, dhakaArea) : checkoutDeliveryZone(district, addressLine);
       if (!zone) throw Object.assign(new Error("Enter a complete delivery address."), { statusCode: 400 });
-      const { rates, codAdvanceTaka, codAdvanceInsideDhaka } = await readCheckoutSettings(tx);
+      const { rates, codAdvanceTaka, codAdvanceInsideDhaka, wallets } = await readCheckoutSettings(tx);
+      const paymentMethod = input.payment?.method ?? "COD";
+      if (paymentMethod !== "COD" && !wallets[paymentMethod].enabled) {
+        conflict("This wallet is unavailable. If you already paid, contact Oneinfo with your transaction ID.");
+      }
       const shippingMinor = rates[zone];
       if (shippingMinor !== input.shippingMinor) conflict("Delivery rates changed. Review your updated total and try again.");
 
@@ -491,7 +514,6 @@ export const orderRoutes: FastifyPluginAsync = async app => {
         discountMinor = couponDiscount(subtotalMinor, coupon.percent);
         if (discountMinor !== input.coupon.discountMinor) conflict("The coupon discount changed. Review your updated total.");
       }
-      const paymentMethod = input.payment?.method ?? "COD";
       const paymentAmountMinor = paymentDueNow(subtotalMinor + shippingMinor - discountMinor, paymentMethod, codAdvanceTaka, { zone, codAdvanceInsideDhaka });
       if ((input.payment?.amountMinor ?? 0) !== paymentAmountMinor) conflict("Payment amount changed. Review the updated amount before paying. If you already paid, contact Oneinfo with your transaction ID.");
       const transactionId = input.payment?.transactionId ?? null;

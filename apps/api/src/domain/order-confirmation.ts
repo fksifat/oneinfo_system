@@ -39,7 +39,7 @@ export async function sendShippingEmail(order: Pick<StoreOrder, "id" | "customer
 export async function sendPaymentVerifiedEmail(order: Pick<StoreOrder, "id" | "customer" | "paymentMethod" | "paymentAmountMinor" | "totalMinor">) {
   const paid = order.paymentAmountMinor ?? 0;
   const remaining = Math.max(0, order.totalMinor - paid);
-  const wallet = order.paymentMethod === "COD" ? "bKash" : paymentMethodLabels[order.paymentMethod];
+  const wallet = order.paymentMethod === "COD" ? "advance" : paymentMethodLabels[order.paymentMethod];
   const intro = `we’ve verified your ${wallet} payment for your Oneinfo order.`;
   const details = [`Verified payment: ${money(paid)}`, `Order total: ${money(order.totalMinor)}`, remaining > 0
     ? `Remaining on delivery: ${money(remaining)}`

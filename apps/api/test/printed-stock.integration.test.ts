@@ -466,6 +466,31 @@ describe.skipIf(process.env.ONEINFO_PRINT_STOCK_TEST !== "1")("confirmed print s
       deliveryAddress: { district: "Dhaka", dhakaArea: "city", addressLine: "Test address" }, shippingMinor: 6000,
       items: [{ productId, variantId, quantity, unitPriceMinor: 50000 }] };
   }
+
+  it("applies Admin wallet availability independently of COD and honors existing payment reservations", async () => {
+    const path = "/api/v1/orders/admin/payment";
+    const { wallets: initial } = await request(path);
+    const save = (wallets: object, codAdvanceTaka = 0) => app.inject({ method: "PUT", url: path, headers, payload: { wallets, codAdvanceTaka } });
+    const disabled = { ...initial, BKASH: { ...initial.BKASH, enabled: false }, ROCKET: { ...initial.ROCKET, enabled: false } };
+    const active = { ...disabled, NAGAD: { enabled: true, number: "01900000001" } };
+    try {
+      expect((await save(disabled, 100)).statusCode).toBe(409);
+      expect((await save(active)).statusCode).toBe(200);
+      const settings = (await app.inject({ url: "/api/v1/orders/shipping" })).json();
+      expect(settings.walletNumbers).toEqual({ NAGAD: "01900000001" });
+      expect(settings.codAdvanceTaka).toBe(0);
+      const checkout = { ...orderPayload(), payment: { method: "NAGAD", amountMinor: 56_000 } };
+      expect((await request("/api/v1/orders/reserve", checkout)).status).toBe("AWAITING_PAYMENT");
+      expect((await save(disabled)).statusCode).toBe(200);
+      expect((await app.inject({ method: "POST", url: "/api/v1/orders/reserve", payload: { ...checkout, requestId: randomUUID() } })).statusCode).toBe(409);
+      const completed = await request("/api/v1/orders", { ...checkout, payment: { ...checkout.payment, transactionId: "NAGADTEST123", senderNumber: "01900000002" } });
+      expect(completed).toMatchObject({ paymentMethod: "NAGAD", paymentAmountMinor: 56_000 });
+      expect(await request("/api/v1/orders", { ...orderPayload(), payment: { method: "COD", amountMinor: 0 } }))
+        .toMatchObject({ paymentMethod: "COD", paymentAmountMinor: 0 });
+    } finally {
+      expect((await save(initial)).statusCode).toBe(200);
+    }
+  });
   async function legacyOrder(payload: object) {
     const placed = await request("/api/v1/orders", payload);
     const { allocatePendingOrders } = await import("../src/domain/printed-stock.js");

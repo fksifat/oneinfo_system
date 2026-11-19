@@ -527,10 +527,22 @@ export const defaultCodAdvanceTaka = 100;
 export const defaultCodAdvanceInsideDhaka = true;
 export const bkashNumber = "01760320810";
 export const rocketNumber = "01305087389";
-export const PaymentMethodSchema = z.enum(["COD", "BKASH", "ROCKET"]);
+export const walletPaymentMethods = ["BKASH", "ROCKET", "NAGAD"] as const;
+export const PaymentMethodSchema = z.enum(["COD", ...walletPaymentMethods]);
 export const TransactionIdSchema = z.string().trim().toUpperCase().regex(/^[A-Z0-9]{8,20}$/);
 export const PaymentSenderNumberSchema = z.string().trim().regex(/^01\d{9,10}$/);
-export const paymentMethodLabels = { COD: "Cash on delivery", BKASH: "bKash", ROCKET: "Rocket" } as const;
+export const paymentMethodLabels = { COD: "Cash on delivery", BKASH: "bKash", ROCKET: "Rocket", NAGAD: "Nagad" } as const;
+const checkoutWalletSchema = z.object({
+  enabled: z.boolean(),
+  number: z.string().trim().pipe(z.union([PaymentSenderNumberSchema, z.literal("")])),
+}).refine(wallet => !wallet.enabled || !!wallet.number, { path: ["number"], message: "Enter the receiving number before enabling this wallet." });
+export const CheckoutWalletsSchema = z.record(z.enum(walletPaymentMethods), checkoutWalletSchema);
+export type CheckoutWallets = z.infer<typeof CheckoutWalletsSchema>;
+export const defaultCheckoutWallets: CheckoutWallets = {
+  BKASH: { enabled: true, number: bkashNumber },
+  ROCKET: { enabled: true, number: rocketNumber },
+  NAGAD: { enabled: false, number: "" },
+};
 
 export function paymentDueNow(
   totalMinor: number,

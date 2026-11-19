@@ -1,6 +1,6 @@
 import { renderCardDesign, observeCardDesigns, getElementStyle } from "./card-design.js";
 import "./card-design.css";
-import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, paymentMethodLabels, paymentDueNow, orderDesignExtensions, orderDesignMaxBytes, orderDesignProductSlug } from "@oneinfo/contracts";
+import { variantPrice, variantPriceForBranding, variantRegularPriceForBranding, discountPercent, productMedia, productGallery, resolveProductImageUrl, resolveProductModelUrl, checkoutDeliveryZone, shippingZoneLabels, ShippingRatesSchema, CouponCodeSchema, couponDiscount, PostalCodeSchema, CodAdvanceSchema, defaultCodAdvanceTaka, PaymentMethodSchema, PaymentSenderNumberSchema, TransactionIdSchema, walletPaymentMethods, paymentMethodLabels, paymentDueNow, orderDesignExtensions, orderDesignMaxBytes, orderDesignProductSlug } from "@oneinfo/contracts";
 import { addCartVariant, cartDesignKey, reconcileCartItems, remainingVariantStock, productRoute, PREMIUM_PRESETS, SURFACE_COLORS, ACCENT_COLORS, isColorLight, defaultCustomization, renderSurfaceMotifSvg } from "./catalog.js";
 import { initializeNfcDeck } from "./nfc-deck.mjs";
 import { initializeHero3D, initializeCardPreviews } from "./hero-3d.mjs";
@@ -2932,7 +2932,8 @@ import "./invoice.css";
   const paymentInstructions = $(".order-payment-instructions");
   const senderField = orderForm.elements.paymentSenderNumber;
   const transactionField = orderForm.elements.transactionId;
-  const rocketOption = $('[name="paymentMethod"][value="ROCKET"]', orderForm);
+  const walletOptions = $$('[name="paymentMethod"]:not([value="COD"])', orderForm);
+  const walletBoxes = $$(".order-payment-wallet-box", orderForm);
   const reservationKey = "oneinfo.storefront.arisepay";
   const pendingOrderKey = "oneinfo.storefront.pendingOrder";
   const receiptKey = "oneinfo.storefront.lastReceipt";
@@ -2971,7 +2972,7 @@ import "./invoice.css";
     sessionStorage.removeItem(reservationKey);
     senderField.value = "";
     transactionField.value = "";
-    orderForm.elements.paymentMethod.value = "BKASH";
+    orderForm.elements.paymentMethod.value = "COD";
   }
 
   function showReceiptDetails() {
@@ -3027,83 +3028,78 @@ import "./invoice.css";
       : fee === undefined ? "Checking rates…" : money.format(fee / 100);
     $(".order-refresh-rates").hidden = !zone || !shippingFailed;
     const total = subtotal + (fee ?? 0) - discount;
-    const rocketNumber = paymentSettings?.rocketNumber;
-    rocketOption.disabled = !rocketNumber;
-    const method = orderForm.elements.paymentMethod.value;
-    const checkout = typeof fee === "number" && !applyingCoupon ? readCheckoutRequest() : null;
+    const walletNumbers = paymentSettings?.walletNumbers ?? {};
+    const paymentMethods = orderForm.elements.paymentMethod;
+    let checkout = readCheckoutRequest();
+    const prepared = Boolean(checkout && reservation?.reserved && matchesReservation(checkout));
+    const selectedWalletDisabled = paymentSettings && !prepared && paymentMethods.value !== "COD" && !walletNumbers[paymentMethods.value];
+    const paymentNeedsHelp = selectedWalletDisabled && TransactionIdSchema.safeParse(transactionField.value).success;
+    if (selectedWalletDisabled && !paymentNeedsHelp) {
+      paymentMethods.value = "COD";
+      senderField.value = transactionField.value = "";
+      checkout = readCheckoutRequest();
+    }
+    for (const option of walletOptions) {
+      const unavailable = !walletNumbers[option.value] && !((prepared || paymentNeedsHelp) && option.checked);
+      option.closest("label").hidden = unavailable;
+      option.disabled = unavailable && !option.checked;
+    }
+    const method = paymentMethods.value;
     const dueNow = checkout?.payment.amountMinor ?? null;
-    const defaultCodAdvanceMinor = (paymentSettings?.codAdvanceTaka ?? 100) * 100;
-    const needsPayment = dueNow === null ? (method === "COD" ? defaultCodAdvanceMinor > 0 : true) : dueNow > 0;
-    const walletNumber = method === "ROCKET" ? (rocketNumber || "01305087389") : (paymentSettings?.bkashNumber || "01760320810");
-    const prepared = Boolean(checkout && walletNumber && matchesReservation(checkout) && reservation?.reserved);
-    const canSubmit = !placingOrder && !updatingCartQuantity && !pendingOrder && Boolean(walletNumber && checkout);
-    const displayAmount = dueNow !== null ? dueNow : method === "COD" ? defaultCodAdvanceMinor : total;
-
-    const guideBadge = $(".order-payment-guide-title");
-    const guideDue = $(".order-payment-guide-due-val");
-    const bkashBox = $('.order-payment-wallet-box[data-wallet="bkash"]');
-    const rocketBox = $('.order-payment-wallet-box[data-wallet="rocket"]');
-    const bkashNumEl = $(".order-wallet-num-bkash");
-    const rocketNumEl = $(".order-wallet-num-rocket");
+    const codAdvanceMinor = method === "COD" && dueNow !== null ? dueNow : paymentDueNow(total, "COD",
+      paymentSettings?.codAdvanceTaka ?? defaultCodAdvanceTaka, { zone, codAdvanceInsideDhaka: paymentSettings?.codAdvanceInsideDhaka });
+    const displayAmount = dueNow ?? (method === "COD" ? codAdvanceMinor : total);
+    const needsPayment = displayAmount > 0;
+    const codAdvanceUnknown = !zone && codAdvanceMinor > 0 && paymentSettings?.codAdvanceInsideDhaka === false;
+    const showPaymentDetails = Boolean(paymentSettings && needsPayment && !(method === "COD" && codAdvanceUnknown));
+    const payOnDelivery = method === "COD" && !needsPayment;
+    const canSubmit = !placingOrder && !updatingCartQuantity && !pendingOrder && !applyingCoupon && !paymentNeedsHelp && Boolean(checkout);
+    const availableWallets = walletPaymentMethods.filter(wallet => walletNumbers[wallet] && (method === "COD" || method === wallet));
+    const walletNames = availableWallets.map(wallet => paymentMethodLabels[wallet]).join(" or ");
+    $(".order-payment-guide-title").textContent = paymentMethodLabels[method];
+    const amountLabel = money.format(displayAmount / 100);
+    $(".order-payment-guide-due-val").textContent = method === "COD" ? `${amountLabel} Advance` : amountLabel;
+    for (const box of walletBoxes) {
+      const wallet = box.dataset.wallet.toUpperCase();
+      box.hidden = !availableWallets.includes(wallet);
+      $(".order-payment-wallet-number", box).textContent = walletNumbers[wallet] ?? "";
+    }
     const stepsEl = $(".order-payment-steps");
-
-    if (guideBadge) {
-      guideBadge.textContent = method === "BKASH" ? "bKash" : method === "ROCKET" ? "Rocket" : "Cash on Delivery";
-    }
-    if (guideDue) {
-      guideDue.textContent = method === "COD" ? `${money.format(displayAmount / 100)} Advance` : money.format(displayAmount / 100);
-    }
-    const effectiveBkashNumber = paymentSettings?.bkashNumber || "01760320810";
-    const effectiveRocketNumber = rocketNumber || "01305087389";
-    if (bkashNumEl) bkashNumEl.textContent = effectiveBkashNumber;
-    if (rocketNumEl) rocketNumEl.textContent = effectiveRocketNumber;
-
-    if (method === "BKASH") {
-      if (bkashBox) bkashBox.hidden = false;
-      if (rocketBox) rocketBox.hidden = true;
-      if (stepsEl) {
-        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)}</strong> via bKash (Send Money) to the number above, then enter the TrxID below.`;
-      }
-    } else if (method === "ROCKET") {
-      if (bkashBox) bkashBox.hidden = true;
-      if (rocketBox) rocketBox.hidden = false;
-      if (stepsEl) {
-        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)}</strong> via Rocket (Send Money) to the number above, then enter the TrxID below.`;
-      }
+    if (paymentNeedsHelp) {
+      stepsEl.textContent = "This wallet was turned off. If you already paid, keep your transaction ID and contact Oneinfo.";
+    } else if (!availableWallets.length) {
+      stepsEl.textContent = "If you already paid, enter your transaction details. For help with payment, contact Oneinfo.";
+    } else if (method === "COD") {
+      const remaining = Math.max(0, total - displayAmount);
+      stepsEl.innerHTML = `Send <strong>${amountLabel} advance</strong> via ${walletNames} to confirm your order.${remaining > 0 ? ` Remaining <strong>${money.format(remaining / 100)}</strong> is due on delivery.` : ""}`;
     } else {
-      if (bkashBox) bkashBox.hidden = false;
-      if (rocketBox) rocketBox.hidden = Boolean(paymentSettings && !rocketNumber);
-      if (stepsEl) {
-        const remaining = Math.max(0, total - displayAmount);
-        const hasRocket = Boolean(!paymentSettings || rocketNumber);
-        stepsEl.innerHTML = `Send <strong>${money.format(displayAmount / 100)} advance</strong> via ${hasRocket ? "bKash or Rocket" : "bKash"} to confirm your order.${remaining > 0 ? ` Remaining <strong>${money.format(remaining / 100)}</strong> is due on delivery.` : ""}`;
-      }
+      stepsEl.innerHTML = `Send <strong>${amountLabel}</strong> via ${walletNames} (Send Money) to the number above, then enter the TrxID below.`;
     }
 
-    $(".order-rocket-status").textContent = rocketNumber ? "" : paymentSettings || shippingFailed ? "Currently unavailable" : "Checking availability…";
-    $(".order-cod-status").textContent = dueNow === 0 ? "No advance required" : `${money.format((dueNow ?? defaultCodAdvanceMinor) / 100)} advance required`;
-    $(".order-payment-details").hidden = dueNow === 0;
+    $(".order-cod-status").textContent = !paymentSettings ? "" : codAdvanceUnknown ? "Enter your address to check the advance"
+      : codAdvanceMinor === 0 ? "No advance required" : `${money.format(codAdvanceMinor / 100)} advance required`;
+    $(".order-payment-details").hidden = !showPaymentDetails;
     if (preparePayment) {
       preparePayment.hidden = prepared;
       preparePayment.disabled = !canSubmit || !needsPayment || prepared;
       preparePayment.textContent = placingOrder && !pendingOrder ? "Checking stock…" : "Show payment details";
     }
     paymentInstructions.hidden = true;
-    paymentInstructions.textContent = `Pay ${money.format(displayAmount / 100)} via ${method === "COD" ? "bKash" : paymentMethodLabels[method]} to ${walletNumber}.`;
-    senderField.disabled = transactionField.disabled = placingOrder;
-    senderField.required = transactionField.required = needsPayment;
+    paymentInstructions.textContent = stepsEl.textContent;
+    senderField.disabled = transactionField.disabled = placingOrder || !showPaymentDetails;
+    senderField.required = transactionField.required = showPaymentDetails;
     const hasValidSender = PaymentSenderNumberSchema.safeParse(senderField.value).success;
     const hasValidTrx = TransactionIdSchema.safeParse(transactionField.value).success;
     orderSubmit.disabled = !canSubmit || (needsPayment && (!hasValidSender || !hasValidTrx));
-    orderSubmit.textContent = placingOrder && pendingOrder ? "Submitting…" : placingOrder ? "Checking stock…" : dueNow === 0 ? "Place order" : "Pay";
+    orderSubmit.textContent = placingOrder && pendingOrder ? "Submitting…" : placingOrder ? "Checking stock…" : payOnDelivery || dueNow === 0 ? "Place order" : "Pay";
     $(".order-payable span").textContent = typeof fee !== "number" ? "Total before shipping"
-      : dueNow === 0 && method === "COD" ? "Total due on delivery" : "Order total";
+      : payOnDelivery ? "Total due on delivery" : "Order total";
     $(".order-payable strong").textContent = money.format(total / 100);
-    $(".order-due-now").hidden = !needsPayment;
+    $(".order-due-now").hidden = !showPaymentDetails;
     $(".order-due-now span").textContent = method === "COD" ? "Advance due now" : "Pay now";
     $(".order-due-now strong").textContent = money.format(displayAmount / 100);
-    $(".order-due-delivery").hidden = !needsPayment || method !== "COD" || dueNow === total;
-    $(".order-due-delivery strong").textContent = money.format(Math.max(0, total - (dueNow ?? defaultCodAdvanceMinor)) / 100);
+    $(".order-due-delivery").hidden = !showPaymentDetails || method !== "COD" || displayAmount === total;
+    $(".order-due-delivery strong").textContent = money.format(Math.max(0, total - displayAmount) / 100);
   }
 
   function refreshShippingRates() {
@@ -3114,10 +3110,9 @@ import "./invoice.css";
         if (!response.ok) throw new Error("Shipping rates unavailable");
         const checkout = await response.json();
         shippingRates = ShippingRatesSchema.parse(checkout.rates);
-        if (typeof checkout.bkashNumber !== "string" || !/^01\d{9}$/.test(checkout.bkashNumber)) throw new Error("Invalid bKash number");
+        const walletNumbers = checkout.walletNumbers ?? { BKASH: checkout.bkashNumber, ROCKET: checkout.rocketNumber };
         paymentSettings = {
-          bkashNumber: checkout.bkashNumber,
-          rocketNumber: /^01\d{9,10}$/.test(checkout.rocketNumber) ? checkout.rocketNumber : undefined,
+          walletNumbers: Object.fromEntries(walletPaymentMethods.map(method => [method, PaymentSenderNumberSchema.safeParse(walletNumbers[method]).data])),
           codAdvanceTaka: CodAdvanceSchema.parse(checkout.codAdvanceTaka),
           codAdvanceInsideDhaka: checkout.codAdvanceInsideDhaka !== false,
         };

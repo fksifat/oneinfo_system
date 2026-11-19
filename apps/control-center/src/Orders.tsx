@@ -1,7 +1,7 @@
 import { OrderPrint } from "./OrderPrint.js";
 import { OrderPacking } from "./OrderPacking.js";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { bkashNumber, paymentMethodLabels, CodAdvanceSchema, shippingZoneLabels, type AdminOrderSearch, type OrderReceipt, type OrderDesignFile, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
+import { CheckoutWalletsSchema, walletPaymentMethods, paymentMethodLabels, CodAdvanceSchema, shippingZoneLabels, type CheckoutWallets, type AdminOrderSearch, type OrderReceipt, type OrderDesignFile, type ShippingRates, type ShippingZone, type StoreCoupon, type StoreOrder } from "@oneinfo/contracts";
 import { api, downloadOrderDesign, productMediaUrl } from "./api.js";
 import { downloadOrderEps } from "./eps-generator.js";
 import { AdminCardPreview } from "./AdminCardPreview.js";
@@ -14,7 +14,7 @@ const searchFields = ["payment", "delivery"] as const;
 const needsPacking = (order: StoreOrder) => order.activationMethod === "ORDER_SECRET" ? !order.packedAt : Boolean(order.invoiceNumber && order.qrAllocation?.status !== "ASSIGNED");
 const statusLabels = { AWAITING_PAYMENT: "Awaiting payment", CANCELLED: "Cancelled", RECEIVED: "Received", PROCESSING: "Processing", SHIPPED: "Shipped", DELIVERED: "Delivered" };
 const orderDate = new Intl.DateTimeFormat("en-BD", { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" });
-const paymentWallet = (order: StoreOrder) => order.paymentMethod === "COD" ? "bKash" : paymentMethodLabels[order.paymentMethod];
+const paymentWallet = (order: StoreOrder) => order.paymentMethod === "COD" ? "advance" : paymentMethodLabels[order.paymentMethod];
 const codBalance = (order: StoreOrder) => Math.max(0, order.totalMinor - (order.paymentStatus === "VERIFIED" ? order.paymentAmountMinor ?? 0 : 0));
 
 export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: initialCustomOnly = false }: { token: string; settingsOpen: boolean; onSettingsOpenChange: (open: boolean) => void; customOnly?: boolean }) {
@@ -40,6 +40,8 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   const [rates, setRates] = useState<Record<ShippingZone, string>>();
   const [codAdvance, setCodAdvance] = useState<string>();
   const [codAdvanceInsideDhaka, setCodAdvanceInsideDhaka] = useState(true);
+  const [wallets, setWallets] = useState<CheckoutWallets>();
+  const [walletsError, setWalletsError] = useState("");
   const [paymentMessage, setPaymentMessage] = useState("");
   const [paymentError, setPaymentError] = useState("");
   const [savingPayment, setSavingPayment] = useState(false);
@@ -115,6 +117,16 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
     void loadRates();
     void loadCoupons();
   }, [token]);
+  useEffect(() => {
+    if (!settingsOpen) return;
+    let current = true;
+    setWallets(undefined);
+    setWalletsError("");
+    void api<{ wallets: CheckoutWallets }>(`${path}/admin/payment`, token)
+      .then(result => { if (current) setWallets(CheckoutWalletsSchema.parse(result.wallets)); })
+      .catch(() => { if (current) setWalletsError("Could not load wallet settings."); });
+    return () => { current = false; };
+  }, [settingsOpen, token]);
   useEffect(() => { void loadOrders(undefined, filters); }, [token, filters]);
 
   useEffect(() => {
@@ -265,9 +277,10 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
         body: JSON.stringify({
           codAdvanceTaka: CodAdvanceSchema.parse(Number(codAdvance)),
           codAdvanceInsideDhaka,
+          wallets,
         }),
       });
-      setPaymentMessage("COD advance saved.");
+      setPaymentMessage("Payment settings saved.");
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : "Could not save payment settings.");
     } finally {
@@ -300,7 +313,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
   async function verifyPayment(order: StoreOrder) {
     if (verifyingPayment || !order.transactionId || !order.paymentAmountMinor) return;
     const sender = order.paymentSenderNumber ? ` from ${order.paymentSenderNumber}` : "";
-    if (!window.confirm(`Confirm you received ${bdt(order.paymentAmountMinor)} in ${paymentWallet(order)}${sender} for transaction ${order.transactionId}.`)) return;
+    if (!window.confirm(`Confirm you received the ${paymentWallet(order)} payment of ${bdt(order.paymentAmountMinor)}${sender} for transaction ${order.transactionId}.`)) return;
     setVerifyingPayment(order.id);
     setActionNotice(undefined);
     try {
@@ -807,7 +820,7 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
     <section className="panel store-order-settings" aria-label="Checkout settings">
       <header className="store-settings-heading"><h2 id="store-settings-title">Checkout settings</h2><button className="quiet" type="button" aria-label="Close checkout settings" onClick={() => settingsDialog.current?.close()}>×</button></header>
       <section className="store-settings-card">
-        <div className="panel-head"><div><h2>Payment</h2><p>bKash {bkashNumber}</p></div></div>
+        <div className="panel-head"><div><h2>Payment</h2><p>Choose which wallets appear at checkout.</p></div></div>
         {codAdvance !== undefined && <form className="store-payment-form" onSubmit={savePayment}>
           <div className="store-payment-row">
             <label>COD advance (BDT)<input type="number" min="0" max="10000" step="1" required value={codAdvance}
@@ -823,10 +836,23 @@ export function Orders({ token, settingsOpen, onSettingsOpenChange, customOnly: 
             />
             <span className="store-cod-toggle-text">
               <strong>COD advance Inside Dhaka: {codAdvanceInsideDhaka ? "ON" : "OFF"}</strong>
-              <small>{codAdvanceInsideDhaka ? "Advance required for Inside Dhaka COD orders" : "No advance required for Inside Dhaka COD orders (orders place directly)"}</small>
+              <small>{codAdvanceInsideDhaka && Number(codAdvance) > 0 ? "Advance required for Inside Dhaka COD orders" : "No advance required for Inside Dhaka COD orders"}</small>
             </span>
           </label>
+          {wallets && walletPaymentMethods.map(method => <div className="store-payment-row" key={method}>
+            <label>{paymentMethodLabels[method]} receiving number
+              <input type="tel" inputMode="numeric" autoComplete="off" pattern="01[0-9]{9,10}" maxLength={12}
+                required={wallets[method].enabled} value={wallets[method].number} disabled={savingPayment}
+                onChange={event => setWallets({ ...wallets, [method]: { ...wallets[method], number: event.target.value } })} />
+            </label>
+            <label className="store-cod-toggle">
+              <input type="checkbox" checked={wallets[method].enabled} disabled={savingPayment}
+                onChange={event => setWallets({ ...wallets, [method]: { ...wallets[method], enabled: event.target.checked } })} />
+              <span>Enable {paymentMethodLabels[method]}</span>
+            </label>
+          </div>)}
         </form>}
+        {walletsError && <p className="store-order-feedback is-error" role="alert">{walletsError}</p>}
         {paymentMessage && <p className="store-order-feedback" role="status">{paymentMessage}</p>}
         {paymentError && <p className="store-order-feedback is-error" role="alert">{paymentError}</p>}
       </section>
