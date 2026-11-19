@@ -1,4 +1,4 @@
-import type { CustomerProfileSchema, OrderLine, PlaceOrderInput, ProductVariant, ShippingRates, ShippingZone, profileModes, profileSources } from "@oneinfo/contracts";
+import type { CheckoutWallets, CustomerProfileSchema, OrderLine, PlaceOrderInput, ProductVariant, ShippingRates, ShippingZone, profileModes, profileSources } from "@oneinfo/contracts";
 import type { z } from "zod";
 import { randomUUID } from "node:crypto";
 import {
@@ -419,6 +419,7 @@ export const storeShippingSettings = pgTable("store_shipping_settings", {
   rates: jsonb("rates").$type<ShippingRates>().notNull(),
   codAdvanceTaka: integer("cod_advance_taka").notNull().default(100),
   codAdvanceInsideDhaka: boolean("cod_advance_inside_dhaka").notNull().default(true),
+  checkoutWallets: jsonb("checkout_wallets").$type<CheckoutWallets>(),
   encryptedMetaCapiToken: text("encrypted_meta_capi_token"),
 });
 

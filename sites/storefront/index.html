@@ -149,7 +149,7 @@
                   <h2 id="order-payment-title">Payment</h2>
                   <div class="order-payment-options" role="radiogroup" aria-labelledby="order-payment-title">
                     <label class="order-payment-option">
-                      <input type="radio" name="paymentMethod" value="BKASH" checked />
+                      <input type="radio" name="paymentMethod" value="BKASH" />
                       <div class="order-payment-option-text">
                         <strong>bKash</strong>
                       </div>
@@ -159,15 +159,18 @@
                       <input type="radio" name="paymentMethod" value="ROCKET" disabled />
                       <div class="order-payment-option-text">
                         <strong>Rocket</strong>
-                        <small class="order-rocket-status">Checking availability…</small>
                       </div>
                       <img class="order-payment-mark" src="/assets/payment/rocket.png" alt="" width="24" height="24" />
                     </label>
+                    <label class="order-payment-option" hidden>
+                      <input type="radio" name="paymentMethod" value="NAGAD" disabled />
+                      <div class="order-payment-option-text"><strong>Nagad</strong></div>
+                    </label>
                     <label class="order-payment-option order-cod-option">
-                      <input type="radio" name="paymentMethod" value="COD" />
+                      <input type="radio" name="paymentMethod" value="COD" checked />
                       <div class="order-payment-option-text">
                         <strong>Cash on Delivery (COD)</strong>
-                        <small class="order-cod-status">৳100 advance</small>
+                        <small class="order-cod-status"></small>
                       </div>
                       <span class="order-payment-mark order-payment-cod-mark" aria-hidden="true">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -178,7 +181,7 @@
                       </span>
                     </label>
                   </div>
-                  <div class="order-payment-details">
+                  <div class="order-payment-details" hidden>
                     <div class="order-payment-guide" role="region" aria-label="Payment instructions">
                       <div class="order-payment-guide-header">
                         <div class="order-payment-guide-badge">
@@ -196,7 +199,7 @@
                             <img src="/assets/payment/bkash.png" alt="" width="22" height="22" class="order-payment-wallet-logo" />
                             <div class="order-payment-wallet-info">
                               <span class="order-payment-wallet-label">bKash</span>
-                              <strong class="order-payment-wallet-number order-wallet-num-bkash">01760320810</strong>
+                              <strong class="order-payment-wallet-number"></strong>
                             </div>
                           </div>
                           <button type="button" class="order-payment-copy-btn" aria-label="Copy bKash number">
@@ -212,7 +215,7 @@
                             <img src="/assets/payment/rocket.png" alt="" width="22" height="22" class="order-payment-wallet-logo" />
                             <div class="order-payment-wallet-info">
                               <span class="order-payment-wallet-label">Rocket</span>
-                              <strong class="order-payment-wallet-number order-wallet-num-rocket">01305087389</strong>
+                              <strong class="order-payment-wallet-number"></strong>
                             </div>
                           </div>
                           <button type="button" class="order-payment-copy-btn" aria-label="Copy Rocket number">
@@ -220,6 +223,15 @@
                               <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
                             </svg>
+                            <span class="order-copy-text">Copy</span>
+                          </button>
+                        </div>
+                        <div class="order-payment-wallet-box" data-wallet="nagad" hidden>
+                          <div class="order-payment-wallet-info">
+                            <span class="order-payment-wallet-label">Nagad</span>
+                            <strong class="order-payment-wallet-number"></strong>
+                          </div>
+                          <button type="button" class="order-payment-copy-btn" aria-label="Copy Nagad number">
                             <span class="order-copy-text">Copy</span>
                           </button>
                         </div>

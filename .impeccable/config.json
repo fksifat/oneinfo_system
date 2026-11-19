@@ -1,3 +1,27 @@
 {
-  "buildPath": "code"
+  "buildPath": "code",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "design-system-font",
+        "value": "menlo",
+        "files": [
+          "sites/storefront/styles.css"
+        ],
+        "createdAt": "2026-11-19T11:08:59.487Z",
+        "reason": "Existing native monospace fallback for numeric wallet identifiers; the checkout change leaves this stack intact."
+      },
+      {
+        "rule": "design-system-font",
+        "value": "roboto",
+        "files": [
+          "apps/control-center/src/styles.css"
+        ],
+        "createdAt": "2026-11-19T11:10:08.160Z",
+        "reason": "Existing Android system font fallback in the public NFC/QR profile stack (c51c90e0); Roboto is not bundled or introduced by the checkout change."
+      }
+    ]
+  }
 }

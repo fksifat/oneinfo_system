@@ -1037,6 +1037,7 @@ test("storefront checkout payment section directly displays payment instructions
   assert.match(indexHtml, /class="order-payment-wallet-box"/);
   assert.match(indexHtml, /data-wallet="bkash"/);
   assert.match(indexHtml, /data-wallet="rocket"/);
+  assert.match(indexHtml, /data-wallet="nagad"/);
   assert.match(indexHtml, /class="order-payment-copy-btn"/);
   assert.match(indexHtml, /class="order-payment-inputs-grid"/);
   assert.match(indexHtml, /order-payment-cod-mark/);
@@ -1044,14 +1045,14 @@ test("storefront checkout payment section directly displays payment instructions
   // app.js handles direct payment guide, COD advance requirement, copy button, and seamless reservation on submit
   assert.match(appJs, /order-payment-guide-title/);
   assert.match(appJs, /order-payment-wallet-number/);
-  assert.match(appJs, /order-wallet-num-bkash/);
-  assert.match(appJs, /order-wallet-num-rocket/);
+  assert.match(appJs, /order-payment-wallet-box/);
+  assert.match(appJs, /paymentSettings\?\.walletNumbers/);
   assert.match(appJs, /order-payment-copy-btn/);
   assert.match(appJs, /advance required/);
   assert.match(appJs, /transactionField\.value\.toUpperCase\(\)/);
 
   // Responsive styling
-  assert.match(stylesCss, /\.order-payment-options\s*\{[^}]*grid-template-columns:\s*repeat\(3/);
+  assert.match(stylesCss, /\.order-payment-options\s*\{[^}]*flex-wrap:\s*wrap/);
   assert.match(stylesCss, /@media\s*\(max-width:\s*640px\)\s*\{[^}]*\.order-payment-options/);
   assert.match(stylesCss, /\.order-payment-guide\s*\{/);
   assert.match(stylesCss, /\.order-payment-copy-btn\s*\{/);
