@@ -17,7 +17,7 @@ const activationGuideUrl = "https://www.oneinfo.online/activation-guide.html";
 export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[] = []) {
   const payment = order.paymentAmountMinor ?? 0;
   const verified = order.paymentStatus === "VERIFIED";
-  const balance = order.totalMinor - payment;
+  const balance = Math.max(0, order.totalMinor - payment);
   const cancelled = order.status === "CANCELLED";
   const unused = cancelled ? [] : codes.flatMap(({ secretCode }, index) => secretCode ? [{ secretCode, cardNumber: index + 1 }] : []);
   const warrantyItems = new Map(order.items.flatMap(item => item.warranty
@@ -42,8 +42,9 @@ export function invoiceMarkup(order: InvoiceOrder, codes: readonly InvoiceCode[]
         ${order.discountMinor ? `<div><dt>Discount</dt><dd>−${money(order.discountMinor)}</dd></div>` : ""}
         <div><dt>Delivery</dt><dd>${money(order.shippingMinor)}</dd></div>
         <div class="invoice-total"><dt>Total</dt><dd>${money(order.totalMinor)}</dd></div>
-        ${!cancelled && payment > 0 ? `<div><dt>${verified ? "Paid" : "Payment to verify"}</dt><dd>${money(payment)}</dd></div>
-        ${balance > 0 ? `<div><dt>${verified ? "Due on delivery" : "Due after payment check"}</dt><dd>${money(balance)}</dd></div>` : ""}` : ""}
+        ${!cancelled ? `
+        ${payment > 0 ? `<div><dt>${verified ? "Paid" : "Payment to verify"}</dt><dd>${money(payment)}</dd></div>` : ""}
+        <div class="invoice-due"><dt>Total Due</dt><dd>${money(balance)}</dd></div>` : ""}
       </dl>
       ${cancelled ? "" : `<a class="invoice-guide" href="${activationGuideUrl}" target="_blank" rel="noopener noreferrer">
         <img src="${escape(new URL(activationGuideQr, location.href).href)}" alt="" width="112" height="112">
