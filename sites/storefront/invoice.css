@@ -30,6 +30,7 @@
 .invoice-totals div { display: flex; justify-content: space-between; gap: 12px; padding: 4px 8px; }
 .invoice-totals dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .invoice-totals .invoice-total { margin: 4px 0; padding-block: 8px; border-block: 1px solid #9eafa6; font-weight: 750; color: #173a34; }
+.invoice-totals .invoice-due { font-weight: 750; color: #173a34; }
 .invoice-guide {
   display: grid; grid-area: 1 / 1; justify-items: center; justify-self: center;
   color: #173a34; text-align: center; text-underline-offset: 3px; font-size: 13px; font-weight: 700;

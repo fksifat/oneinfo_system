@@ -1073,3 +1073,12 @@ test("storefront and hosting cleanly support direct /products route and auto-scr
   // cloud build generates .cloud-dist/products/index.html
   assert.match(buildCloud, /\.cloud-dist\/products/);
 });
+
+test("invoice markup includes Total Due for unpaid, partial and full orders", () => {
+  const invoiceTs = readFileSync("sites/storefront/invoice.ts", "utf8");
+  const invoiceCss = readFileSync("sites/storefront/invoice.css", "utf8");
+
+  assert.match(invoiceTs, /<div class="invoice-due"><dt>Total Due<\/dt><dd>\$\{money\(balance\)\}<\/dd><\/div>/);
+  assert.match(invoiceTs, /const balance = Math\.max\(0, order\.totalMinor - payment\);/);
+  assert.match(invoiceCss, /\.invoice-totals \.invoice-due\s*\{\s*font-weight:\s*750;\s*color:\s*#173a34;\s*\}/);
+});
